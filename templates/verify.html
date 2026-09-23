@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Verify your email{% endblock %}
+
+{% block content %}
+  <h1>Check your email</h1>
+  <p>We sent a 6-digit code to {{ email }}. It expires in 10 minutes.</p>
+
+  <form method="post">
+    <label>Verification code
+      <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus />
+    </label>
+    <button type="submit">Verify</button>
+  </form>
+
+  <form method="post" action="{{ url_for('resend_code') }}">
+    <button type="submit">Send a new code</button>
+  </form>
+{% endblock %}
