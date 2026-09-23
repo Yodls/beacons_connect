@@ -49,6 +49,8 @@ def register():
 
         if not email or not password:
             flash("Email and password are required.")
+        elif not email.endswith("@umb.edu"):
+            flash("You must register with a @umb.edu email address.")
         elif len(password) < 8:
             flash("Password must be at least 8 characters.")
         elif password != request.form["confirm_password"]:
