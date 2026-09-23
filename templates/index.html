@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+  <h1>You're signed in</h1>
+  <p>{{ current_user.email }}</p>
+  <p><a href="{{ url_for('logout') }}">Sign out</a></p>
+{% endblock %}

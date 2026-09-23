@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Beacon{% endblock %}</title>
+    <style>
+      body {
+        max-width: 22rem;
+        margin: 4rem auto;
+        padding: 0 1rem;
+        font: 16px/1.5 system-ui, sans-serif;
+      }
+      label { display: block; margin-top: 1rem; }
+      input { width: 100%; padding: 0.5rem; font-size: 1rem; }
+      button { margin-top: 1.25rem; padding: 0.5rem 1rem; font-size: 1rem; }
+      .flash { padding: 0.5rem; background: #fdecea; color: #611a15; }
+    </style>
+  </head>
+  <body>
+    {% for message in get_flashed_messages() %}
+      <p class="flash">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </body>
+</html>
