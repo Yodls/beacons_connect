@@ -1,7 +1,7 @@
 .env
-.env.example
 __pycache__/
 *.pyc
 .venv/
 venv/
 migrations/versions/*.pyc
+capstone_test.py

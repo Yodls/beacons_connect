@@ -20,6 +20,7 @@ load_dotenv()
 
 CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
+OPTIONAL_QUESTIONS = {"minor"}
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
@@ -48,9 +49,74 @@ class User(UserMixin, db.Model):
     verification_attempts = db.Column(db.Integer, nullable=False, default=0)
 
 
+class Question(db.Model):
+    __tablename__ = "questions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.Text, unique=True, nullable=False)
+    prompt = db.Column(db.Text, nullable=False)
+    allows_multiple = db.Column(db.Boolean, nullable=False, default=False)
+    weight = db.Column(db.Numeric(4, 2), nullable=False, default=1)
+    options = db.relationship(
+        "QuestionOption",
+        order_by="QuestionOption.sort_order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (db.CheckConstraint("weight >= 0", name="ck_questions_weight"),)
+
+
+class QuestionOption(db.Model):
+    __tablename__ = "question_options"
+
+    id = db.Column(db.Integer, primary_key=True)
+    question_id = db.Column(
+        db.Integer, db.ForeignKey("questions.id", ondelete="CASCADE"), nullable=False
+    )
+    label = db.Column(db.Text, nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint("question_id", "label", name="uq_option_label"),
+        # Redundant-looking, but the composite foreign key below needs a unique
+        # constraint on exactly these two columns to point at.
+        db.UniqueConstraint("question_id", "id", name="uq_option_question"),
+    )
+
+
+class UserAnswer(db.Model):
+    __tablename__ = "user_answers"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    question_id = db.Column(db.Integer, nullable=False)
+    option_id = db.Column(db.Integer, primary_key=True)
+
+    # The pair, not two separate keys: this is what makes it impossible to file
+    # an option under the wrong question.
+    __table_args__ = (
+        db.ForeignKeyConstraint(
+            ["question_id", "option_id"],
+            ["question_options.question_id", "question_options.id"],
+            ondelete="CASCADE",
+            name="fk_answer_option",
+        ),
+        db.Index("ix_user_answers_option_id", "option_id"),
+    )
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+
+def has_onboarded(user_id):
+    """Answers are written in one transaction, so any row means they finished."""
+    return db.session.scalar(
+        db.select(db.literal(True)).where(UserAnswer.user_id == user_id).limit(1)
+    ) is not None
 
 
 def issue_verification_code(user):
@@ -73,6 +139,33 @@ def send_verification_email(user, code):
             ),
         )
     )
+
+
+ONBOARDING_EXEMPT = {
+    "static",
+    "onboarding",
+    "login",
+    "logout",
+    "register",
+    "verify",
+    "resend_code",
+}
+
+
+# Defined below LoginManager(app) on purpose: before_request handlers run in
+# registration order, and above it current_user would always be anonymous.
+@app.before_request
+def require_onboarding():
+    if request.endpoint is None or request.endpoint in ONBOARDING_EXEMPT:
+        return None
+
+    if not current_user.is_authenticated:
+        return None
+
+    if has_onboarded(current_user.id):
+        return None
+
+    return redirect(url_for("onboarding"))
 
 
 @app.route("/")
@@ -185,6 +278,67 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("login"))
+
+
+@app.route("/onboarding", methods=["GET", "POST"])
+@login_required
+def onboarding():
+    questions = db.session.scalars(db.select(Question).order_by(Question.id)).all()
+    selected = set(
+        db.session.scalars(
+            db.select(UserAnswer.option_id).filter_by(user_id=current_user.id)
+        )
+    )
+
+    if request.method == "POST":
+        picks = {
+            question.id: [
+                int(value)
+                for value in request.form.getlist(f"q{question.id}")
+                if value.isdigit()
+            ]
+            for question in questions
+        }
+        # Re-render with what they submitted, not what is stored, so a single
+        # missed question does not wipe the other eight answers.
+        selected = {option_id for ids in picks.values() for option_id in ids}
+
+        missing = [
+            q for q in questions
+            if q.key not in OPTIONAL_QUESTIONS and not picks[q.id]
+        ]
+        doubled = [q for q in questions if not q.allows_multiple and len(picks[q.id]) > 1]
+        stray = [
+            q for q in questions
+            if not set(picks[q.id]) <= {option.id for option in q.options}
+        ]
+
+        if missing:
+            flash("Please answer: " + "; ".join(q.prompt for q in missing))
+        elif doubled:
+            flash("Please pick just one answer for each single-choice question.")
+        elif stray:
+            flash("Please choose from the listed options.")
+        else:
+            db.session.execute(db.delete(UserAnswer).filter_by(user_id=current_user.id))
+            for question in questions:
+                for option_id in picks[question.id]:
+                    db.session.add(
+                        UserAnswer(
+                            user_id=current_user.id,
+                            question_id=question.id,
+                            option_id=option_id,
+                        )
+                    )
+            db.session.commit()
+            return redirect(url_for("index"))
+
+    return render_template(
+        "onboarding.html",
+        questions=questions,
+        selected=selected,
+        optional=OPTIONAL_QUESTIONS,
+    )
 
 
 if __name__ == "__main__":

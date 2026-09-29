@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Tell us about you{% endblock %}
+
+{% block style %}body { max-width: 34rem; }{% endblock %}
+
+{% block content %}
+  <h1>Tell us about you</h1>
+  <p>This is how we find students you'd actually get along with. You can change your answers later.</p>
+
+  <form method="post">
+    {% for question in questions %}
+      <fieldset>
+        <legend>{{ question.prompt }}</legend>
+        {% if question.allows_multiple %}
+          {% for option in question.options %}
+            <label>
+              <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
+                {% if option.id in selected %}checked{% endif %} />
+              {{ option.label }}
+            </label>
+          {% endfor %}
+        {% elif question.options | length > 12 %}
+          <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
+            <option value="">Choose one</option>
+            {% for option in question.options %}
+              <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          {% for option in question.options %}
+            <label>
+              <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
+                {% if option.id in selected %}checked{% endif %} required />
+              {{ option.label }}
+            </label>
+          {% endfor %}
+        {% endif %}
+      </fieldset>
+    {% endfor %}
+    <button type="submit">Save and continue</button>
+  </form>
+{% endblock %}
