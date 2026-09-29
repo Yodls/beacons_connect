@@ -4,7 +4,8 @@
 {% block content %}
   <h1>Create account</h1>
   <form method="post">
-    <label>Email <input type="email" name="email" required autofocus /></label>
+    <label>Your name <input name="name" maxlength="120" required autofocus /></label>
+    <label>Email <input type="email" name="email" required /></label>
     <label>Password <input type="password" name="password" required /></label>
     <label>Confirm password <input type="password" name="confirm_password" required /></label>
     <button type="submit">Create account</button>

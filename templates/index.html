@@ -2,34 +2,52 @@
 {% block title %}Your matches{% endblock %}
 
 {% block style %}body { max-width: 34rem; }
-      h2 { margin-top: 2rem; font-size: 1.1rem; }
-      .card { margin-top: 0.75rem; padding: 0.75rem 1rem; border: 1px solid #ddd; }
-      .card h3 { margin: 0; font-size: 1rem; }
-      .score { float: right; color: #555; font-variant-numeric: tabular-nums; }
-      .why { margin: 0.35rem 0 0; color: #555; font-size: 0.9rem; }
 {% endblock %}
 
 {% block content %}
-  <h1>Your matches</h1>
+  <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
   <p>
     Worked out from the answers you gave.
     <a href="{{ url_for('onboarding') }}">Change your answers</a>
   </p>
 
-  <h2>People you should meet</h2>
+  <h2>Your matches</h2>
   {% for match in matches %}
     <div class="card">
       <h3>
         <span class="score">{{ "%g" % match.score }}</span>
-        {{ match.email.split("@")[0] }}
+        {{ match.name }}
       </h3>
       <p class="why">In common: {{ match.shared | join(", ") }}</p>
+      <div class="actions">
+        <button type="button" disabled>Chat &mdash; coming soon</button>
+        <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
+          <button type="submit">Unmatch</button>
+        </form>
+      </div>
     </div>
   {% else %}
     <p class="why">
-      Nobody else has answered the questions yet. Check back once more students
-      have signed up.
+      Nobody left to match you with right now. Once more students answer the
+      questions we'll pair you up.
     </p>
+  {% endfor %}
+
+  <h2>Your clubs</h2>
+  {% for club in joined %}
+    <div class="card">
+      <h3>{{ club.name }}</h3>
+      <p class="why">{{ club.description }}</p>
+      <div class="actions">
+        <button type="button" disabled>Club space &mdash; coming soon</button>
+        <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+          <input type="hidden" name="back" value="index" />
+          <button type="submit">Leave</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">You haven't joined any clubs yet. Try one of the suggestions below.</p>
   {% endfor %}
 
   <h2>Clubs you might like</h2>
@@ -41,12 +59,21 @@
       </h3>
       <p class="why">{{ club.description }}</p>
       <p class="why">Suggested because you picked: {{ club.shared | join(", ") }}</p>
+      <div class="actions">
+        <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
+          <input type="hidden" name="back" value="index" />
+          <button type="submit">Join</button>
+        </form>
+      </div>
     </div>
   {% else %}
-    <p class="why">No club recommendations from your answers yet.</p>
+    <p class="why">No new suggestions from your answers right now.</p>
   {% endfor %}
 
-  <p style="margin-top: 2rem">
+  <p class="nav">
+    <a href="{{ url_for('clubs') }}">Browse all clubs</a>
+  </p>
+  <p class="nav">
     {{ current_user.email }} &middot;
     <a href="{{ url_for('logout') }}">Sign out</a>
   </p>

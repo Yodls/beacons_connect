@@ -150,12 +150,15 @@ def seed():
             user = db.session.scalar(db.select(User).filter_by(email=email))
             if user is None:
                 user = User(
-                    email=email, password_hash=generate_password_hash(PASSWORD)
+                    name=name,
+                    email=email,
+                    password_hash=generate_password_hash(PASSWORD),
                 )
                 db.session.add(user)
                 created += 1
             else:
                 updated += 1
+            user.name = name
             user.email_verified = True
             db.session.flush()
 

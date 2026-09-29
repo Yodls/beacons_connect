@@ -1,5 +1,7 @@
 # Kept out of app.py: `python app.py` loads it as __main__, so importing app
 # from here would build a second Flask app and a second db session.
+from datetime import datetime
+
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 
@@ -8,6 +10,7 @@ db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
@@ -101,3 +104,48 @@ class ClubTag(db.Model):
         ),
         db.Index("ix_club_tags_option_id", "option_id"),
     )
+
+
+class ClubMember(db.Model):
+    __tablename__ = "club_members"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    club_id = db.Column(
+        db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE"), primary_key=True
+    )
+    joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class Match(db.Model):
+    __tablename__ = "matches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_lo = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    user_hi = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    score = db.Column(db.Numeric(6, 2), nullable=False, default=0)
+    status = db.Column(db.Text, nullable=False, default="active")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    ended_at = db.Column(db.DateTime)
+
+    __table_args__ = (
+        # One row per pair, ever. An ended row is what stops an unmatched
+        # person being paired again on the next page load.
+        db.UniqueConstraint("user_lo", "user_hi", name="uq_match_pair"),
+        # Forces the canonical ordering, which rules out both a reversed
+        # duplicate and a self-match.
+        db.CheckConstraint("user_lo < user_hi", name="ck_match_order"),
+        db.CheckConstraint("status IN ('active', 'ended')", name="ck_match_status"),
+        db.Index("ix_matches_lo", "user_lo"),
+        db.Index("ix_matches_hi", "user_hi"),
+    )
+
+
+def pair(a, b):
+    """Matches are symmetric but stored once; always normalise through this."""
+    return (a, b) if a < b else (b, a)

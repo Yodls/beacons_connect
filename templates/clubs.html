@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}All clubs{% endblock %}
+
+{% block style %}body { max-width: 34rem; }
+{% endblock %}
+
+{% block content %}
+  <h1>All clubs</h1>
+  <p>Every club on campus. You're in {{ joined_ids | length }} of {{ clubs | length }}.</p>
+
+  {% for club in clubs %}
+    <div class="card">
+      <h3>{{ club.name }}</h3>
+      <p class="why">{{ club.description }}</p>
+      <div class="actions">
+        {% if club.id in joined_ids %}
+          <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+            <input type="hidden" name="back" value="clubs" />
+            <button type="submit">Leave</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
+            <input type="hidden" name="back" value="clubs" />
+            <button type="submit">Join</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <p class="nav">
+    <a href="{{ url_for('index') }}">Back to your matches</a>
+  </p>
+{% endblock %}

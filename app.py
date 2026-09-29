@@ -15,13 +15,14 @@ from flask_mail import Mail, Message
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import matching
-from models import Question, User, UserAnswer, db
+from models import Club, ClubMember, Question, User, UserAnswer, db
 
 load_dotenv()
 
 CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
+MATCH_TARGET = 3
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
@@ -98,23 +99,100 @@ def require_onboarding():
     return redirect(url_for("onboarding"))
 
 
+RETURN_TO = {"index", "clubs"}
+
+
+def joined_clubs(user_id):
+    return db.session.scalars(
+        db.select(Club)
+        .join(ClubMember, ClubMember.club_id == Club.id)
+        .where(ClubMember.user_id == user_id)
+        .order_by(Club.name)
+    ).all()
+
+
+def back_to():
+    target = request.form.get("back", "index")
+    return redirect(url_for(target if target in RETURN_TO else "index"))
+
+
 @app.route("/")
 @login_required
 def index():
+    matching.ensure_matches(current_user.id, target=MATCH_TARGET)
     return render_template(
         "index.html",
-        matches=matching.find_matches(current_user.id, limit=5),
+        matches=matching.active_matches(current_user.id),
+        joined=joined_clubs(current_user.id),
         clubs=matching.recommend_clubs(current_user.id, limit=5),
     )
+
+
+@app.route("/clubs")
+@login_required
+def clubs():
+    joined = joined_clubs(current_user.id)
+    return render_template(
+        "clubs.html",
+        clubs=db.session.scalars(db.select(Club).order_by(Club.name)).all(),
+        joined_ids={club.id for club in joined},
+    )
+
+
+@app.route("/clubs/<int:club_id>/join", methods=["POST"])
+@login_required
+def join_club(club_id):
+    club = db.session.get(Club, club_id)
+
+    if club is None:
+        flash("That club no longer exists.")
+    elif db.session.get(ClubMember, (current_user.id, club_id)):
+        flash(f"You are already in {club.name}.")
+    else:
+        db.session.add(ClubMember(user_id=current_user.id, club_id=club_id))
+        db.session.commit()
+        flash(f"You joined {club.name}.")
+
+    return back_to()
+
+
+@app.route("/clubs/<int:club_id>/leave", methods=["POST"])
+@login_required
+def leave_club(club_id):
+    membership = db.session.get(ClubMember, (current_user.id, club_id))
+
+    if membership is None:
+        flash("You are not in that club.")
+    else:
+        club = db.session.get(Club, club_id)
+        db.session.delete(membership)
+        db.session.commit()
+        flash(f"You left {club.name}.")
+
+    return back_to()
+
+
+@app.route("/matches/<int:other_id>/unmatch", methods=["POST"])
+@login_required
+def unmatch(other_id):
+    if matching.end_match(current_user.id, other_id):
+        flash("Unmatched. We'll find you someone else.")
+    else:
+        flash("You are not matched with that person.")
+
+    return redirect(url_for("index"))
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
+        name = request.form["name"].strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
 
-        if not email or not password:
+        if not name:
+            flash("Please enter your name.")
+        elif not email or not password:
             flash("Email and password are required.")
         elif not email.endswith("@umb.edu"):
             flash("You must register with a @umb.edu email address.")
@@ -125,7 +203,11 @@ def register():
         elif db.session.scalar(db.select(User).filter_by(email=email)):
             flash("That email is already registered.")
         else:
-            user = User(email=email, password_hash=generate_password_hash(password))
+            user = User(
+                name=name,
+                email=email,
+                password_hash=generate_password_hash(password),
+            )
             db.session.add(user)
             db.session.commit()
             issue_verification_code(user)
