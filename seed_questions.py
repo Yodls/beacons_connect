@@ -1,4 +1,5 @@
-from app import Question, QuestionOption, app, db
+from app import app
+from models import Question, QuestionOption, db
 
 DEGREE_TYPES = [
     "Bachelor's",

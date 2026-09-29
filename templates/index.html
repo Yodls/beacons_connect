@@ -1,8 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Home{% endblock %}
+{% block title %}Your matches{% endblock %}
+
+{% block style %}body { max-width: 34rem; }
+      h2 { margin-top: 2rem; font-size: 1.1rem; }
+      .card { margin-top: 0.75rem; padding: 0.75rem 1rem; border: 1px solid #ddd; }
+      .card h3 { margin: 0; font-size: 1rem; }
+      .score { float: right; color: #555; font-variant-numeric: tabular-nums; }
+      .why { margin: 0.35rem 0 0; color: #555; font-size: 0.9rem; }
+{% endblock %}
 
 {% block content %}
-  <h1>You're signed in</h1>
-  <p>{{ current_user.email }}</p>
-  <p><a href="{{ url_for('logout') }}">Sign out</a></p>
+  <h1>Your matches</h1>
+  <p>
+    Worked out from the answers you gave.
+    <a href="{{ url_for('onboarding') }}">Change your answers</a>
+  </p>
+
+  <h2>People you should meet</h2>
+  {% for match in matches %}
+    <div class="card">
+      <h3>
+        <span class="score">{{ "%g" % match.score }}</span>
+        {{ match.email.split("@")[0] }}
+      </h3>
+      <p class="why">In common: {{ match.shared | join(", ") }}</p>
+    </div>
+  {% else %}
+    <p class="why">
+      Nobody else has answered the questions yet. Check back once more students
+      have signed up.
+    </p>
+  {% endfor %}
+
+  <h2>Clubs you might like</h2>
+  {% for club in clubs %}
+    <div class="card">
+      <h3>
+        <span class="score">{{ "%g" % club.score }}</span>
+        {{ club.name }}
+      </h3>
+      <p class="why">{{ club.description }}</p>
+      <p class="why">Suggested because you picked: {{ club.shared | join(", ") }}</p>
+    </div>
+  {% else %}
+    <p class="why">No club recommendations from your answers yet.</p>
+  {% endfor %}
+
+  <p style="margin-top: 2rem">
+    {{ current_user.email }} &middot;
+    <a href="{{ url_for('logout') }}">Sign out</a>
+  </p>
 {% endblock %}

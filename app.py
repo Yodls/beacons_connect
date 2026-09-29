@@ -6,15 +6,16 @@ from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_login import (
     LoginManager,
-    UserMixin,
     current_user,
     login_required,
     login_user,
     logout_user,
 )
 from flask_mail import Mail, Message
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
+
+import matching
+from models import Question, User, UserAnswer, db
 
 load_dotenv()
 
@@ -33,78 +34,10 @@ app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
 app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
 
-db = SQLAlchemy(app)
+db.init_app(app)
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
-
-
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    email_verified = db.Column(db.Boolean, nullable=False, default=False)
-    verification_code_hash = db.Column(db.String(255))
-    verification_expires_at = db.Column(db.DateTime)
-    verification_attempts = db.Column(db.Integer, nullable=False, default=0)
-
-
-class Question(db.Model):
-    __tablename__ = "questions"
-
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.Text, unique=True, nullable=False)
-    prompt = db.Column(db.Text, nullable=False)
-    allows_multiple = db.Column(db.Boolean, nullable=False, default=False)
-    weight = db.Column(db.Numeric(4, 2), nullable=False, default=1)
-    options = db.relationship(
-        "QuestionOption",
-        order_by="QuestionOption.sort_order",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-    __table_args__ = (db.CheckConstraint("weight >= 0", name="ck_questions_weight"),)
-
-
-class QuestionOption(db.Model):
-    __tablename__ = "question_options"
-
-    id = db.Column(db.Integer, primary_key=True)
-    question_id = db.Column(
-        db.Integer, db.ForeignKey("questions.id", ondelete="CASCADE"), nullable=False
-    )
-    label = db.Column(db.Text, nullable=False)
-    sort_order = db.Column(db.Integer, nullable=False, default=0)
-
-    __table_args__ = (
-        db.UniqueConstraint("question_id", "label", name="uq_option_label"),
-        # Redundant-looking, but the composite foreign key below needs a unique
-        # constraint on exactly these two columns to point at.
-        db.UniqueConstraint("question_id", "id", name="uq_option_question"),
-    )
-
-
-class UserAnswer(db.Model):
-    __tablename__ = "user_answers"
-
-    user_id = db.Column(
-        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-    )
-    question_id = db.Column(db.Integer, nullable=False)
-    option_id = db.Column(db.Integer, primary_key=True)
-
-    # The pair, not two separate keys: this is what makes it impossible to file
-    # an option under the wrong question.
-    __table_args__ = (
-        db.ForeignKeyConstraint(
-            ["question_id", "option_id"],
-            ["question_options.question_id", "question_options.id"],
-            ondelete="CASCADE",
-            name="fk_answer_option",
-        ),
-        db.Index("ix_user_answers_option_id", "option_id"),
-    )
 
 
 @login_manager.user_loader
@@ -171,7 +104,11 @@ def require_onboarding():
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        matches=matching.find_matches(current_user.id, limit=5),
+        clubs=matching.recommend_clubs(current_user.id, limit=5),
+    )
 
 
 @app.route("/register", methods=["GET", "POST"])
