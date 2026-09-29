@@ -46,7 +46,6 @@ def load_user(user_id):
 
 
 def has_onboarded(user_id):
-    """Answers are written in one transaction, so any row means they finished."""
     return db.session.scalar(
         db.select(db.literal(True)).where(UserAnswer.user_id == user_id).limit(1)
     ) is not None
@@ -85,8 +84,6 @@ ONBOARDING_EXEMPT = {
 }
 
 
-# Defined below LoginManager(app) on purpose: before_request handlers run in
-# registration order, and above it current_user would always be anonymous.
 @app.before_request
 def require_onboarding():
     if request.endpoint is None or request.endpoint in ONBOARDING_EXEMPT:
@@ -236,8 +233,6 @@ def onboarding():
             ]
             for question in questions
         }
-        # Re-render with what they submitted, not what is stored, so a single
-        # missed question does not wipe the other eight answers.
         selected = {option_id for ids in picks.values() for option_id in ids}
 
         missing = [

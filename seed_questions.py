@@ -261,8 +261,6 @@ STUDY_STYLE = [
     "I don't study (I'm sure it will all turn out fine)",
 ]
 
-# Order matters: get_questionnaire() sorts by questions.id, so the rows have to be
-# inserted in the order the form should show them.
 QUESTIONS = [
     {
         "key": "degree_type",
@@ -358,9 +356,8 @@ def seed():
             else:
                 option.sort_order = sort_order
 
-        # Never delete a stale option: the answer rows point at it with an
-        # ON DELETE CASCADE foreign key, so dropping one silently erases that
-        # answer for every student who picked it. Report and leave it alone.
+        # Never delete a stale option: user_answers cascades off it, so removing
+        # one erases that answer for every student who picked it.
         for label in existing:
             print(f"  kept {spec['key']}/{label!r} - no longer in this file")
 

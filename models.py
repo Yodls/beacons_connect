@@ -1,11 +1,5 @@
-"""Database models, deliberately kept out of app.py.
-
-Running `python app.py` loads that file under the name __main__. Anything that
-then does `from app import ...` loads it a *second* time, producing a second
-Flask app and a second SQLAlchemy instance - and queries issued through one are
-not bound to the other. Keeping `db` and the models here means matching.py and
-the seed scripts never import the app, so there is only ever one of each.
-"""
+# Kept out of app.py: `python app.py` loads it as __main__, so importing app
+# from here would build a second Flask app and a second db session.
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 
@@ -52,8 +46,7 @@ class QuestionOption(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("question_id", "label", name="uq_option_label"),
-        # Redundant-looking, but the composite foreign key below needs a unique
-        # constraint on exactly these two columns to point at.
+        # Looks redundant; the composite FKs below need this exact pair to exist.
         db.UniqueConstraint("question_id", "id", name="uq_option_question"),
     )
 
@@ -67,8 +60,6 @@ class UserAnswer(db.Model):
     question_id = db.Column(db.Integer, nullable=False)
     option_id = db.Column(db.Integer, primary_key=True)
 
-    # The pair, not two separate keys: this is what makes it impossible to file
-    # an option under the wrong question.
     __table_args__ = (
         db.ForeignKeyConstraint(
             ["question_id", "option_id"],
@@ -92,11 +83,6 @@ class Club(db.Model):
 
 
 class ClubTag(db.Model):
-    """What a club is about, in the same vocabulary students answer in.
-
-    Tagging a club with question options means club recommendations fall out of
-    the same weighted overlap as person-to-person matching.
-    """
 
     __tablename__ = "club_tags"
 

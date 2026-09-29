@@ -1,18 +1,6 @@
-"""Seed demo clubs and their tags.
-
-Re-runnable: clubs are matched on name, and a club's tags are replaced each run.
-
-    python seed_clubs.py
-
-A club is tagged with the same question options students answer in, so club
-recommendations come out of the same weighted overlap as person matching. Tags
-are written as (question key, option label) pairs and resolved to option ids at
-seed time; an unknown label is an error rather than a silently dropped tag.
-"""
 from app import app
 from models import Club, ClubTag, Question, QuestionOption, db
 
-# (name, description, [(question_key, option_label), ...])
 CLUBS = [
     ("Computer Science Club",
      "Talks, project nights and interview prep for anyone who writes code.",
@@ -193,7 +181,6 @@ CLUBS = [
 
 
 def option_lookup():
-    """{(question key, option label): option id} for validating tags."""
     rows = db.session.execute(
         db.select(Question.key, QuestionOption.label, QuestionOption.id)
         .join(QuestionOption, QuestionOption.question_id == Question.id)
@@ -223,8 +210,6 @@ def seed():
         club.description = description
         db.session.flush()
 
-        # Tags are ours to rebuild -- unlike question options, nothing points at
-        # them, so replacing them wholesale is safe.
         db.session.execute(db.delete(ClubTag).filter_by(club_id=club.id))
         for key, label in tags:
             option_id = options[(key, label)]

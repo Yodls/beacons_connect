@@ -1,16 +1,3 @@
-"""Seed demo students so matching has something to work with.
-
-    python seed_demo.py           # create or refresh the demo accounts
-    python seed_demo.py --clear   # delete them and their answers
-
-Every account uses a demo.* email so it is easy to spot and easy to remove. The
-profiles are deliberately clustered -- a CS cohort, an arts cohort, and so on --
-so a recommendation can be explained rather than just observed.
-
-Picks per student are kept moderate on purpose. Scoring pays out once per shared
-option, so a profile that ticked every box would outrank everyone; real students
-can do that, but demo data should not make the ranking look broken.
-"""
 import random
 import sys
 
@@ -36,8 +23,6 @@ LAST = [
     "Aziz", "Novak",
 ]
 
-# Each cluster is a pool to draw from, not a fixed profile -- students inside a
-# cluster overlap heavily but never identically.
 CLUSTERS = [
     {
         "name": "CS / tech",
@@ -122,7 +107,6 @@ CLUSTERS = [
 
 
 def option_ids():
-    """{(question key, label): option id}"""
     rows = db.session.execute(
         db.select(Question.key, QuestionOption.label, QuestionOption.id)
         .join(QuestionOption, QuestionOption.question_id == Question.id)
@@ -139,7 +123,7 @@ def clear():
         db.select(User).where(User.email.like(f"{EMAIL_PREFIX}%"))
     ).all()
     for user in demo_users:
-        db.session.delete(user)     # user_answers cascade via the FK
+        db.session.delete(user)
     db.session.commit()
     print(f"  removed {len(demo_users)} demo accounts")
 
@@ -150,7 +134,7 @@ def seed():
     if not options:
         raise SystemExit("No questions found. Run seed_questions.py first.")
 
-    rng = random.Random(20260929)        # fixed, so re-running gives the same cohort
+    rng = random.Random(20260929)
     names = [f"{f} {l}" for f, l in zip(FIRST, LAST)]
     rng.shuffle(names)
 
@@ -191,7 +175,6 @@ def seed():
                 "friday_night": [rng.choice(cluster["friday"])],
                 "study_style": [rng.choice(cluster["study"])],
             }
-            # Roughly half declare a minor, same as the form allows.
             if rng.random() < 0.5:
                 picks["minor"] = [rng.choice(cluster["minors"])]
 

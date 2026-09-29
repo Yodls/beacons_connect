@@ -1,26 +1,5 @@
-"""Beacon Connect - weighted matching.
-
-Students are matched to each other, and to clubs, by the same rule: every answer
-two profiles share pays out that question's weight, and the payouts are summed.
-Clubs are tagged with the same question options students answer in, so a club
-behaves like another profile to match against.
-
-Reads through the app's SQLAlchemy session, so it needs an application context:
-
-    from app import app
-    import matching
-
-    with app.app_context():
-        matching.find_matches(user_id)
-
-Run it directly to see matches for whoever has answered so far:
-
-    python matching.py
-"""
 from models import Question, db
 
-# Each shared answer adds its question's weight once per shared option, so a
-# multi-select question pays out once per overlapping pick. See README notes.
 _PEOPLE_SQL = """
     SELECT theirs.user_id AS user_id,
            u.email        AS email,
@@ -67,11 +46,6 @@ _ANSWERS_SQL = """
 
 
 def find_matches(user_id, limit=10):
-    """Students ranked by weighted score, highest first.
-
-    Returns [{'user_id', 'email', 'score', 'shared'}], where `shared` lists the
-    answers the two have in common.
-    """
     rows = db.session.execute(
         db.text(_PEOPLE_SQL), {"user_id": user_id, "limit": limit}
     ).mappings()
@@ -87,10 +61,6 @@ def find_matches(user_id, limit=10):
 
 
 def recommend_clubs(user_id, limit=10):
-    """Clubs ranked by how much of their tagging the student's answers cover.
-
-    Returns [{'club_id', 'name', 'description', 'score', 'shared'}].
-    """
     rows = db.session.execute(
         db.text(_CLUBS_SQL), {"user_id": user_id, "limit": limit}
     ).mappings()
@@ -107,7 +77,6 @@ def recommend_clubs(user_id, limit=10):
 
 
 def get_answers(user_id):
-    """One student's answers: {'major': ['Computer Science'], 'hobbies': [...]}"""
     answers = {}
     rows = db.session.execute(db.text(_ANSWERS_SQL), {"user_id": user_id}).mappings()
     for row in rows:
@@ -123,7 +92,6 @@ def get_weights():
 
 
 def set_weight(question_key, weight):
-    """Change a question's weight. Takes effect on the next find_matches call."""
     question = db.session.scalar(db.select(Question).filter_by(key=question_key))
     if question is None:
         raise ValueError(f"no question with key {question_key!r}")
