@@ -27,20 +27,26 @@ _CLUBS_SQL = """
 
 _CANDIDATES_SQL = """
     SELECT theirs.user_id AS user_id,
-           SUM(q.weight)  AS score
+           SUM(q.weight)  AS shared_score,
+           SUM(q.weight) + CASE
+               WHEN me.gender IN ('man', 'woman') AND me.gender = them.gender
+               THEN :gender_bonus ELSE 0
+           END AS rank_score
     FROM user_answers mine
     JOIN user_answers theirs
       ON theirs.option_id = mine.option_id
      AND theirs.user_id <> mine.user_id
     JOIN questions q ON q.id = mine.question_id
+    JOIN "user" me   ON me.id = :user_id
+    JOIN "user" them ON them.id = theirs.user_id
     WHERE mine.user_id = :user_id
       AND NOT EXISTS (
           SELECT 1 FROM matches m
           WHERE (m.user_lo = LEAST(:user_id, theirs.user_id)
              AND m.user_hi = GREATEST(:user_id, theirs.user_id))
       )
-    GROUP BY theirs.user_id
-    ORDER BY score DESC, theirs.user_id
+    GROUP BY theirs.user_id, me.gender, them.gender
+    ORDER BY rank_score DESC, theirs.user_id
     LIMIT :limit
 """
 
@@ -85,8 +91,13 @@ def recommend_clubs(user_id, limit=10):
     ]
 
 
-def ensure_matches(user_id, target=3):
-    """Top the student up to `target` active matches. Safe to call on every view."""
+def ensure_matches(user_id, target=3, gender_bonus=0):
+    """Top the student up to `target` active matches. Safe to call on every view.
+
+    `gender_bonus` steers who gets paired without inflating what is stored: the
+    ranking uses it, the saved score is the shared-answer total the dashboard
+    shows beside the list of answers in common.
+    """
     active = db.session.execute(
         db.text(_ACTIVE_SQL), {"user_id": user_id}
     ).fetchall()
@@ -95,7 +106,8 @@ def ensure_matches(user_id, target=3):
         return 0
 
     candidates = db.session.execute(
-        db.text(_CANDIDATES_SQL), {"user_id": user_id, "limit": missing}
+        db.text(_CANDIDATES_SQL),
+        {"user_id": user_id, "limit": missing, "gender_bonus": gender_bonus},
     ).mappings().all()
 
     created = 0
@@ -104,7 +116,12 @@ def ensure_matches(user_id, target=3):
         try:
             with db.session.begin_nested():
                 db.session.add(
-                    Match(user_lo=lo, user_hi=hi, score=row["score"], status="active")
+                    Match(
+                        user_lo=lo,
+                        user_hi=hi,
+                        score=row["shared_score"],
+                        status="active",
+                    )
                 )
             created += 1
         except IntegrityError:

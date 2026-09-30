@@ -11,12 +11,20 @@ db = SQLAlchemy()
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
+    gender = db.Column(db.String(12), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
     verification_code_hash = db.Column(db.String(255))
     verification_expires_at = db.Column(db.DateTime)
     verification_attempts = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "gender IN ('man', 'woman', 'nonbinary', 'undisclosed')",
+            name="ck_user_gender",
+        ),
+    )
 
 
 class Question(db.Model):

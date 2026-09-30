@@ -23,6 +23,13 @@ CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
 MATCH_TARGET = 3
+GENDER_BONUS = 4.0
+GENDERS = {
+    "man": "Man",
+    "woman": "Woman",
+    "nonbinary": "Non-binary",
+    "undisclosed": "Prefer not to say",
+}
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
@@ -119,7 +126,9 @@ def back_to():
 @app.route("/")
 @login_required
 def index():
-    matching.ensure_matches(current_user.id, target=MATCH_TARGET)
+    matching.ensure_matches(
+        current_user.id, target=MATCH_TARGET, gender_bonus=GENDER_BONUS
+    )
     return render_template(
         "index.html",
         matches=matching.active_matches(current_user.id),
@@ -190,8 +199,12 @@ def register():
         email = request.form["email"].strip().lower()
         password = request.form["password"]
 
+        gender = request.form.get("gender", "")
+
         if not name:
             flash("Please enter your name.")
+        elif gender not in GENDERS:
+            flash("Please choose an option for gender.")
         elif not email or not password:
             flash("Email and password are required.")
         elif not email.endswith("@umb.edu"):
@@ -205,6 +218,7 @@ def register():
         else:
             user = User(
                 name=name,
+                gender=gender,
                 email=email,
                 password_hash=generate_password_hash(password),
             )
@@ -214,7 +228,7 @@ def register():
             session["pending_user_id"] = user.id
             return redirect(url_for("verify"))
 
-    return render_template("register.html")
+    return render_template("register.html", genders=GENDERS)
 
 
 @app.route("/verify", methods=["GET", "POST"])
