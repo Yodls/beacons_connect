@@ -5,3 +5,4 @@ __pycache__/
 venv/
 migrations/versions/*.pyc
 capstone_test.py
+db/
