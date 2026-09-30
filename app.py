@@ -23,7 +23,7 @@ CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
 MATCH_TARGET = 3
-GENDER_BONUS = 4.0
+GENDER_BONUS = 2.0
 GENDERS = {
     "man": "Man",
     "woman": "Woman",

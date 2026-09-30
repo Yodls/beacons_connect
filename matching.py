@@ -26,27 +26,53 @@ _CLUBS_SQL = """
 """
 
 _CANDIDATES_SQL = """
-    SELECT theirs.user_id AS user_id,
-           SUM(q.weight)  AS shared_score,
-           SUM(q.weight) + CASE
+    WITH mine AS (
+        SELECT question_id, option_id
+        FROM user_answers
+        WHERE user_id = :user_id
+    ),
+    mine_n AS (
+        SELECT question_id, count(*) AS n
+        FROM mine
+        GROUP BY question_id
+    ),
+    overlap AS (
+        SELECT theirs.user_id     AS other_id,
+               theirs.question_id AS question_id,
+               count(*)              AS n_theirs,
+               count(mine.option_id) AS n_shared
+        FROM user_answers theirs
+        LEFT JOIN mine ON mine.option_id = theirs.option_id
+        WHERE theirs.user_id <> :user_id
+        GROUP BY theirs.user_id, theirs.question_id
+    ),
+    scored AS (
+        SELECT o.other_id AS other_id,
+               ROUND(SUM(
+                   q.weight * o.n_shared
+                   / (COALESCE(mn.n, 0) + o.n_theirs - o.n_shared)
+               ), 2) AS shared_score
+        FROM overlap o
+        JOIN questions q   ON q.id = o.question_id
+        LEFT JOIN mine_n mn ON mn.question_id = o.question_id
+        GROUP BY o.other_id
+        HAVING SUM(o.n_shared) > 0
+    )
+    SELECT s.other_id     AS user_id,
+           s.shared_score AS shared_score,
+           s.shared_score + CASE
                WHEN me.gender IN ('man', 'woman') AND me.gender = them.gender
                THEN :gender_bonus ELSE 0
            END AS rank_score
-    FROM user_answers mine
-    JOIN user_answers theirs
-      ON theirs.option_id = mine.option_id
-     AND theirs.user_id <> mine.user_id
-    JOIN questions q ON q.id = mine.question_id
+    FROM scored s
     JOIN "user" me   ON me.id = :user_id
-    JOIN "user" them ON them.id = theirs.user_id
-    WHERE mine.user_id = :user_id
-      AND NOT EXISTS (
-          SELECT 1 FROM matches m
-          WHERE (m.user_lo = LEAST(:user_id, theirs.user_id)
-             AND m.user_hi = GREATEST(:user_id, theirs.user_id))
-      )
-    GROUP BY theirs.user_id, me.gender, them.gender
-    ORDER BY rank_score DESC, theirs.user_id
+    JOIN "user" them ON them.id = s.other_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM matches m
+        WHERE m.user_lo = LEAST(:user_id, s.other_id)
+          AND m.user_hi = GREATEST(:user_id, s.other_id)
+    )
+    ORDER BY rank_score DESC, (me.gender = them.gender) DESC, s.other_id
     LIMIT :limit
 """
 
