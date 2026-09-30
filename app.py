@@ -48,7 +48,7 @@ def load_user(user_id):
 
 def has_onboarded(user_id):
     return db.session.scalar(
-        db.select(db.literal(True)).where(UserAnswer.user_id == user_id).limit(1)
+        db.select(UserAnswer.user_id).filter_by(user_id=user_id).limit(1)
     ) is not None
 
 

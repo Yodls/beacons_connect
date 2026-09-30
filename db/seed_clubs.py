@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app import app
 from models import Club, ClubTag, Question, QuestionOption, db
 
@@ -182,10 +187,10 @@ CLUBS = [
 
 def option_lookup():
     rows = db.session.execute(
-        db.select(Question.key, QuestionOption.label, QuestionOption.id)
+        db.select(Question.key, QuestionOption.label, Question.id, QuestionOption.id)
         .join(QuestionOption, QuestionOption.question_id == Question.id)
     )
-    return {(key, label): option_id for key, label, option_id in rows}
+    return {(key, label): (qid, oid) for key, label, qid, oid in rows}
 
 
 def seed():
@@ -212,10 +217,7 @@ def seed():
 
         db.session.execute(db.delete(ClubTag).filter_by(club_id=club.id))
         for key, label in tags:
-            option_id = options[(key, label)]
-            question_id = db.session.scalar(
-                db.select(QuestionOption.question_id).filter_by(id=option_id)
-            )
+            question_id, option_id = options[(key, label)]
             db.session.add(
                 ClubTag(
                     club_id=club.id, question_id=question_id, option_id=option_id

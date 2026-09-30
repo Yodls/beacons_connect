@@ -80,9 +80,6 @@ class Club(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Text, unique=True, nullable=False)
     description = db.Column(db.Text, nullable=False)
-    tags = db.relationship(
-        "ClubTag", cascade="all, delete-orphan", passive_deletes=True
-    )
 
 
 class ClubTag(db.Model):
