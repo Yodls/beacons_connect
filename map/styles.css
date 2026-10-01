@@ -1,0 +1,269 @@
+/* ================================================================
+   styles.css: every style for the beacon center campus map page.
+   part 1 is the page (top bar, map frame, bottom nav, toast),
+   part 2 is the map widget, nested inside #beaconMap.
+   linked from beacon-center-homepage-mobile.html.
+   ================================================================ */
+
+/* ================================================================
+   css: page styles
+   tokens first, then base, then one section per component in
+   page order, then responsive rules.
+   ================================================================ */
+/* ---------- design tokens ---------- */
+:root {
+  --navy: #132245;
+  --navy-deep: #0d1b38;
+  --blue: #005a8b;
+  --sky: #78afe9;
+  --ink: #182b43;
+  --muted: #5f7288;
+  --line: #dbe4ee;
+  --paper: #f5f8fc;
+  --shadow: 0 4px 14px rgba(22, 48, 80, 0.06);
+  /* color code: one color per kind of thing */
+
+  /* games: orange */
+  --game: #d9620f;
+
+  /* places / map: green */
+  --place: #1b7f52;
+  --place-bg: #e3f3ea;
+
+  --dock-height: 62px;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 110px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.45 Arial, Helvetica, sans-serif; padding-bottom: calc(var(--dock-height) + 40px + env(safe-area-inset-bottom)); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+.icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* ---------- top bar (campus identity lives here) ---------- */
+.topbar { position: sticky; top: 0; z-index: 20; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar-inner { max-width: 1180px; margin: auto; display: flex; align-items: center; gap: 12px; padding: 10px 16px; min-height: 60px; }
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--navy); }
+.brand-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--blue); color: #fff; display: grid; place-items: center; font-weight: bold; font-size: 20px; border: 2px solid #9cc6e6; }
+.brand-name { font-size: 15px; letter-spacing: -0.3px; display: block; line-height: 1.1; }
+.brand-tagline { font-size: 11px; color: var(--muted); }
+.campus-badge { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
+.campus-badge img { height: 32px; width: auto; display: block; }
+.campus-badge span { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: bold; line-height: 1.2; }
+.search { margin-left: auto; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); padding: 0 11px; height: 38px; width: 260px; color: var(--muted); }
+.search input { border: 0; outline: 0; background: transparent; width: 100%; font-size: 14px; min-width: 0; }
+.icon-btn { position: relative; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--blue); display: grid; place-items: center; flex: none; }
+.badge { position: absolute; top: -5px; right: -5px; background: var(--game); color: #fff; font-size: 10px; font-weight: bold; border-radius: 10px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 4px; border: 2px solid #fff; }
+.avatar { width: 38px; height: 38px; border-radius: 10px; background: #d7eaf7; color: var(--blue); display: grid; place-items: center; font-weight: bold; flex: none; }
+
+/* ---------- main ---------- */
+.page { max-width: 1180px; margin: auto; padding: 12px 16px 0; }
+
+/* map section: the Beacon Center map widget, framed in the green "places" color */
+.map-section { border-top: 3px solid var(--place); border-radius: 14px; }
+.map-section #beaconMap { border-top: 0; border-radius: 0 0 14px 14px; }
+
+/* section title icon, used in the map toolbar */
+.tag-dot { width: 28px; height: 28px; border-radius: 8px; background: var(--place-bg); color: var(--place); display: grid; place-items: center; flex: none; }
+.tag-dot .icon { width: 16px; height: 16px; }
+
+.disclaimer { margin-top: 12px; color: var(--muted); font-size: 11px; }
+
+/* ---------- bottom nav ---------- */
+.dock { position: fixed; z-index: 25; left: 50%; transform: translateX(-50%); bottom: 16px; width: min(540px, calc(100% - 32px)); background: var(--navy-deep); border-radius: 20px; box-shadow: 0 12px 34px rgba(8, 20, 45, 0.35); display: grid; grid-template-columns: repeat(6, 1fr); align-items: center; height: var(--dock-height); padding: 0 6px; }
+.dock-btn { border: 0; background: none; color: #a8bfda; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; height: 52px; border-radius: 13px; position: relative; }
+.dock-btn:hover, .dock-btn.is-active { color: #fff; }
+.dock-btn.is-active::after { content: ''; position: absolute; bottom: 3px; width: 18px; height: 3px; border-radius: 3px; background: var(--dock-accent); }
+.dock-btn.is-active .icon { color: var(--dock-accent); }
+.dock-home { --dock-accent: var(--sky); }
+.dock-map { --dock-accent: #3fbf85; }
+.dock-create { background: var(--blue); color: #fff; width: 50px; height: 50px; border-radius: 15px; margin: auto; border: 2px solid #9cc6e6; }
+.dock-create .icon { width: 24px; height: 24px; }
+.dock-count { position: absolute; top: 4px; left: calc(50% + 6px); background: var(--game); color: #fff; font-size: 10px; font-weight: bold; border-radius: 9px; min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; }
+
+/* ---------- toast ---------- */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--dock-height) + 30px + env(safe-area-inset-bottom)); background: var(--navy); color: #fff; border-radius: 12px; padding: 12px 16px; z-index: 45; font-size: 13px; box-shadow: var(--shadow); display: none; width: max-content; max-width: calc(100% - 32px); }
+.toast.is-visible { display: block; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 700px) {
+  .topbar-inner { flex-wrap: wrap; gap: 9px 8px; padding: 9px 16px 10px; min-height: 56px; }
+  .brand-tagline, .campus-badge span { display: none; }
+  .campus-badge { padding-left: 8px; }
+  .campus-badge img { height: 28px; }
+  /* the brand shrinks before anything wraps; only the search box moves to the second row */
+  .brand { flex: 1 1 0; max-width: max-content; }
+  .topbar-inner > .search { order: 1; width: 100%; margin: 0; }
+  .topbar-spacer { margin-left: auto; }
+  .dock { left: 0; right: 0; transform: none; width: 100%; bottom: 0; border-radius: 18px 18px 0 0; height: calc(var(--dock-height) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom); }
+  body { padding-bottom: calc(var(--dock-height) + 24px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(var(--dock-height) + 14px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 380px) {
+  .brand-name { display: none; }
+  .dock-btn { font-size: 10px; }
+}
+
+@media (min-width: 701px) {
+  .topbar-spacer { display: none; }
+}
+
+/* ================================================================
+   css: all styles for the widget
+   everything is nested inside #beaconMap so it never leaks into
+   the host website. sections run top to bottom in page order.
+   ================================================================ */
+/* ================= Beacon Center map widget (from Beacon-Center-Map.html) ================= */
+#beaconMap {
+  /* ---------- css: 2. theme tokens, light value first then dark value ---------- */
+  --bcBg: light-dark(#f5f7fa, #18222e); /* variable: page background */
+  --bcPanel: light-dark(#fff, #202d3d); /* variable: cards, nav, side panel */
+  --bcInk: light-dark(#18334b, #edf4fb); /* variable: main text */
+  --bcMuted: light-dark(#566779, #afbed0); /* variable: secondary text */
+  --bcLine: light-dark(#dce3eb, #3a4859); /* variable: borders and dividers */
+  --bcSoft: light-dark(#eef4fa, #263c50); /* variable: soft highlight fill */
+  --bcBlue: light-dark(#005a99, #72bfff); /* variable: brand accent */
+
+  /* ---------- css: 3. widget root ---------- */
+  color-scheme: light dark; /* follows the os theme, delete to follow the host site */
+  container-type: inline-size; /* lets the responsive rules below react to widget width */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font: 14px/1.45 Arial, sans-serif;
+  color: var(--bcInk);
+  background: var(--bcBg);
+  border: 1px solid var(--bcLine);
+  border-radius: 14px;
+
+  /* ---------- css: 4. base elements and resets ---------- */
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  h3 { font-weight: 500; }
+  p { margin: 0 0 14px; }
+  a { color: var(--bcBlue); font-weight: 500; text-decoration: none; }
+  a:hover { text-decoration: underline dashed; }
+  button, input, select, textarea { font: inherit; }
+  button { color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 3px solid #efb847; outline-offset: 3px; }
+  .bcSprite { display: none; }
+  .bcIcon { display: block; flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .bcMuted { color: var(--bcMuted); font-size: 12px; }
+
+  /* ---------- css: 6. layout, map + side panel ---------- */
+  .bcWork { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px); align-items: start; border-top: 1px solid var(--bcLine); }
+
+  /* ---------- css: 7. toolbar, buttons, status line ---------- */
+  .bcToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 16px; }
+  .bcActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bcButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; background: var(--bcPanel); border: 1px solid var(--bcLine); border-radius: 7px; }
+  .bcButton.bcPrimary { background: #005a99; border-color: #005a99; color: #fff; }
+  .bcFull { width: 100%; margin-top: 8px; }
+  .bcStatus { padding: 0 22px 10px; font-size: 12px; color: var(--bcBlue); }
+
+  /* ---------- css: 8. map canvas and osm layers ---------- */
+  .bcMapWrap { min-width: 0; }
+  .bcMap { position: relative; aspect-ratio: 900 / 680; overflow: hidden; z-index: 1; background: light-dark(#eef1e9, #283a3b); } /* z-index keeps the phone bottom sheet above the legend */
+  .bcBase { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  .building { fill: light-dark(#d0dbe1, #43596a); stroke: light-dark(#a4b6c2, #6a8091); stroke-width: 1; }
+  .road { fill: none; stroke: light-dark(#fff, #68747c); stroke-width: 8; stroke-linejoin: round; }
+  .footway { fill: none; stroke: light-dark(#fff, #617775); stroke-width: 3; }
+  .coast { fill: none; stroke: light-dark(#c0dfe9, #2c5b70); stroke-width: 12; }
+  .green { fill: light-dark(#d6e4d0, #354e41); stroke: none; }
+
+  /* ---------- css: 9. map overlays, note, place labels, markers, gps ---------- */
+  .bcMapNote { position: absolute; top: 14px; left: 14px; right: 14px; z-index: 4; display: flex; justify-content: space-between; font-size: 11px; color: var(--bcMuted); pointer-events: none; }
+  .bcMapNote span { background: var(--bcPanel); padding: 5px 8px; border-radius: 5px; }
+  .bcPlace { position: absolute; transform: translate(-50%, 0); padding: 2px 4px; font-size: 11px; white-space: nowrap; color: var(--bcInk); background: var(--bcBg); border-radius: 3px; pointer-events: none; }
+  .bcMarker { position: absolute; z-index: 2; transform: translate(-50%, -100%); display: flex; align-items: center; justify-content: center; min-width: 44px; height: 48px; padding: 0; border: 0; background: transparent; filter: drop-shadow(0 2px 2px #0003); }
+  .bcMarker.bcSelected { background: light-dark(#fff, #18222e); border-radius: 50%; outline: 2px solid var(--bcBlue); }
+  .bcPrivateBadge { position: absolute; top: 2px; right: 0; padding: 2px; background: var(--bcPanel); border-radius: 50%; color: var(--bcBlue); }
+  .bcPhoto { position: absolute; left: 49%; top: 59%; z-index: 3; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 3px solid var(--bcPanel); border-radius: 50%; background: #005a99; color: #fff; font-size: 10px; box-shadow: 0 0 0 6px #0072bc22; }
+  .bcPhoto::after { content: 'GPS placeholder'; position: absolute; top: 35px; padding: 2px 5px; white-space: nowrap; background: var(--bcPanel); color: var(--bcInk); border-radius: 3px; }
+
+  /* ---------- css: 10. flag popup, a card beside the marker (becomes a bottom sheet on phones) ---------- */
+  .bcPopup { position: absolute; z-index: 5; display: flex; flex-direction: column; width: 280px; max-height: calc(100% - 16px); background: var(--bcPanel); border: 1px solid var(--bcLine); border-radius: 10px; box-shadow: 0 8px 24px #0003; animation: bcPopIn 0.15s ease-out; }
+  .bcPopup:focus { outline: none; }
+  .bcPopupBody { min-height: 0; padding: 16px; overflow-y: auto; overflow-wrap: anywhere; }
+  .bcPopup h3 { font-size: 17px; line-height: 1.25; margin: 6px 30px 10px 0; }
+  .bcPopupClose { position: absolute; top: 8px; right: 8px; z-index: 1; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; color: var(--bcMuted); }
+  .bcPopupClose:hover { background: var(--bcSoft); }
+  /* the little arrow pointing back at the marker, script sets --arrowY and the side class */
+  .bcPopup::before { content: ''; position: absolute; top: var(--arrowY, 24px); width: 12px; height: 12px; background: var(--bcPanel); border: solid var(--bcLine); transform: rotate(45deg); }
+  .bcPopup.bcOnRight::before { left: -7px; border-width: 0 0 1px 1px; }
+  .bcPopup.bcOnLeft::before { right: -7px; border-width: 1px 1px 0 0; }
+  .bcPopup:not(.bcOnLeft, .bcOnRight)::before { display: none; }
+  @keyframes bcPopIn { from { opacity: 0; transform: translateY(4px); } }
+  @keyframes bcSheetIn { from { transform: translateY(100%); } }
+
+  /* ---------- css: 11. lighthouse icon, drawn with two clipped pseudo elements ---------- */
+  .bcLighthouse { position: relative; display: inline-block; flex: none; width: 22px; height: 34px; color: #006bad; }
+  .bcLighthouse::before { content: ''; position: absolute; inset: 13px 2px 0; clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%); background: linear-gradient(to bottom, currentColor 0 35%, #fff 35% 53%, currentColor 53%); }
+  .bcLighthouse::after { content: ''; position: absolute; left: 3px; top: 2px; width: 16px; height: 13px; clip-path: polygon(50% 0, 100% 35%, 90% 35%, 90% 100%, 10% 100%, 10% 35%, 0 35%); background: linear-gradient(to bottom, currentColor 0 30%, #f7d779 30% 76%, currentColor 76%); }
+  .bcP2p .bcLighthouse { transform: scale(0.7); }
+
+  /* ---------- css: 12. legend and attribution under the map ---------- */
+  .bcLegend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 15px; padding: 12px 15px; font-size: 11px; background: var(--bcPanel); border-top: 1px solid var(--bcLine); }
+  .bcLegend span { display: flex; align-items: center; gap: 5px; }
+  .bcLegend .bcLighthouse { width: 17px; height: 24px; }
+  .bcLegend .bcLighthouse::after { left: 2px; width: 13px; }
+  .bcAttrib { padding: 7px 14px; font-size: 10px; color: var(--bcMuted); }
+
+  /* ---------- css: 13. side panel and forms ---------- */
+  .bcSide { align-self: stretch; min-width: 0; padding: 20px; overflow-wrap: anywhere; background: var(--bcPanel); border-left: 1px solid var(--bcLine); }
+  .bcSide h3 { font-size: 18px; line-height: 1.25; margin: 7px 0 13px; }
+  .bcEyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--bcBlue); }
+  .bcTag { display: inline-flex; margin: 2px 0 12px; padding: 4px 7px; font-size: 11px; color: var(--bcBlue); background: var(--bcSoft); border-radius: 5px; }
+  .bcRow { padding: 10px 0; font-size: 12px; border-top: 1px solid var(--bcLine); }
+  .bcRow span { display: block; margin-bottom: 2px; font-size: 11px; color: var(--bcMuted); }
+  .bcFields { display: grid; gap: 11px; }
+  .bcFields > * { min-width: 0; }
+  label { display: block; font-size: 12px; }
+  input, select, textarea { display: block; width: 100%; min-width: 0; margin-top: 4px; padding: 8px; color: var(--bcInk); background: var(--bcBg); border: 1px solid var(--bcLine); border-radius: 5px; }
+  textarea { min-height: 74px; resize: vertical; }
+  .bcError { margin-top: 10px; font-size: 12px; color: light-dark(#a82424, #ffaba7); }
+
+  /* ---------- css: 14. footer ---------- */
+  .bcBottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 13px 20px; font-size: 11px; color: var(--bcMuted); border-top: 1px solid var(--bcLine); }
+
+  /* ---------- css: 15. responsive, based on widget width (not screen width) ---------- */
+  /* criteria: tablet and below, stack the side panel under the map */
+  @container (max-width: 800px) {
+    .bcWork { grid-template-columns: minmax(0, 1fr); }
+    .bcToolbar { padding: 16px; }
+    .bcSide { padding: 18px; border-left: 0; border-top: 1px solid var(--bcLine); }
+    .bcButton { min-height: 44px; }
+    input, select, textarea { min-height: 44px; font-size: 16px; }
+  }
+  /* criteria: phone, tighten spacing and hide the labels that would overlap */
+  @container (max-width: 480px) {
+    .bcToolbar { padding: 14px; }
+    .bcMapNote { top: 8px; left: 8px; right: 8px; font-size: 10px; }
+    .bcPlace:is([data-place='Clark Athletic Center'], [data-place='McCormack Hall'], [data-place='Wheatley Hall']) { display: none; }
+    .bcPlace[data-place='University Hall'] { transform: translate(-15%, -50%); }
+    .bcPlace[data-place='Campus Center'] { transform: translate(-50%, 8px); }
+    .bcLegend { gap: 8px 12px; padding: 10px; }
+    .bcBottom { padding: 12px 14px; }
+    /* criteria: popup turns into a bottom sheet pinned to the screen, with a grab handle on top */
+    .bcPopup { position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-height: 70vh; border-width: 1px 0 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px #0003; animation-name: bcSheetIn; animation-duration: 0.2s; }
+    .bcPopupBody { padding-top: 22px; }
+    .bcPopup:not(.bcOnLeft, .bcOnRight)::before { display: block; top: 8px; left: 50%; width: 36px; height: 4px; border: 0; border-radius: 2px; background: var(--bcLine); transform: translateX(-50%); }
+  }
+}
+
+/* ---- page integration overrides ---- */
+/* page is light, keep the map light too */
+#beaconMap { color-scheme: light; }
+#beaconMap .bcToolbar { padding: 12px 14px; }
+#beaconMap .bcToolbar h1 { margin: 0 0 3px; font-size: 16px; line-height: 1.25; font-weight: bold; letter-spacing: -0.2px; display: flex; align-items: center; gap: 9px; }
+#beaconMap .bcPlace.bcFlash { display: block; background: var(--place); color: #fff; font-weight: bold; z-index: 4; animation: bcFlash 1.2s ease-out 2; }
+@keyframes bcFlash { 50% { transform: translate(-50%, 0) scale(1.15); } }
+/* sheet sits above the bottom dock */
+@container (max-width: 480px) {
+  #beaconMap .bcPopup { bottom: calc(var(--dock-height) + env(safe-area-inset-bottom)); }
+}
