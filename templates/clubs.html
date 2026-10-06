@@ -1,10 +1,10 @@
-{% extends "base.html" %}
+{% extends "shell.html" %}
 {% block title %}All clubs{% endblock %}
 
-{% block style %}body { max-width: 34rem; }
+{% block appstyle %}
 {% endblock %}
 
-{% block content %}
+{% block main %}
   <h1>All clubs</h1>
   <p>Every club on campus. You're in {{ joined_ids | length }} of {{ clubs | length }}.</p>
 
@@ -29,6 +29,6 @@
   {% endfor %}
 
   <p class="nav">
-    <a href="{{ url_for('index') }}">Back to your matches</a>
+    <a href="{{ url_for('matches') }}">Back to your matches</a>
   </p>
 {% endblock %}

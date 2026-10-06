@@ -30,6 +30,19 @@
       .actions button { margin-top: 0; padding: 0.3rem 0.7rem; font-size: 0.85rem; }
       .actions button[disabled] { color: #999; border-style: dashed; }
       .nav { margin-top: 2rem; color: #555; font-size: 0.9rem; }
+      .shell { display: flex; gap: 1.5rem; align-items: flex-start; }
+      .shell main { flex: 1 1 auto; min-width: 0; }
+      .side { flex: 0 0 11rem; }
+      .side button { display: block; width: 100%; margin: 0 0 0.5rem; text-align: left; }
+      .side button[disabled] { color: #999; border-style: dashed; }
+      details.menu { margin-bottom: 1rem; }
+      details.menu summary { cursor: pointer; font-size: 1.3rem; list-style: none; }
+      details.menu summary::-webkit-details-marker { display: none; }
+      details.menu a { display: block; padding: 0.3rem 0; font-size: 0.9rem; }
+      @media (max-width: 40rem) {
+        .shell { flex-direction: column; }
+        .side { flex: 1 1 auto; width: 100%; }
+      }
       {% block style %}{% endblock %}
     </style>
   </head>
@@ -38,5 +51,6 @@
       <p class="flash">{{ message }}</p>
     {% endfor %}
     {% block content %}{% endblock %}
+    {% block script %}{% endblock %}
   </body>
 </html>

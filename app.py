@@ -3,7 +3,16 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import (
     LoginManager,
     current_user,
@@ -11,11 +20,23 @@ from flask_login import (
     login_user,
     logout_user,
 )
-from flask_mail import Mail, Message
+from flask_mail import Mail
+from jinja2 import ChoiceLoader, FileSystemLoader
+from flask_mail import Message as MailMessage
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import matching
-from models import Club, ClubMember, Question, User, UserAnswer, db
+from models import (
+    Club,
+    ClubMember,
+    Match,
+    Message,
+    Question,
+    User,
+    UserAnswer,
+    db,
+    pair,
+)
 
 load_dotenv()
 
@@ -41,6 +62,12 @@ app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "").lower() == "true
 app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
 app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
+
+# A gitignored templates_local/ overrides templates/ when it exists, so local
+# UI experiments stay off the repository. No folder, no change in behaviour.
+_local_ui = os.path.join(app.root_path, "templates_local")
+if os.path.isdir(_local_ui):
+    app.jinja_loader = ChoiceLoader([FileSystemLoader(_local_ui), app.jinja_loader])
 
 db.init_app(app)
 mail = Mail(app)
@@ -70,7 +97,7 @@ def issue_verification_code(user):
 
 def send_verification_email(user, code):
     mail.send(
-        Message(
+        MailMessage(
             subject="Verify your Beacon account",
             recipients=[user.email],
             body=(
@@ -106,7 +133,7 @@ def require_onboarding():
     return redirect(url_for("onboarding"))
 
 
-RETURN_TO = {"index", "clubs"}
+RETURN_TO = {"matches", "clubs"}
 
 
 def joined_clubs(user_id):
@@ -119,22 +146,171 @@ def joined_clubs(user_id):
 
 
 def back_to():
-    target = request.form.get("back", "index")
-    return redirect(url_for(target if target in RETURN_TO else "index"))
+    target = request.form.get("back", "matches")
+    return redirect(url_for(target if target in RETURN_TO else "matches"))
+
+
+MESSAGE_MAX = 2000
+
+
+def chat_target(kind, target_id):
+    """Resolve a chat and check the student may see it.
+
+    Access is derived from data that already exists: an active match, or a club
+    membership. Returns (parent, title) or (None, None).
+    """
+    if kind == "match":
+        lo, hi = pair(current_user.id, target_id)
+        match = db.session.scalar(
+            db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
+        )
+        if match is None:
+            return None, None
+        other = db.session.get(User, target_id)
+        return match, (other.name if other else "Chat")
+
+    if kind == "club":
+        if db.session.get(ClubMember, (current_user.id, target_id)) is None:
+            return None, None
+        club = db.session.get(Club, target_id)
+        if club is None:
+            return None, None
+        return club, club.name
+
+    return None, None
+
+
+def message_filter(kind, parent):
+    column = Message.match_id if kind == "match" else Message.club_id
+    return column == parent.id
+
+
+def chat_rows(kind, parent, after=0):
+    rows = db.session.execute(
+        db.select(Message, User.name)
+        .join(User, User.id == Message.user_id)
+        .where(message_filter(kind, parent), Message.id > after)
+        .order_by(Message.id)
+    ).all()
+    return [
+        {
+            "id": m.id,
+            "user_id": m.user_id,
+            "name": name,
+            "body": m.body,
+            "at": m.created_at.strftime("%H:%M"),
+            "mine": m.user_id == current_user.id,
+        }
+        for m, name in rows
+    ]
+
+
+def chat_list():
+    """Every chat the student can open, most recently active first."""
+    entries = []
+    for match in matching.active_matches(current_user.id):
+        entries.append({
+            "kind": "match",
+            "target_id": match["user_id"],
+            "title": match["name"],
+            "subtitle": "Your match",
+        })
+    for club in joined_clubs(current_user.id):
+        entries.append({
+            "kind": "club",
+            "target_id": club.id,
+            "title": club.name,
+            "subtitle": "Club space",
+        })
+
+    last = {}
+    for kind, column in (("match", Message.match_id), ("club", Message.club_id)):
+        for parent_id, body, when in db.session.execute(
+            db.select(column, Message.body, Message.created_at)
+            .where(column.is_not(None))
+            .order_by(Message.id.desc())
+        ).all():
+            last.setdefault((kind, parent_id), (body, when))
+
+    for entry in entries:
+        key = (entry["kind"], entry["target_id"])
+        if entry["kind"] == "match":
+            lo, hi = pair(current_user.id, entry["target_id"])
+            match = db.session.scalar(
+                db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
+            )
+            key = ("match", match.id if match else 0)
+        preview, when = last.get(key, (None, None))
+        entry["preview"] = preview
+        entry["when"] = when
+
+    entries.sort(key=lambda e: (e["when"] is not None, e["when"]), reverse=True)
+    return entries
 
 
 @app.route("/")
 @login_required
 def index():
+    return render_template("home.html", chats=chat_list())
+
+
+@app.route("/matches")
+@login_required
+def matches():
     matching.ensure_matches(
         current_user.id, target=MATCH_TARGET, gender_bonus=GENDER_BONUS
     )
     return render_template(
-        "index.html",
+        "matches.html",
         matches=matching.active_matches(current_user.id),
         joined=joined_clubs(current_user.id),
         clubs=matching.recommend_clubs(current_user.id, limit=5),
     )
+
+
+@app.route("/chats/<kind>/<int:target_id>", methods=["GET", "POST"])
+@login_required
+def chat(kind, target_id):
+    parent, title = chat_target(kind, target_id)
+
+    if parent is None:
+        flash("That chat is not available to you.")
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+
+        if not body:
+            flash("Write something first.")
+        elif len(body) > MESSAGE_MAX:
+            flash(f"Messages are limited to {MESSAGE_MAX} characters.")
+        else:
+            message = Message(user_id=current_user.id, body=body)
+            setattr(message, f"{kind}_id", parent.id)
+            db.session.add(message)
+            db.session.commit()
+
+        return redirect(url_for("chat", kind=kind, target_id=target_id))
+
+    return render_template(
+        "chat.html",
+        kind=kind,
+        target_id=target_id,
+        title=title,
+        messages=chat_rows(kind, parent),
+    )
+
+
+@app.route("/chats/<kind>/<int:target_id>/messages")
+@login_required
+def chat_messages(kind, target_id):
+    parent, _ = chat_target(kind, target_id)
+
+    if parent is None:
+        return jsonify({"error": "unavailable"}), 403
+
+    after = request.args.get("after", type=int, default=0)
+    return jsonify(chat_rows(kind, parent, after=after))
 
 
 @app.route("/clubs")
@@ -189,7 +365,7 @@ def unmatch(other_id):
     else:
         flash("You are not matched with that person.")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("matches"))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -359,7 +535,7 @@ def onboarding():
                         )
                     )
             db.session.commit()
-            return redirect(url_for("index"))
+            return redirect(url_for("matches"))
 
     return render_template(
         "onboarding.html",

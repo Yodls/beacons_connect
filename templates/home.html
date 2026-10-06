@@ -1,0 +1,34 @@
+{% extends "shell.html" %}
+{% block title %}Beacons Center{% endblock %}
+
+{% block appstyle %}
+      .chatrow { display: block; padding: 0.7rem 1rem; border: 1px solid #ddd;
+                 margin-top: 0.5rem; color: inherit; text-decoration: none; }
+      .chatrow:hover { background: #f6f6f6; }
+      .chatrow b { display: block; font-size: 1rem; }
+      .chatrow .who { color: #555; font-size: 0.8rem; }
+      .chatrow .last { margin: 0.2rem 0 0; color: #555; font-size: 0.9rem;
+                       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+{% endblock %}
+
+{% block main %}
+  <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
+  <p>Your chats.</p>
+
+  {% for chat in chats %}
+    <a class="chatrow"
+       href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
+      <b>{{ chat.title }}</b>
+      <span class="who">{{ chat.subtitle }}</span>
+      <p class="last">
+        {%- if chat.preview %}{{ chat.preview }}{% else %}No messages yet{% endif -%}
+      </p>
+    </a>
+  {% else %}
+    <p class="why">
+      You have no chats yet. Once you're matched with someone or join a club,
+      they'll show up here.
+      <a href="{{ url_for('matches') }}">See your matches and club suggestions</a>.
+    </p>
+  {% endfor %}
+{% endblock %}

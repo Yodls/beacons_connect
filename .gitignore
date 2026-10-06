@@ -6,3 +6,4 @@ venv/
 migrations/versions/*.pyc
 capstone_test.py
 db/
+templates_local/

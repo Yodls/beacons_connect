@@ -5,23 +5,61 @@ from sqlalchemy.exc import IntegrityError
 from models import Match, db, pair
 
 _CLUBS_SQL = """
-    SELECT c.id            AS club_id,
-           c.name          AS name,
-           c.description   AS description,
-           SUM(q.weight)   AS score,
-           array_agg(o.label ORDER BY q.id, o.sort_order) AS shared
-    FROM user_answers mine
-    JOIN club_tags t        ON t.option_id = mine.option_id
-    JOIN clubs c            ON c.id = t.club_id
-    JOIN questions q        ON q.id = mine.question_id
-    JOIN question_options o ON o.id = mine.option_id
-    WHERE mine.user_id = :user_id
-      AND NOT EXISTS (
-          SELECT 1 FROM club_members m
-          WHERE m.club_id = c.id AND m.user_id = :user_id
-      )
-    GROUP BY c.id, c.name, c.description
-    ORDER BY score DESC, c.name
+    WITH mine AS (
+        SELECT option_id
+        FROM user_answers
+        WHERE user_id = :user_id
+    ),
+    hit AS (
+        SELECT t.club_id,
+               t.question_id,
+               t.option_id,
+               (mine.option_id IS NOT NULL) AS matched
+        FROM club_tags t
+        LEFT JOIN mine ON mine.option_id = t.option_id
+    ),
+    per_q AS (
+        SELECT club_id,
+               question_id,
+               count(*)                        AS n_tags,
+               count(*) FILTER (WHERE matched) AS n_matched
+        FROM hit
+        GROUP BY club_id, question_id
+    ),
+    scored AS (
+        SELECT p.club_id AS club_id,
+               ROUND(SUM(q.weight * CASE
+                   WHEN q.allows_multiple
+                   THEN p.n_matched::numeric / p.n_tags
+                   ELSE LEAST(p.n_matched, 1)
+               END), 2) AS score
+        FROM per_q p
+        JOIN questions q ON q.id = p.question_id
+        GROUP BY p.club_id
+        HAVING SUM(p.n_matched) > 0
+    ),
+    labels AS (
+        SELECT h.club_id AS club_id,
+               array_agg(o.label ORDER BY q.id, o.sort_order) AS shared
+        FROM hit h
+        JOIN question_options o ON o.id = h.option_id
+        JOIN questions q        ON q.id = h.question_id
+        WHERE h.matched
+        GROUP BY h.club_id
+    )
+    SELECT c.id          AS club_id,
+           c.name        AS name,
+           c.description AS description,
+           s.score       AS score,
+           l.shared      AS shared
+    FROM scored s
+    JOIN clubs c  ON c.id = s.club_id
+    JOIN labels l ON l.club_id = s.club_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM club_members m
+        WHERE m.club_id = c.id AND m.user_id = :user_id
+    )
+    ORDER BY s.score DESC, c.name
     LIMIT :limit
 """
 

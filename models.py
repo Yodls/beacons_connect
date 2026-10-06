@@ -151,6 +151,28 @@ class Match(db.Model):
     )
 
 
+class Message(db.Model):
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    match_id = db.Column(db.Integer, db.ForeignKey("matches.id", ondelete="CASCADE"))
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE"))
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        # A message hangs off exactly one chat, never both and never neither.
+        db.CheckConstraint(
+            "num_nonnulls(match_id, club_id) = 1", name="ck_message_one_parent"
+        ),
+        db.Index("ix_messages_match", "match_id", "id"),
+        db.Index("ix_messages_club", "club_id", "id"),
+    )
+
+
 def pair(a, b):
     """Matches are symmetric but stored once; always normalise through this."""
     return (a, b) if a < b else (b, a)

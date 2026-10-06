@@ -1,0 +1,99 @@
+{% extends "shell.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block appstyle %}
+      #log { border: 1px solid #ddd; padding: 0.75rem; height: 24rem;
+             overflow-y: auto; background: #fff; }
+      .msg { margin: 0 0 0.6rem; }
+      .msg .who { display: block; color: #555; font-size: 0.8rem; }
+      .msg .body { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .msg.mine .who { color: #1a4d80; }
+      .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+      .composer input { margin: 0; }
+      .composer button { margin: 0; white-space: nowrap; }
+{% endblock %}
+
+{% block main %}
+  <h1>{{ title }}</h1>
+  <p class="nav" style="margin-top:0"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
+
+  <div id="log">
+    {% for message in messages %}
+      <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
+        <span class="who">{{ message.name }}</span>
+        <span class="body">{{ message.body }}</span>
+      </p>
+    {% else %}
+      <p class="why" id="empty">No messages yet. Say hello.</p>
+    {% endfor %}
+  </div>
+
+  <form class="composer" method="post">
+    <input name="body" maxlength="{{ 2000 }}" autocomplete="off" autofocus
+           placeholder="Write a message" required />
+    <button type="submit">Send</button>
+  </form>
+{% endblock %}
+
+{% block script %}
+<script>
+  (function () {
+    var log = document.getElementById("log");
+    var url = {{ url_for("chat_messages", kind=kind, target_id=target_id) | tojson }};
+    var me = {{ current_user.id | tojson }};
+    var last = 0;
+    var failures = 0;
+
+    document.querySelectorAll("#log .msg").forEach(function (el) {
+      last = Math.max(last, parseInt(el.dataset.id, 10) || 0);
+    });
+    log.scrollTop = log.scrollHeight;
+
+    function add(message) {
+      var empty = document.getElementById("empty");
+      if (empty) { empty.remove(); }
+
+      var who = document.createElement("span");
+      who.className = "who";
+      who.textContent = message.name;
+
+      var body = document.createElement("span");
+      body.className = "body";
+      // textContent, never innerHTML: this is user-written text.
+      body.textContent = message.body;
+
+      var p = document.createElement("p");
+      p.className = "msg" + (message.user_id === me ? " mine" : "");
+      p.dataset.id = message.id;
+      p.appendChild(who);
+      p.appendChild(body);
+      log.appendChild(p);
+    }
+
+    function poll() {
+      if (document.hidden) { return; }
+      fetch(url + "?after=" + last, { headers: { "Accept": "application/json" } })
+        .then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        })
+        .then(function (rows) {
+          failures = 0;
+          if (!rows.length) { return; }
+          var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+          rows.forEach(function (m) {
+            add(m);
+            last = Math.max(last, m.id);
+          });
+          if (stuck) { log.scrollTop = log.scrollHeight; }
+        })
+        .catch(function () {
+          failures += 1;
+          if (failures >= 5) { clearInterval(timer); }
+        });
+    }
+
+    var timer = setInterval(poll, 4000);
+  })();
+</script>
+{% endblock %}

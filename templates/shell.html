@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block style %}body { max-width: 52rem; }
+{% block appstyle %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+  <div class="shell">
+    <main>
+      {% block main %}{% endblock %}
+    </main>
+
+    <div class="side">
+      <details class="menu">
+        <summary>&#9776;</summary>
+        <a href="{{ url_for('matches') }}">Matches &amp; clubs</a>
+        <a href="{{ url_for('clubs') }}">Browse all clubs</a>
+        <a href="{{ url_for('logout') }}">Sign out</a>
+      </details>
+
+      {% block sidebuttons %}
+        <button type="button" disabled>Find a Game</button>
+        <button type="button" disabled>Play a Game</button>
+        <button type="button" disabled>Who's looking for a game</button>
+        <button type="button" disabled>Maps</button>
+      {% endblock %}
+    </div>
+  </div>
+{% endblock %}
