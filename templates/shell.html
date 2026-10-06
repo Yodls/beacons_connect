@@ -20,7 +20,9 @@
 
       {% block sidebuttons %}
         <button type="button" disabled>Find a Game</button>
-        <button type="button" disabled>Play a Game</button>
+        <form method="get" action="{{ url_for('game_lobby') }}" style="margin:0">
+          <button type="submit">Play a Game</button>
+        </form>
         <button type="button" disabled>Who's looking for a game</button>
         <button type="button" disabled>Maps</button>
       {% endblock %}

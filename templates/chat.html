@@ -11,11 +11,27 @@
       .composer { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
       .composer input { margin: 0; }
       .composer button { margin: 0; white-space: nowrap; }
+      .launch { display: flex; gap: 0.5rem; align-items: center;
+                margin-bottom: 0.75rem; }
+      .launch select { width: auto; margin: 0; }
+      .launch button { margin: 0; white-space: nowrap; }
 {% endblock %}
 
 {% block main %}
   <h1>{{ title }}</h1>
   <p class="nav" style="margin-top:0"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
+
+  {% if kind == "match" %}
+    <form class="launch" method="post" action="{{ url_for('game_new') }}">
+      <input type="hidden" name="opponent_id" value="{{ target_id }}" />
+      <select name="kind" required>
+        {% for key, label in game_kinds %}
+          <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Start a game</button>
+    </form>
+  {% endif %}
 
   <div id="log">
     {% for message in messages %}

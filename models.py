@@ -173,6 +173,57 @@ class Message(db.Model):
     )
 
 
+class Game(db.Model):
+    __tablename__ = "games"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.Text, nullable=False)
+    status = db.Column(db.Text, nullable=False, default="invited")
+    player_a = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    player_b = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    turn_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    winner_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    outcome = db.Column(db.Text)
+    # db.JSON does not notice in-place edits: always reassign a fresh object.
+    state = db.Column(db.JSON, nullable=False)
+    version = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint("player_a <> player_b", name="ck_game_two_players"),
+        db.CheckConstraint(
+            "status IN ('invited', 'active', 'finished', 'declined')",
+            name="ck_game_status",
+        ),
+        # All four kinds listed now so adding their rules needs no migration.
+        db.CheckConstraint(
+            "kind IN ('tictactoe', 'connect4', 'battleship', 'chess')",
+            name="ck_game_kind",
+        ),
+        db.CheckConstraint(
+            "outcome IS NULL OR outcome IN ('win', 'draw', 'resigned')",
+            name="ck_game_outcome",
+        ),
+        db.Index("ix_games_player_a", "player_a"),
+        db.Index("ix_games_player_b", "player_b"),
+    )
+
+    def seat_of(self, user_id):
+        if user_id == self.player_a:
+            return 0
+        if user_id == self.player_b:
+            return 1
+        return None
+
+    def user_in_seat(self, seat):
+        return self.player_a if seat == 0 else self.player_b
+
+
 def pair(a, b):
     """Matches are symmetric but stored once; always normalise through this."""
     return (a, b) if a < b else (b, a)

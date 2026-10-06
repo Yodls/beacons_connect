@@ -1,0 +1,65 @@
+{% extends "shell.html" %}
+{% block title %}Play a game{% endblock %}
+
+{% block appstyle %}
+      .turn { color: #1a4d80; font-weight: 600; }
+      .start select { width: auto; margin-right: 0.5rem; }
+{% endblock %}
+
+{% block main %}
+  <h1>Play a game</h1>
+  <p>Turn-based games against the people you've matched with.</p>
+
+  <h2>Start a game</h2>
+  {% if opponents %}
+    <div class="card">
+      <form class="start" method="post" action="{{ url_for('game_new') }}">
+        <select name="kind" required>
+          {% for key, label in kinds %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <select name="opponent_id" required>
+          {% for match in opponents %}
+            <option value="{{ match.user_id }}">{{ match.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Send invite</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="why">
+      You need a match to play against.
+      <a href="{{ url_for('matches') }}">See your matches</a>.
+    </p>
+  {% endif %}
+
+  <h2>Your games</h2>
+  {% for row in rows %}
+    <div class="card">
+      <h3>{{ row.label }} with {{ row.opponent }}</h3>
+      <p class="why">
+        {% if row.game.status == "invited" %}
+          {% if row.waiting_on_you %}They invited you.{% else %}Waiting for them to accept.{% endif %}
+        {% elif row.game.status == "active" %}
+          {% if row.waiting_on_you %}<span class="turn">Your turn.</span>{% else %}Their turn.{% endif %}
+        {% elif row.game.status == "declined" %}
+          Invite declined.
+        {% elif row.game.outcome == "draw" %}
+          Finished &mdash; a draw.
+        {% elif row.game.winner_id == current_user.id %}
+          Finished &mdash; you won.
+        {% else %}
+          Finished &mdash; {{ row.opponent }} won.
+        {% endif %}
+      </p>
+      <div class="actions">
+        <form method="get" action="{{ url_for('game_view', game_id=row.game.id) }}">
+          <button type="submit">Open</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">No games yet. Send an invite above.</p>
+  {% endfor %}
+{% endblock %}

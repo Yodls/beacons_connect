@@ -25,10 +25,12 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from flask_mail import Message as MailMessage
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import games as rules
 import matching
 from models import (
     Club,
     ClubMember,
+    Game,
     Match,
     Message,
     Question,
@@ -298,6 +300,7 @@ def chat(kind, target_id):
         target_id=target_id,
         title=title,
         messages=chat_rows(kind, parent),
+        game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
     )
 
 
@@ -311,6 +314,231 @@ def chat_messages(kind, target_id):
 
     after = request.args.get("after", type=int, default=0)
     return jsonify(chat_rows(kind, parent, after=after))
+
+
+def game_for(game_id):
+    """Resolve a game and check the student is one of its two players.
+
+    Returns (game, seat) or (None, None). Every game route goes through this,
+    including the JSON one.
+    """
+    game = db.session.get(Game, game_id)
+    if game is None:
+        return None, None
+
+    seat = game.seat_of(current_user.id)
+    if seat is None:
+        return None, None
+
+    return game, seat
+
+
+def game_payload(game, seat):
+    other_id = game.user_in_seat(1 - seat)
+    other = db.session.get(User, other_id)
+    return {
+        "version": game.version,
+        "status": game.status,
+        "kind": game.kind,
+        "label": rules.LABELS.get(game.kind, game.kind),
+        "state": rules.view(game.kind, game.state, seat),
+        "seat": seat,
+        "your_turn": game.status == "active" and game.turn_id == current_user.id,
+        "opponent": other.name if other else "Opponent",
+        "opponent_id": other_id,
+        "outcome": game.outcome,
+        "winner_id": game.winner_id,
+        "you_won": game.winner_id == current_user.id,
+    }
+
+
+def finish_game(game, outcome, winner_id=None):
+    game.status = "finished"
+    game.outcome = outcome
+    game.winner_id = winner_id
+    game.turn_id = None
+
+
+@app.route("/games")
+@login_required
+def game_lobby():
+    mine = db.session.scalars(
+        db.select(Game)
+        .where(db.or_(Game.player_a == current_user.id,
+                      Game.player_b == current_user.id))
+        .order_by(Game.updated_at.desc())
+    ).all()
+
+    rows = []
+    for game in mine:
+        seat = game.seat_of(current_user.id)
+        other = db.session.get(User, game.user_in_seat(1 - seat))
+        rows.append({
+            "game": game,
+            "label": rules.LABELS.get(game.kind, game.kind),
+            "opponent": other.name if other else "Opponent",
+            "waiting_on_you": (
+                (game.status == "invited" and game.player_b == current_user.id)
+                or (game.status == "active" and game.turn_id == current_user.id)
+            ),
+        })
+
+    return render_template(
+        "games.html",
+        rows=rows,
+        opponents=matching.active_matches(current_user.id),
+        kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
+    )
+
+
+@app.route("/games/new", methods=["POST"])
+@login_required
+def game_new():
+    kind = request.form.get("kind", "")
+    opponent_id = request.form.get("opponent_id", type=int)
+
+    if kind not in rules.PLAYABLE:
+        flash("Pick a game to play.")
+        return redirect(url_for("game_lobby"))
+
+    # You can only challenge someone you are actively matched with.
+    lo, hi = pair(current_user.id, opponent_id or 0)
+    match = db.session.scalar(
+        db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
+    )
+    if match is None:
+        flash("You can only start a game with one of your matches.")
+        return redirect(url_for("game_lobby"))
+
+    game = Game(
+        kind=kind,
+        status="invited",
+        player_a=current_user.id,
+        player_b=opponent_id,
+        turn_id=current_user.id,
+        state=rules.new_state(kind),
+        version=0,
+    )
+    db.session.add(game)
+    db.session.commit()
+
+    flash(f"Invite sent for {rules.LABELS[kind]}.")
+    return redirect(url_for("game_view", game_id=game.id))
+
+
+@app.route("/games/<int:game_id>")
+@login_required
+def game_view(game_id):
+    game, seat = game_for(game_id)
+
+    if game is None:
+        flash("That game is not available to you.")
+        return redirect(url_for("game_lobby"))
+
+    other_id = game.user_in_seat(1 - seat)
+    parent, _ = chat_target("match", other_id)
+
+    return render_template(
+        "game.html",
+        game=game,
+        seat=seat,
+        payload=game_payload(game, seat),
+        other_id=other_id,
+        messages=chat_rows("match", parent) if parent else None,
+    )
+
+
+@app.route("/games/<int:game_id>/state")
+@login_required
+def game_state(game_id):
+    game, seat = game_for(game_id)
+
+    if game is None:
+        return jsonify({"error": "unavailable"}), 403
+
+    after = request.args.get("after", type=int, default=-1)
+    if after == game.version and game.status == "active":
+        return jsonify({"version": game.version, "unchanged": True})
+
+    return jsonify(game_payload(game, seat))
+
+
+@app.route("/games/<int:game_id>/move", methods=["POST"])
+@login_required
+def game_move(game_id):
+    game, seat = game_for(game_id)
+
+    if game is None:
+        flash("That game is not available to you.")
+        return redirect(url_for("game_lobby"))
+
+    if game.status != "active":
+        flash("That game isn't in play.")
+    elif game.turn_id != current_user.id:
+        flash("It isn't your turn.")
+    else:
+        state, error = rules.apply_move(
+            game.kind, game.state, seat, request.form.get("move")
+        )
+        if error:
+            flash(error)
+        else:
+            # Reassign, never mutate: db.JSON does not track in-place edits.
+            game.state = state
+            game.version += 1
+            game.updated_at = datetime.utcnow()
+
+            outcome = rules.result(game.kind, state)
+            if outcome is None:
+                game.turn_id = game.user_in_seat(state["turn"])
+            elif outcome[0] == "win":
+                finish_game(game, "win", game.user_in_seat(outcome[1]))
+            else:
+                finish_game(game, "draw")
+
+            db.session.commit()
+
+    return redirect(url_for("game_view", game_id=game_id))
+
+
+@app.route("/games/<int:game_id>/<any(accept, decline, resign):action>",
+           methods=["POST"])
+@login_required
+def game_action(game_id, action):
+    game, seat = game_for(game_id)
+
+    if game is None:
+        flash("That game is not available to you.")
+        return redirect(url_for("game_lobby"))
+
+    if action in ("accept", "decline"):
+        if game.status != "invited":
+            flash("That invite has already been answered.")
+        elif game.player_b != current_user.id:
+            flash("Only the person invited can answer.")
+        elif action == "accept":
+            game.status = "active"
+            game.turn_id = game.player_a
+            game.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash("Game on.")
+        else:
+            game.status = "declined"
+            game.turn_id = None
+            game.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash("Invite declined.")
+
+    elif action == "resign":
+        if game.status != "active":
+            flash("That game isn't in play.")
+        else:
+            finish_game(game, "resigned", game.user_in_seat(1 - seat))
+            game.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash("You resigned.")
+
+    return redirect(url_for("game_view", game_id=game_id))
 
 
 @app.route("/clubs")
