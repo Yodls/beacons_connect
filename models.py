@@ -135,15 +135,16 @@ class Match(db.Model):
     )
     score = db.Column(db.Numeric(6, 2), nullable=False, default=0)
     status = db.Column(db.Text, nullable=False, default="active")
-    # Null means the matcher paired them. Set means a student asked, and says
-    # which of the two did the asking, so the other one gets the accept button.
+    # Null only on legacy rows, from back when a matcher paired people without
+    # asking. Every new row records which of the two did the asking, so the
+    # other one is the one who gets the accept button.
     requested_by = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ended_at = db.Column(db.DateTime)
 
     __table_args__ = (
-        # One row per pair, ever. An ended row is what stops an unmatched
-        # person being paired again on the next page load.
+        # One row per pair, ever. An ended row is what keeps someone you
+        # removed from turning up in your recommendations again.
         db.UniqueConstraint("user_lo", "user_hi", name="uq_match_pair"),
         # Forces the canonical ordering, which rules out both a reversed
         # duplicate and a self-match.

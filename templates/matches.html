@@ -1,5 +1,5 @@
 {% extends "shell.html" %}
-{% block title %}Your matches{% endblock %}
+{% block title %}Your friends{% endblock %}
 
 {% block sidebuttons %}{% endblock %}
 
@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block main %}
-  <h1>Your matches and clubs</h1>
+  <h1>Your friends and clubs</h1>
   <p>
     Worked out from the answers you gave.
     <a href="{{ url_for('onboarding') }}">Change your answers</a>
@@ -16,7 +16,7 @@
   </p>
 
   {% if requests %}
-    <h2>Match requests</h2>
+    <h2>Friend requests</h2>
     {% for person in requests %}
       <div class="card">
         <h3>
@@ -24,7 +24,7 @@
           {{ person.name }}
         </h3>
         <p class="why">
-          Asked to match with you.
+          Wants to be friends.
           {%- if person.shared %} In common: {{ person.shared | join(", ") }}{% endif %}
         </p>
         <div class="actions">
@@ -41,7 +41,7 @@
     {% endfor %}
   {% endif %}
 
-  <h2>Your matches</h2>
+  <h2>Your friends</h2>
   {% for match in matches %}
     <div class="card">
       <h3>
@@ -55,14 +55,37 @@
           <button type="submit">Chat</button>
         </form>
         <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
-          <button type="submit">Unmatch</button>
+          <button type="submit">Remove friend</button>
         </form>
       </div>
     </div>
   {% else %}
     <p class="why">
-      Nobody left to match you with right now. Once more students answer the
-      questions we'll pair you up.
+      No friends yet. Send a request to someone below, or
+      <a href="{{ url_for('people') }}">search by name</a>.
+    </p>
+  {% endfor %}
+
+  <h2>People you might know</h2>
+  {% for rec in recs %}
+    <div class="card">
+      <h3>
+        <span class="score">{{ "%g" % rec.score }}</span>
+        {{ rec.name }}
+      </h3>
+      {% if rec.shared %}
+        <p class="why">In common: {{ rec.shared | join(", ") }}</p>
+      {% endif %}
+      <div class="actions">
+        <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+          <button type="submit">Send friend request</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">
+      No suggestions from your answers right now.
+      <a href="{{ url_for('people') }}">Search by name</a> instead.
     </p>
   {% endfor %}
 

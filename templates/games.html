@@ -8,7 +8,7 @@
 
 {% block main %}
   <h1>Play an online game</h1>
-  <p>Turn-based games against the people you've matched with.</p>
+  <p>Turn-based games against your friends.</p>
 
   <h2>Start a game</h2>
   {% if opponents %}
@@ -29,8 +29,8 @@
     </div>
   {% else %}
     <p class="why">
-      You need a match to play against.
-      <a href="{{ url_for('matches') }}">See your matches</a>.
+      You need a friend to play against.
+      <a href="{{ url_for('matches') }}">See your friends</a>.
     </p>
   {% endif %}
 

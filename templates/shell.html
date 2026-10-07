@@ -13,11 +13,14 @@
     <div class="side">
       <details class="menu">
         <summary>&#9776;</summary>
-        <a href="{{ url_for('matches') }}">Matches &amp; clubs</a>
+        <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
+          if pending_count %} ({{ pending_count }}){% endif %}</a>
         <a href="{{ url_for('people') }}">Find people</a>
         <a href="{{ url_for('clubs') }}">Browse all clubs</a>
         <a href="{{ url_for('logout') }}">Sign out</a>
       </details>
+
+      {% block rail %}{% endblock %}
 
       {% block sidebuttons %}
         <form method="get" action="{{ url_for('find_game') }}" style="margin:0">

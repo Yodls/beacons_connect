@@ -51,7 +51,8 @@ load_dotenv()
 CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
-MATCH_TARGET = 3
+# How many people to suggest in the home rail. The friends page asks for more.
+RECOMMEND_LIMIT = 4
 GENDER_BONUS = 2.0
 GENDERS = {
     "man": "Man",
@@ -141,6 +142,27 @@ def require_onboarding():
     return redirect(url_for("onboarding"))
 
 
+@app.context_processor
+def inject_pending():
+    """How many friend requests are waiting on an answer from you.
+
+    This runs for every template, the signed-out ones included, so the
+    authentication check is what keeps the login page from blowing up.
+    """
+    if not current_user.is_authenticated:
+        return {}
+
+    return {"pending_count": db.session.scalar(
+        db.select(db.func.count()).select_from(Match).where(
+            Match.status == "invited",
+            # Requests you sent are not waiting on you.
+            Match.requested_by != current_user.id,
+            db.or_(Match.user_lo == current_user.id,
+                   Match.user_hi == current_user.id),
+        )
+    )}
+
+
 RETURN_TO = {"matches", "clubs"}
 
 
@@ -170,6 +192,22 @@ MESSAGE_MAX = 2000
 COMMUNITY = "community"
 COMMUNITY_TITLE = "Community Chat"
 POST_MODES = {"online": "Online", "inperson": "In person"}
+
+# There are four kinds of chat. Naming them here rather than in the templates
+# keeps the two places that label a chat from drifting apart, and stops a new
+# kind rendering as whichever one the else-branch happened to name.
+CHAT_SUBTITLE = {
+    COMMUNITY: "Everyone on campus",
+    "match": "Friend",
+    "pair": "Game pairing",
+    "club": "Club space",
+}
+CHAT_TAG = {
+    COMMUNITY: "Campus",
+    "match": "Friend",
+    "pair": "Game",
+    "club": "Club",
+}
 
 def activity_catalogue(in_person_only=False):
     """Every activity with its locations, ready for a form or for validation."""
@@ -202,7 +240,7 @@ class _Room:
 def chat_target(kind, target_id):
     """Resolve a chat and check the student may see it.
 
-    Access is derived from data that already exists: an active match, or a club
+    Access is derived from data that already exists: a friendship, or a club
     membership. Returns (parent, title) or (None, None).
     """
     if kind == "match":
@@ -317,21 +355,22 @@ def post_payload(post):
     }
 
 
+def chat_entry(kind, target_id, title):
+    """One row for the chat list. The wording for a kind lives in one place."""
+    return {
+        "kind": kind,
+        "target_id": target_id,
+        "title": title,
+        "subtitle": CHAT_SUBTITLE[kind],
+        "tag": CHAT_TAG[kind],
+    }
+
+
 def chat_list():
     """Every chat the student can open, most recently active first."""
-    entries = [{
-        "kind": COMMUNITY,
-        "target_id": 0,
-        "title": COMMUNITY_TITLE,
-        "subtitle": "Everyone on campus",
-    }]
-    for match in matching.active_matches(current_user.id):
-        entries.append({
-            "kind": "match",
-            "target_id": match["user_id"],
-            "title": match["name"],
-            "subtitle": "Your match",
-        })
+    entries = [chat_entry(COMMUNITY, 0, COMMUNITY_TITLE)]
+    for friend in matching.active_matches(current_user.id):
+        entries.append(chat_entry("match", friend["user_id"], friend["name"]))
     for pairing in db.session.scalars(
         db.select(GamePairing).where(
             db.or_(GamePairing.user_lo == current_user.id,
@@ -342,20 +381,13 @@ def chat_list():
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
         other = db.session.get(User, other_id)
-        entries.append({
-            "kind": "pair",
-            "target_id": pairing.id,
-            "title": f"{pairing.game} with {other.name if other else 'Partner'}",
-            "subtitle": "Game pairing",
-        })
+        entries.append(chat_entry(
+            "pair", pairing.id,
+            f"{pairing.game} with {other.name if other else 'Partner'}",
+        ))
 
     for club in joined_clubs(current_user.id):
-        entries.append({
-            "kind": "club",
-            "target_id": club.id,
-            "title": club.name,
-            "subtitle": "Club space",
-        })
+        entries.append(chat_entry("club", club.id, club.name))
 
     last = {}
     newest = db.session.execute(
@@ -394,19 +426,25 @@ def chat_list():
 @app.route("/")
 @login_required
 def index():
-    return render_template("home.html", chats=chat_list())
+    return render_template(
+        "home.html",
+        chats=chat_list(),
+        recs=matching.recommend_people(
+            current_user.id, limit=RECOMMEND_LIMIT, gender_bonus=GENDER_BONUS
+        ),
+    )
 
 
 @app.route("/matches")
 @login_required
 def matches():
-    matching.ensure_matches(
-        current_user.id, target=MATCH_TARGET, gender_bonus=GENDER_BONUS
-    )
     return render_template(
         "matches.html",
         matches=matching.active_matches(current_user.id),
         requests=matching.incoming_requests(current_user.id),
+        recs=matching.recommend_people(
+            current_user.id, limit=10, gender_bonus=GENDER_BONUS
+        ),
         joined=joined_clubs(current_user.id),
         clubs=matching.recommend_clubs(current_user.id, limit=5),
     )
@@ -441,6 +479,7 @@ def chat(kind, target_id):
         kind=kind,
         target_id=target_id,
         title=title,
+        subtitle=CHAT_SUBTITLE[kind],
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
@@ -549,13 +588,13 @@ def game_new():
         flash("Pick a game to play.")
         return redirect(url_for("game_lobby"))
 
-    # You can only challenge someone you are actively matched with.
+    # You can only challenge someone on your friends list.
     lo, hi = pair(current_user.id, opponent_id or 0)
     match = db.session.scalar(
         db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
     )
     if match is None:
-        flash("You can only start a game with one of your matches.")
+        flash("You can only start a game with one of your friends.")
         return redirect(url_for("game_lobby"))
 
     game = Game(
@@ -971,10 +1010,13 @@ def leave_club(club_id):
 @app.route("/matches/<int:other_id>/unmatch", methods=["POST"])
 @login_required
 def unmatch(other_id):
+    other = db.session.get(User, other_id)
+    name = other.name if other else "That student"
+
     if matching.end_match(current_user.id, other_id):
-        flash("Unmatched. We'll find you someone else.")
+        flash(f"Removed {name} from your friends.")
     else:
-        flash("You are not matched with that person.")
+        flash(f"{name} is not on your friends list.")
 
     return redirect(url_for("matches"))
 
@@ -999,12 +1041,12 @@ def people():
 
 
 ASK_MESSAGES = {
-    "asked": "Asked {name} to match. They'll see it on their matches page.",
-    "matched": "You're matched with {name} — they had already asked you.",
-    "already": "You've already asked {name}.",
-    "already_matched": "You're already matched with {name}.",
-    "declined": "{name} turned down a match. Leave it there.",
-    "self": "You can't match with yourself.",
+    "asked": "Friend request sent to {name}.",
+    "matched": "You and {name} are friends now — they had already asked you.",
+    "already": "You've already sent {name} a friend request.",
+    "already_matched": "You're already friends with {name}.",
+    "declined": "{name} turned down a friend request. Leave it there.",
+    "self": "You can't send yourself a friend request.",
     "unknown": "We couldn't find that student.",
 }
 
@@ -1016,6 +1058,8 @@ def match_ask(other_id):
     outcome = matching.request_match(current_user.id, other_id)
     flash(ASK_MESSAGES[outcome].format(name=other.name if other else "that student"))
 
+    if request.form.get("back") == "home":
+        return redirect(url_for("index"))
     if outcome in ("asked", "matched"):
         return redirect(url_for("matches"))
     return back_to_people()
@@ -1030,12 +1074,12 @@ def match_respond(other_id, action):
 
     if matching.respond_to_request(current_user.id, other_id, action):
         flash({
-            "accept": f"You're matched with {name}.",
-            "decline": f"Turned down {name}.",
-            "cancel": f"Took back your request to {name}.",
+            "accept": f"You and {name} are friends now.",
+            "decline": f"Turned down {name}'s friend request.",
+            "cancel": f"Took back your friend request to {name}.",
         }[action])
     else:
-        flash("That request is no longer waiting on you.")
+        flash("That friend request is no longer waiting on you.")
 
     if action == "cancel":
         return back_to_people()
@@ -1209,7 +1253,7 @@ def onboarding():
                         )
                     )
             db.session.commit()
-            return redirect(url_for("matches"))
+            return redirect(url_for("index"))
 
     return render_template(
         "onboarding.html",

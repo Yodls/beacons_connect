@@ -10,7 +10,7 @@
 
 {% block main %}
   <h1>Find people</h1>
-  <p>Search by name and ask to match. They decide whether to accept.</p>
+  <p>Search by name and send a friend request. They decide whether to accept.</p>
 
   <form class="search" method="get" action="{{ url_for('people') }}">
     <input name="q" value="{{ term }}" maxlength="120"
@@ -33,20 +33,20 @@
         {% endif %}
         <div class="actions">
           {% if person.state == "matched" %}
-            <span class="state">Already matched.</span>
+            <span class="state">Already friends.</span>
             <form method="get"
                   action="{{ url_for('chat', kind='match', target_id=person.user_id) }}">
               <button type="submit">Chat</button>
             </form>
           {% elif person.state == "you_asked" %}
-            <span class="state">You've asked. Waiting on them.</span>
+            <span class="state">Request sent. Waiting on them.</span>
             <form method="post"
                   action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
               <input type="hidden" name="q" value="{{ term }}" />
               <button type="submit">Take it back</button>
             </form>
           {% elif person.state == "they_asked" %}
-            <span class="state">They asked you.</span>
+            <span class="state">They want to be friends.</span>
             <form method="post"
                   action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
               <button type="submit">Accept</button>
@@ -56,15 +56,15 @@
               <button type="submit">Decline</button>
             </form>
           {% elif person.state == "declined" %}
-            <span class="state">A match here was turned down.</span>
+            <span class="state">A request here was turned down.</span>
           {% else %}
             {% if person.state == "ended" %}
-              <span class="state">You were matched before.</span>
+              <span class="state">You were friends before.</span>
             {% endif %}
             <form method="post"
                   action="{{ url_for('match_ask', other_id=person.user_id) }}">
               <input type="hidden" name="q" value="{{ term }}" />
-              <button type="submit">Ask to match</button>
+              <button type="submit">Send friend request</button>
             </form>
           {% endif %}
         </div>
@@ -94,6 +94,6 @@
   {% endfor %}
 
   <p class="nav">
-    <a href="{{ url_for('matches') }}">Back to your matches</a>
+    <a href="{{ url_for('matches') }}">Back to your friends</a>
   </p>
 {% endblock %}

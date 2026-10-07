@@ -2,6 +2,9 @@
 {% block title %}Beacons Center{% endblock %}
 
 {% block appstyle %}
+      /* The rail needs room, and shell.html sets 52rem for every other page. */
+      body { max-width: 60rem; }
+      .side { flex: 0 0 15rem; }
       .chatrow { display: block; padding: 0.7rem 1rem; border: 1px solid #ddd;
                  margin-top: 0.5rem; color: inherit; text-decoration: none; }
       .chatrow:hover { background: #f6f6f6; }
@@ -9,6 +12,48 @@
       .chatrow .who { color: #555; font-size: 0.8rem; }
       .chatrow .last { margin: 0.2rem 0 0; color: #555; font-size: 0.9rem;
                        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rail h2 { margin-top: 0; font-size: 0.95rem; }
+      .rail .card { padding: 0.6rem 0.7rem; }
+      .rail .card h3 { font-size: 0.9rem; }
+      .rail .why { font-size: 0.8rem; }
+      .rail button { width: 100%; margin-top: 0.5rem; padding: 0.35rem;
+                     font-size: 0.8rem; }
+      .waiting { display: block; padding: 0.5rem 0.7rem; margin-bottom: 0.75rem;
+                 border: 1px solid #c8a24a; background: #fdf6e6;
+                 color: #6b4e11; font-size: 0.85rem; }
+{% endblock %}
+
+{% block rail %}
+  <div class="rail">
+    {% if pending_count %}
+      <a class="waiting" href="{{ url_for('matches') }}">
+        {{ pending_count }} friend request{{ "" if pending_count == 1 else "s" }}
+        waiting &rarr;
+      </a>
+    {% endif %}
+
+    <h2>People you might like</h2>
+    {% for rec in recs %}
+      <div class="card">
+        <h3>
+          <span class="score">{{ "%g" % rec.score }}</span>
+          {{ rec.name }}
+        </h3>
+        {% if rec.shared %}
+          <p class="why">{{ rec.shared[:3] | join(", ") }}</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+          <input type="hidden" name="back" value="home" />
+          <button type="submit">Send friend request</button>
+        </form>
+      </div>
+    {% else %}
+      <p class="why">
+        No suggestions right now.
+        <a href="{{ url_for('people') }}">Search by name</a> instead.
+      </p>
+    {% endfor %}
+  </div>
 {% endblock %}
 
 {% block main %}
@@ -26,9 +71,9 @@
     </a>
   {% else %}
     <p class="why">
-      You have no chats yet. Once you're matched with someone or join a club,
+      You have no chats yet. Send someone a friend request or join a club and
       they'll show up here.
-      <a href="{{ url_for('matches') }}">See your matches and club suggestions</a>.
+      <a href="{{ url_for('matches') }}">See your friends and club suggestions</a>.
     </p>
   {% endfor %}
 {% endblock %}

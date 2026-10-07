@@ -63,6 +63,12 @@ _CLUBS_SQL = """
     LIMIT :limit
 """
 
+# Who to suggest. The NOT EXISTS below is status-agnostic on purpose, so one
+# clause covers every pair that should stay off the list: people you are
+# already friends with, a request either of you has sent, a decline, and
+# anyone you have removed. Together with the HAVING (shares at least one
+# answer, so they have answered at all) and email_verified, that makes every
+# row here someone request_match will accept outright.
 _CANDIDATES_SQL = """
     WITH mine AS (
         SELECT question_id, option_id
@@ -97,6 +103,7 @@ _CANDIDATES_SQL = """
         HAVING SUM(o.n_shared) > 0
     )
     SELECT s.other_id     AS user_id,
+           them.name      AS name,
            s.shared_score AS shared_score,
            s.shared_score + CASE
                WHEN me.gender IN ('man', 'woman') AND me.gender = them.gender
@@ -111,8 +118,8 @@ _CANDIDATES_SQL = """
           AND m.user_hi = GREATEST(:user_id, s.other_id)
     )
       -- Unverified accounts cannot log in, so they cannot answer anything
-      -- either. Saying so here keeps the matcher and the name search honest
-      -- about the same set of people.
+      -- either. Saying so here keeps recommendations and the name search
+      -- honest about the same set of people.
       AND them.email_verified
     ORDER BY rank_score DESC, (me.gender = them.gender) DESC, s.other_id
     LIMIT :limit
@@ -143,8 +150,8 @@ _SHARED_SQL = """
 """
 
 # The same weighted Jaccard as _CANDIDATES_SQL, aimed at one named person
-# instead of ranking the field, so a hand-picked match carries a score the
-# dashboard can show beside anyone the matcher chose.
+# instead of ranking the field, so a friendship you asked for carries the
+# same kind of score as one that came off a recommendation.
 _PAIR_SCORE_SQL = """
     WITH mine AS (
         SELECT question_id, option_id
@@ -174,8 +181,8 @@ _PAIR_SCORE_SQL = """
     LEFT JOIN mine_n mn ON mn.question_id = o.question_id
 """
 
-# Name search. Only students who finished onboarding can be matched on
-# answers, which is the same bar the matcher applies, so they are the only
+# Name search. Only students who finished onboarding can be scored on
+# answers, which is the same bar recommendations apply, so they are the only
 # ones worth offering. The left join carries whatever already stands between
 # the two of you, so the page knows which button to draw.
 _SEARCH_SQL = """
@@ -228,44 +235,26 @@ def recommend_clubs(user_id, limit=10):
     ]
 
 
-def ensure_matches(user_id, target=3, gender_bonus=0):
-    """Top the student up to `target` active matches. Safe to call on every view.
+def recommend_people(user_id, limit=4, gender_bonus=0):
+    """Students worth sending a friend request to. Reads only, writes nothing.
 
-    `gender_bonus` steers who gets paired without inflating what is stored: the
-    ranking uses it, the saved score is the shared-answer total the dashboard
-    shows beside the list of answers in common.
+    `gender_bonus` steers the order without touching the number on the card:
+    the ranking uses it, the score returned is the shared-answer total, which
+    is what `pair_score` recomputes everywhere else. Returning the ranking
+    score instead would show the same person a different number here than on
+    the search page.
     """
-    active = db.session.execute(
-        db.text(_ACTIVE_SQL), {"user_id": user_id}
-    ).fetchall()
-    missing = target - len(active)
-    if missing <= 0:
-        return 0
-
-    candidates = db.session.execute(
+    rows = db.session.execute(
         db.text(_CANDIDATES_SQL),
-        {"user_id": user_id, "limit": missing, "gender_bonus": gender_bonus},
+        {"user_id": user_id, "limit": limit, "gender_bonus": gender_bonus},
     ).mappings().all()
 
-    created = 0
-    for row in candidates:
-        lo, hi = pair(user_id, row["user_id"])
-        try:
-            with db.session.begin_nested():
-                db.session.add(
-                    Match(
-                        user_lo=lo,
-                        user_hi=hi,
-                        score=row["shared_score"],
-                        status="active",
-                    )
-                )
-            created += 1
-        except IntegrityError:
-            pass
-
-    db.session.commit()
-    return created
+    return [{
+        "user_id": row["user_id"],
+        "name": row["name"],
+        "score": float(row["shared_score"]),
+        "shared": shared_labels(user_id, row["user_id"]),
+    } for row in rows]
 
 
 def active_matches(user_id):
