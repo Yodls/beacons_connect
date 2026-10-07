@@ -343,7 +343,10 @@ def game_payload(game, seat):
         "label": rules.LABELS.get(game.kind, game.kind),
         "state": rules.view(game.kind, game.state, seat),
         "seat": seat,
-        "your_turn": game.status == "active" and game.turn_id == current_user.id,
+        "your_turn": (
+            game.status == "active"
+            and rules.can_move(game.kind, game.state, seat)
+        ),
         "opponent": other.name if other else "Opponent",
         "opponent_id": other_id,
         "outcome": game.outcome,
@@ -379,7 +382,8 @@ def game_lobby():
             "opponent": other.name if other else "Opponent",
             "waiting_on_you": (
                 (game.status == "invited" and game.player_b == current_user.id)
-                or (game.status == "active" and game.turn_id == current_user.id)
+                or (game.status == "active"
+                    and rules.can_move(game.kind, game.state, seat))
             ),
         })
 
@@ -474,7 +478,7 @@ def game_move(game_id):
 
     if game.status != "active":
         flash("That game isn't in play.")
-    elif game.turn_id != current_user.id:
+    elif not rules.can_move(game.kind, game.state, seat):
         flash("It isn't your turn.")
     else:
         state, error = rules.apply_move(
@@ -490,7 +494,8 @@ def game_move(game_id):
 
             outcome = rules.result(game.kind, state)
             if outcome is None:
-                game.turn_id = game.user_in_seat(state["turn"])
+                nxt = rules.turn_seat(game.kind, state)
+                game.turn_id = None if nxt is None else game.user_in_seat(nxt)
             elif outcome[0] == "win":
                 finish_game(game, "win", game.user_in_seat(outcome[1]))
             else:
@@ -518,7 +523,8 @@ def game_action(game_id, action):
             flash("Only the person invited can answer.")
         elif action == "accept":
             game.status = "active"
-            game.turn_id = game.player_a
+            nxt = rules.turn_seat(game.kind, game.state)
+            game.turn_id = None if nxt is None else game.user_in_seat(nxt)
             game.updated_at = datetime.utcnow()
             db.session.commit()
             flash("Game on.")

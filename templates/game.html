@@ -11,6 +11,18 @@
               color: #222; }
       .board.ttt .cell { height: 4rem; }
       .board.c4 .cell { height: 2.6rem; font-size: 1rem; }
+      .board.bs { grid-template-columns: repeat(10, 1.6rem); }
+      .board.bs .cell { height: 1.6rem; font-size: 0.8rem; display: block;
+                        line-height: 1.6rem; text-align: center; }
+      .board.bs .cell.ship { background: #dde6ef; }
+      .board.bs .cell.hit { background: #f3c6c2; }
+      .board.bs .cell.miss { background: #eee; }
+      .board.chess { grid-template-columns: repeat(8, 2.4rem); gap: 0; }
+      .board.chess .cell { height: 2.4rem; font-size: 1.4rem; border: 0;
+                           background: #f0d9b5; }
+      .board.chess .cell.dark { background: #b58863; }
+      .board.chess .cell.last { outline: 2px solid #1a4d80; outline-offset: -2px; }
+      .board.chess .cell.pick { outline: 2px solid #c8701a; outline-offset: -2px; }
       .cell[disabled] { color: #222; }
       .cell.p0 { color: #1a4d80; }
       .cell.p1 { color: #a3341f; }
@@ -117,6 +129,27 @@
     }
 
     var gameTimer = setInterval(pollGame, 2500);
+  })();
+</script>
+
+<script>
+  (function () {
+    var form = document.getElementById("chessform");
+    var field = document.getElementById("chessmove");
+    if (!form || !field || field.disabled) { return; }
+
+    var from = null;
+    form.querySelectorAll(".cell[data-sq]").forEach(function (cell) {
+      cell.addEventListener("click", function () {
+        if (from === null) {
+          from = cell.dataset.sq;
+          cell.classList.add("pick");
+          return;
+        }
+        field.value = from + cell.dataset.sq;
+        form.submit();
+      });
+    });
   })();
 </script>
 
