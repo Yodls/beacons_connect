@@ -15,6 +15,17 @@
                 margin-bottom: 0.75rem; }
       .launch select { width: auto; margin: 0; }
       .launch button { margin: 0; white-space: nowrap; }
+      .newpost { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+                 margin-bottom: 0.75rem; padding: 0.6rem; border: 1px solid #ddd; }
+      .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 8rem; }
+      .newpost button { margin: 0; }
+      .post { display: block; margin-top: 0.3rem; padding: 0.5rem 0.7rem;
+              border: 1px solid #ccc; background: #fafafa; }
+      .post .meta { display: block; color: #555; font-size: 0.8rem; }
+      .post .note { display: block; font-size: 0.85rem; margin-top: 0.2rem; }
+      .post-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+      .post-actions form { margin: 0; }
+      .post-actions button { margin: 0; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
 {% endblock %}
 
 {% block main %}
@@ -33,11 +44,59 @@
     </form>
   {% endif %}
 
+  {% if kind == "community" %}
+    <form class="newpost" method="post" action="{{ url_for('post_new') }}">
+      <b>Looking for a game?</b>
+      <input name="game" maxlength="120" required placeholder="Chess, basketball..." />
+      <select name="mode">
+        {% for key, label in post_modes.items() %}
+          <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <input name="max_players" type="number" min="2" max="50" value="2" />
+      <input name="location" maxlength="120" placeholder="Where (optional)" />
+      <input name="when_text" maxlength="120" placeholder="When (optional)" />
+      <input name="note" maxlength="300" placeholder="Note (optional)" />
+      <button type="submit">Post</button>
+    </form>
+  {% endif %}
+
   <div id="log">
     {% for message in messages %}
       <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
+        {% if message.post %}
+          <span class="post">
+            <b>{{ message.post.game }}</b>
+            <span class="meta">{{ message.post.mode_label }}
+              {%- if message.post.location %} &middot; {{ message.post.location }}{% endif -%}
+              {%- if message.post.when_text %} &middot; {{ message.post.when_text }}{% endif -%}
+            </span>
+            {% if message.post.note %}<span class="note">{{ message.post.note }}</span>{% endif %}
+            <span class="meta">
+              {{ message.post.count }} of {{ message.post.max_players }} going{% if message.post.going %}:
+              {{ message.post.going | join(", ") }}{% endif %}
+            </span>
+            <span class="post-actions">
+              {% if message.post.status != "open" %}
+                <span class="meta">Closed</span>
+              {% else %}
+                <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                  <button type="submit"
+                          {% if message.post.full and not message.post.im_going %}disabled{% endif %}>
+                    {{ "Leave" if message.post.im_going else "I'm in" }}
+                  </button>
+                </form>
+                {% if message.post.mine %}
+                  <form method="post" action="{{ url_for('post_close', post_id=message.post.id) }}">
+                    <button type="submit">Close</button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </span>
+          </span>
+        {% endif %}
       </p>
     {% else %}
       <p class="why" id="empty">No messages yet. Say hello.</p>

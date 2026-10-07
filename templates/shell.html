@@ -23,7 +23,9 @@
         <form method="get" action="{{ url_for('game_lobby') }}" style="margin:0">
           <button type="submit">Play a Game</button>
         </form>
-        <button type="button" disabled>Who's looking for a game</button>
+        <form method="get" action="{{ url_for('chat', kind='community', target_id=0) }}" style="margin:0">
+          <button type="submit">Who's looking for a game</button>
+        </form>
         <button type="button" disabled>Maps</button>
       {% endblock %}
     </div>

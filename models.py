@@ -160,17 +160,63 @@ class Message(db.Model):
     )
     match_id = db.Column(db.Integer, db.ForeignKey("matches.id", ondelete="CASCADE"))
     club_id = db.Column(db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE"))
+    # Singleton rooms everyone belongs to, e.g. the campus-wide "community".
+    room = db.Column(db.String(32))
+    # A message may carry a "looking for a game" post, rendered as a card.
+    post_id = db.Column(db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"))
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
         # A message hangs off exactly one chat, never both and never neither.
         db.CheckConstraint(
-            "num_nonnulls(match_id, club_id) = 1", name="ck_message_one_parent"
+            "num_nonnulls(match_id, club_id, room) = 1",
+            name="ck_message_one_parent",
         ),
         db.Index("ix_messages_match", "match_id", "id"),
         db.Index("ix_messages_club", "club_id", "id"),
+        db.Index("ix_messages_room", "room", "id"),
     )
+
+
+class GamePost(db.Model):
+    """A "looking for a game" post in the campus-wide room."""
+
+    __tablename__ = "game_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    author_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    game = db.Column(db.Text, nullable=False)
+    mode = db.Column(db.Text, nullable=False, default="online")
+    note = db.Column(db.Text)
+    # Filled in for in-person meetups; unused by online posts.
+    location = db.Column(db.Text)
+    when_text = db.Column(db.Text)
+    max_players = db.Column(db.Integer, nullable=False, default=2)
+    status = db.Column(db.Text, nullable=False, default="open")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint("mode IN ('online', 'inperson')", name="ck_post_mode"),
+        db.CheckConstraint("status IN ('open', 'closed')", name="ck_post_status"),
+        db.CheckConstraint("max_players >= 2", name="ck_post_players"),
+        db.Index("ix_game_posts_created", "created_at"),
+    )
+
+
+class GamePostRsvp(db.Model):
+    __tablename__ = "game_post_rsvps"
+
+    post_id = db.Column(
+        db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
 class Game(db.Model):

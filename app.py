@@ -31,6 +31,8 @@ from models import (
     Club,
     ClubMember,
     Game,
+    GamePost,
+    GamePostRsvp,
     Match,
     Message,
     Question,
@@ -155,6 +157,17 @@ def back_to():
 MESSAGE_MAX = 2000
 
 
+COMMUNITY = "community"
+COMMUNITY_TITLE = "Beacons Center"
+POST_MODES = {"online": "Online", "inperson": "In person"}
+
+
+class _Room:
+    """Stand-in parent for a singleton room, which has no table of its own."""
+
+    id = 0
+
+
 def chat_target(kind, target_id):
     """Resolve a chat and check the student may see it.
 
@@ -171,6 +184,10 @@ def chat_target(kind, target_id):
         other = db.session.get(User, target_id)
         return match, (other.name if other else "Chat")
 
+    if kind == COMMUNITY:
+        # Everyone who has finished onboarding is in this one.
+        return _Room(), COMMUNITY_TITLE
+
     if kind == "club":
         if db.session.get(ClubMember, (current_user.id, target_id)) is None:
             return None, None
@@ -182,7 +199,17 @@ def chat_target(kind, target_id):
     return None, None
 
 
+def attach_parent(message, kind, parent):
+    """Point a message at exactly one parent, as the check constraint demands."""
+    if kind == COMMUNITY:
+        message.room = COMMUNITY
+    else:
+        setattr(message, f"{kind}_id", parent.id)
+
+
 def message_filter(kind, parent):
+    if kind == COMMUNITY:
+        return Message.room == COMMUNITY
     column = Message.match_id if kind == "match" else Message.club_id
     return column == parent.id
 
@@ -194,8 +221,16 @@ def chat_rows(kind, parent, after=0):
         .where(message_filter(kind, parent), Message.id > after)
         .order_by(Message.id)
     ).all()
-    return [
-        {
+
+    posts = {}
+    post_ids = [m.post_id for m, _ in rows if m.post_id]
+    if post_ids:
+        posts = {p.id: p for p in db.session.scalars(
+            db.select(GamePost).where(GamePost.id.in_(post_ids)))}
+
+    out = []
+    for m, name in rows:
+        entry = {
             "id": m.id,
             "user_id": m.user_id,
             "name": name,
@@ -203,13 +238,47 @@ def chat_rows(kind, parent, after=0):
             "at": m.created_at.strftime("%H:%M"),
             "mine": m.user_id == current_user.id,
         }
-        for m, name in rows
-    ]
+        post = posts.get(m.post_id)
+        if post is not None:
+            entry["post"] = post_payload(post)
+        out.append(entry)
+    return out
+
+
+def post_payload(post):
+    going = db.session.scalars(
+        db.select(User.name)
+        .join(GamePostRsvp, GamePostRsvp.user_id == User.id)
+        .where(GamePostRsvp.post_id == post.id)
+        .order_by(User.name)
+    ).all()
+    return {
+        "id": post.id,
+        "game": post.game,
+        "mode": post.mode,
+        "mode_label": POST_MODES.get(post.mode, post.mode),
+        "note": post.note,
+        "location": post.location,
+        "when_text": post.when_text,
+        "max_players": post.max_players,
+        "status": post.status,
+        "going": going,
+        "count": len(going),
+        "full": len(going) >= post.max_players,
+        "im_going": db.session.get(GamePostRsvp, (post.id, current_user.id))
+        is not None,
+        "mine": post.author_id == current_user.id,
+    }
 
 
 def chat_list():
     """Every chat the student can open, most recently active first."""
-    entries = []
+    entries = [{
+        "kind": COMMUNITY,
+        "target_id": 0,
+        "title": COMMUNITY_TITLE,
+        "subtitle": "Everyone on campus",
+    }]
     for match in matching.active_matches(current_user.id):
         entries.append({
             "kind": "match",
@@ -226,6 +295,14 @@ def chat_list():
         })
 
     last = {}
+    newest = db.session.execute(
+        db.select(Message.body, Message.created_at)
+        .where(Message.room == COMMUNITY)
+        .order_by(Message.id.desc()).limit(1)
+    ).first()
+    if newest:
+        last[(COMMUNITY, 0)] = (newest[0], newest[1])
+
     for kind, column in (("match", Message.match_id), ("club", Message.club_id)):
         for parent_id, body, when in db.session.execute(
             db.select(column, Message.body, Message.created_at)
@@ -288,7 +365,7 @@ def chat(kind, target_id):
             flash(f"Messages are limited to {MESSAGE_MAX} characters.")
         else:
             message = Message(user_id=current_user.id, body=body)
-            setattr(message, f"{kind}_id", parent.id)
+            attach_parent(message, kind, parent)
             db.session.add(message)
             db.session.commit()
 
@@ -301,6 +378,7 @@ def chat(kind, target_id):
         title=title,
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
+        post_modes=POST_MODES,
     )
 
 
@@ -545,6 +623,103 @@ def game_action(game_id, action):
             flash("You resigned.")
 
     return redirect(url_for("game_view", game_id=game_id))
+
+
+POST_NOTE_MAX = 300
+
+
+@app.route("/posts/new", methods=["POST"])
+@login_required
+def post_new():
+    game = request.form.get("game", "").strip()
+    mode = request.form.get("mode", "online")
+    note = request.form.get("note", "").strip()
+    location = request.form.get("location", "").strip()
+    when_text = request.form.get("when_text", "").strip()
+    players = request.form.get("max_players", type=int) or 2
+
+    if not game:
+        flash("Say which game you're looking for.")
+    elif mode not in POST_MODES:
+        flash("Pick online or in person.")
+    elif len(note) > POST_NOTE_MAX:
+        flash(f"Keep the note under {POST_NOTE_MAX} characters.")
+    elif not 2 <= players <= 50:
+        flash("Pick between 2 and 50 players.")
+    else:
+        post = GamePost(
+            author_id=current_user.id,
+            game=game[:120],
+            mode=mode,
+            note=note or None,
+            location=location[:120] or None,
+            when_text=when_text[:120] or None,
+            max_players=players,
+        )
+        db.session.add(post)
+        db.session.flush()
+
+        # The post lives in the room as a message, so one timeline and one
+        # poller cover both chatter and posts.
+        summary = f"Looking for {post.game}"
+        if post.mode == "inperson":
+            summary += " in person"
+        db.session.add(Message(
+            user_id=current_user.id, room=COMMUNITY, post_id=post.id, body=summary
+        ))
+        # The author is the first one going.
+        db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
+        db.session.commit()
+        flash("Posted to Beacons Center.")
+
+    return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
+
+
+@app.route("/posts/<int:post_id>/rsvp", methods=["POST"])
+@login_required
+def post_rsvp(post_id):
+    post = db.session.get(GamePost, post_id)
+
+    if post is None:
+        flash("That post is gone.")
+    elif post.status != "open":
+        flash("That post is closed.")
+    else:
+        rsvp = db.session.get(GamePostRsvp, (post_id, current_user.id))
+        if rsvp is not None:
+            db.session.delete(rsvp)
+            db.session.commit()
+            flash(f"You're no longer down for {post.game}.")
+        else:
+            going = db.session.scalar(
+                db.select(db.func.count()).select_from(GamePostRsvp)
+                .where(GamePostRsvp.post_id == post_id)
+            )
+            if going >= post.max_players:
+                flash("That one is full.")
+            else:
+                db.session.add(
+                    GamePostRsvp(post_id=post_id, user_id=current_user.id)
+                )
+                db.session.commit()
+                flash(f"You're in for {post.game}.")
+
+    return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
+
+
+@app.route("/posts/<int:post_id>/close", methods=["POST"])
+@login_required
+def post_close(post_id):
+    post = db.session.get(GamePost, post_id)
+
+    if post is None or post.author_id != current_user.id:
+        flash("That isn't your post.")
+    else:
+        post.status = "closed"
+        db.session.commit()
+        flash("Post closed.")
+
+    return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
 
 
 @app.route("/clubs")
