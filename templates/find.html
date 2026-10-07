@@ -1,5 +1,5 @@
 {% extends "shell.html" %}
-{% block title %}Find a game{% endblock %}
+{% block title %}Meet up in person{% endblock %}
 
 {% block appstyle %}
       .queue { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block main %}
-  <h1>Find a game</h1>
+  <h1>Meet up in person!</h1>
   <p>Meet up in person. Join the queue to be paired, or answer someone's post.</p>
 
   <h2>Matchmaking</h2>
@@ -69,9 +69,28 @@
     <form class="newpost" method="post" action="{{ url_for('post_new') }}">
       <input type="hidden" name="mode" value="inperson" />
       <input type="hidden" name="back" value="find" />
-      <input name="game" maxlength="120" required placeholder="Which game" />
+      <select name="game" class="act" required>
+        {% for a in catalogue %}
+          {% if a.in_person %}
+            <option value="{{ a.name }}"
+                    data-online="{{ 1 if a.online else 0 }}"
+                    data-inperson="1">{{ a.name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <select name="location" class="loc" required>
+        <option value="">Where</option>
+        {% for a in catalogue %}
+          {% if a.locations %}
+            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
+              {% for loc in a.locations %}
+                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endif %}
+        {% endfor %}
+      </select>
       <input name="max_players" type="number" min="2" max="50" value="4" />
-      <input name="location" maxlength="120" placeholder="Where" />
       <input name="when_text" maxlength="120" placeholder="When" />
       <input name="note" maxlength="300" placeholder="Note (optional)" />
       <button type="submit">Post it</button>
@@ -101,7 +120,8 @@
         </form>
         {% if post.mine %}
           <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
-            <button type="submit">Close</button>
+            <input type="hidden" name="back" value="find" />
+            <button type="submit">Cancel meetup</button>
           </form>
         {% endif %}
       </div>
@@ -109,4 +129,36 @@
   {% else %}
     <p class="why">No in-person meetups posted yet. Add one above.</p>
   {% endfor %}
+{% endblock %}
+
+{% block script %}
+<script>
+  // Narrows the location list to the chosen activity. Without this the form
+  // still works: every location is listed under its activity and the server
+  // validates the pair.
+  (function () {
+    document.querySelectorAll("form .act").forEach(function (act) {
+      var form = act.closest("form");
+      var loc = form.querySelector(".loc");
+      if (!loc) { return; }
+
+      function sync() {
+        var name = act.value;
+        form.querySelectorAll(".loc optgroup").forEach(function (g) {
+          g.hidden = g.dataset.act !== name;
+        });
+        Array.prototype.forEach.call(loc.options, function (o) {
+          if (!o.value) { return; }
+          var show = o.dataset.act === name;
+          o.hidden = !show;
+          o.disabled = !show;
+        });
+        if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
+      }
+
+      act.addEventListener("change", sync);
+      sync();
+    });
+  })();
+</script>
 {% endblock %}

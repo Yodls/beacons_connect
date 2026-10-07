@@ -28,6 +28,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import games as rules
 import matching
 from models import (
+    Activity,
+    ActivityLocation,
     Club,
     ClubMember,
     Game,
@@ -160,15 +162,29 @@ MESSAGE_MAX = 2000
 
 
 COMMUNITY = "community"
-COMMUNITY_TITLE = "Beacons Center"
+COMMUNITY_TITLE = "Community Chat"
 POST_MODES = {"online": "Online", "inperson": "In person"}
 
-# Matchmaking pairs on an exact string, so the options are fixed rather than
-# free text - "bball" and "Basketball" must not miss each other.
-IN_PERSON_GAMES = (
-    "Basketball", "Soccer", "Volleyball", "Table tennis", "Tennis",
-    "Pool", "Chess", "Cards", "Spikeball", "Frisbee", "Badminton",
-)
+def activity_catalogue(in_person_only=False):
+    """Every activity with its locations, ready for a form or for validation."""
+    query = db.select(Activity).order_by(Activity.sort_order)
+    if in_person_only:
+        query = query.where(Activity.in_person.is_(True))
+    return [
+        {
+            "name": a.name,
+            "online": a.online,
+            "in_person": a.in_person,
+            "locations": [loc.name for loc in a.locations],
+        }
+        for a in db.session.scalars(query)
+    ]
+
+
+def find_activity(name):
+    return db.session.scalar(db.select(Activity).filter_by(name=name))
+
+
 
 
 class _Room:
@@ -421,6 +437,7 @@ def chat(kind, target_id):
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
+        catalogue=activity_catalogue(),
     )
 
 
@@ -707,7 +724,8 @@ def find_game():
 
     return render_template(
         "find.html",
-        games=IN_PERSON_GAMES,
+        games=[a["name"] for a in activity_catalogue(in_person_only=True)],
+        catalogue=activity_catalogue(),
         waiting=waiting,
         counts=counts,
         posts=[post_payload(p) for p in posts],
@@ -720,8 +738,9 @@ def find_game():
 def find_queue():
     game = request.form.get("game", "")
 
-    if game not in IN_PERSON_GAMES:
-        flash("Pick a game from the list.")
+    activity = find_activity(game)
+    if activity is None or not activity.in_person:
+        flash("Pick an activity from the list.")
         return redirect(url_for("find_game"))
 
     partner = db.session.scalars(
@@ -795,10 +814,23 @@ def post_new():
     when_text = request.form.get("when_text", "").strip()
     players = request.form.get("max_players", type=int) or 2
 
+    activity = find_activity(game)
+    allowed = [] if activity is None else [loc.name for loc in activity.locations]
+
     if not game:
-        flash("Say which game you're looking for.")
+        flash("Say which activity you're looking for.")
+    elif activity is None:
+        flash("Pick an activity from the list.")
     elif mode not in POST_MODES:
         flash("Pick online or in person.")
+    elif mode == "online" and not activity.online:
+        flash(f"{activity.name} can't be played online.")
+    elif mode == "inperson" and not activity.in_person:
+        flash(f"{activity.name} is online only.")
+    elif mode == "inperson" and not location:
+        flash("Pick where you'll be playing.")
+    elif mode == "inperson" and location not in allowed:
+        flash(f"You can't play {activity.name} at that spot.")
     elif len(note) > POST_NOTE_MAX:
         flash(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
@@ -809,7 +841,7 @@ def post_new():
             game=game[:120],
             mode=mode,
             note=note or None,
-            location=location[:120] or None,
+            location=(location if mode == "inperson" else None),
             when_text=when_text[:120] or None,
             max_players=players,
         )
@@ -827,7 +859,7 @@ def post_new():
         # The author is the first one going.
         db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
         db.session.commit()
-        flash("Posted to Beacons Center.")
+        flash("Posted to Community Chat.")
 
     if request.form.get("back") == "find":
         return redirect(url_for("find_game"))
@@ -878,8 +910,10 @@ def post_close(post_id):
     else:
         post.status = "closed"
         db.session.commit()
-        flash("Post closed.")
+        flash(f"{post.game} cancelled.")
 
+    if request.form.get("back") == "find":
+        return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
 
 

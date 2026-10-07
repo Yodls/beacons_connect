@@ -47,14 +47,31 @@
   {% if kind == "community" %}
     <form class="newpost" method="post" action="{{ url_for('post_new') }}">
       <b>Looking for a game?</b>
-      <input name="game" maxlength="120" required placeholder="Chess, basketball..." />
-      <select name="mode">
+      <select name="game" class="act" required>
+        {% for a in catalogue %}
+          <option value="{{ a.name }}"
+                  data-online="{{ 1 if a.online else 0 }}"
+                  data-inperson="{{ 1 if a.in_person else 0 }}">{{ a.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="mode" class="mode">
         {% for key, label in post_modes.items() %}
           <option value="{{ key }}">{{ label }}</option>
         {% endfor %}
       </select>
+      <select name="location" class="loc">
+        <option value="">Where</option>
+        {% for a in catalogue %}
+          {% if a.locations %}
+            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
+              {% for loc in a.locations %}
+                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endif %}
+        {% endfor %}
+      </select>
       <input name="max_players" type="number" min="2" max="50" value="2" />
-      <input name="location" maxlength="120" placeholder="Where (optional)" />
       <input name="when_text" maxlength="120" placeholder="When (optional)" />
       <input name="note" maxlength="300" placeholder="Note (optional)" />
       <button type="submit">Post</button>
@@ -111,6 +128,58 @@
 {% endblock %}
 
 {% block script %}
+<script>
+  // Narrows mode and location to whatever activity is picked. Without this the
+  // form still works: every location is listed under its activity and the
+  // server validates the pair.
+  (function () {
+    document.querySelectorAll("form .act").forEach(function (act) {
+      var form = act.closest("form");
+      var mode = form.querySelector(".mode");
+      var loc = form.querySelector(".loc");
+
+      function sync() {
+        var opt = act.options[act.selectedIndex];
+        var name = opt.value;
+        var online = opt.dataset.online === "1";
+        var inperson = opt.dataset.inperson === "1";
+
+        if (mode) {
+          Array.prototype.forEach.call(mode.options, function (o) {
+            var ok = o.value === "online" ? online : inperson;
+            o.hidden = !ok;
+            o.disabled = !ok;
+          });
+          if (mode.options[mode.selectedIndex].disabled) {
+            Array.prototype.some.call(mode.options, function (o, i) {
+              if (!o.disabled) { mode.selectedIndex = i; return true; }
+              return false;
+            });
+          }
+        }
+
+        if (loc) {
+          var wanted = !mode || mode.value === "inperson";
+          loc.closest("form").querySelectorAll(".loc optgroup").forEach(function (g) {
+            g.hidden = !(wanted && g.dataset.act === name);
+          });
+          Array.prototype.forEach.call(loc.options, function (o) {
+            if (!o.value) { return; }
+            var show = wanted && o.dataset.act === name;
+            o.hidden = !show;
+            o.disabled = !show;
+          });
+          if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
+          loc.hidden = !wanted;
+        }
+      }
+
+      act.addEventListener("change", sync);
+      if (mode) { mode.addEventListener("change", sync); }
+      sync();
+    });
+  })();
+</script>
 <script>
   (function () {
     var log = document.getElementById("log");

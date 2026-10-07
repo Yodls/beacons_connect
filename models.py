@@ -223,6 +223,45 @@ class GamePostRsvp(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
+class Activity(db.Model):
+    """Something students can play, and how it can be played."""
+
+    __tablename__ = "activities"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.Text, unique=True, nullable=False)
+    online = db.Column(db.Boolean, nullable=False, default=False)
+    in_person = db.Column(db.Boolean, nullable=False, default=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    locations = db.relationship(
+        "ActivityLocation",
+        order_by="ActivityLocation.sort_order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        # An activity nobody can play either way is nonsense.
+        db.CheckConstraint("online OR in_person", name="ck_activity_playable"),
+    )
+
+
+class ActivityLocation(db.Model):
+    __tablename__ = "activity_locations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(
+        db.Integer, db.ForeignKey("activities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name = db.Column(db.Text, nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint("activity_id", "name", name="uq_activity_location"),
+    )
+
+
 class GameQueue(db.Model):
     """One waiting slot per student, for in-person matchmaking."""
 

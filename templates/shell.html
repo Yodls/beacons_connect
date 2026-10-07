@@ -20,13 +20,13 @@
 
       {% block sidebuttons %}
         <form method="get" action="{{ url_for('find_game') }}" style="margin:0">
-          <button type="submit">Find a Game</button>
+          <button type="submit">Meet up in person!</button>
         </form>
         <form method="get" action="{{ url_for('game_lobby') }}" style="margin:0">
-          <button type="submit">Play a Game</button>
+          <button type="submit">Play an online game</button>
         </form>
         <form method="get" action="{{ url_for('chat', kind='community', target_id=0) }}" style="margin:0">
-          <button type="submit">Who's looking for a game</button>
+          <button type="submit">Community Chat</button>
         </form>
         <button type="button" disabled>Maps</button>
       {% endblock %}
