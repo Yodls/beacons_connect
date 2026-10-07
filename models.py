@@ -135,6 +135,9 @@ class Match(db.Model):
     )
     score = db.Column(db.Numeric(6, 2), nullable=False, default=0)
     status = db.Column(db.Text, nullable=False, default="active")
+    # Null means the matcher paired them. Set means a student asked, and says
+    # which of the two did the asking, so the other one gets the accept button.
+    requested_by = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ended_at = db.Column(db.DateTime)
 
@@ -145,7 +148,20 @@ class Match(db.Model):
         # Forces the canonical ordering, which rules out both a reversed
         # duplicate and a self-match.
         db.CheckConstraint("user_lo < user_hi", name="ck_match_order"),
-        db.CheckConstraint("status IN ('active', 'ended')", name="ck_match_status"),
+        db.CheckConstraint(
+            "status IN ('invited', 'active', 'ended', 'declined')",
+            name="ck_match_status",
+        ),
+        # A requester who isn't in the pair is nonsense.
+        db.CheckConstraint(
+            "requested_by IS NULL OR requested_by IN (user_lo, user_hi)",
+            name="ck_match_requester",
+        ),
+        # So "who do I show Accept to" always has an answer.
+        db.CheckConstraint(
+            "status <> 'invited' OR requested_by IS NOT NULL",
+            name="ck_match_invite_has_asker",
+        ),
         db.Index("ix_matches_lo", "user_lo"),
         db.Index("ix_matches_hi", "user_hi"),
     )

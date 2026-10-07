@@ -158,6 +158,12 @@ def back_to():
     return redirect(url_for(target if target in RETURN_TO else "matches"))
 
 
+def back_to_people():
+    """Back to the search, carrying the term so the results are still there."""
+    term = request.form.get("q", "").strip()
+    return redirect(url_for("people", q=term) if term else url_for("people"))
+
+
 MESSAGE_MAX = 2000
 
 
@@ -400,6 +406,7 @@ def matches():
     return render_template(
         "matches.html",
         matches=matching.active_matches(current_user.id),
+        requests=matching.incoming_requests(current_user.id),
         joined=joined_clubs(current_user.id),
         clubs=matching.recommend_clubs(current_user.id, limit=5),
     )
@@ -969,6 +976,69 @@ def unmatch(other_id):
     else:
         flash("You are not matched with that person.")
 
+    return redirect(url_for("matches"))
+
+
+@app.route("/people")
+@login_required
+def people():
+    term = request.args.get("q", "").strip()
+    searched = bool(term)
+
+    if searched and len(term) < matching.SEARCH_MIN:
+        flash(f"Search for at least {matching.SEARCH_MIN} characters.")
+        searched = False
+
+    return render_template(
+        "people.html",
+        term=term,
+        searched=searched,
+        results=matching.search_people(current_user.id, term) if searched else [],
+        sent=matching.outgoing_requests(current_user.id),
+    )
+
+
+ASK_MESSAGES = {
+    "asked": "Asked {name} to match. They'll see it on their matches page.",
+    "matched": "You're matched with {name} — they had already asked you.",
+    "already": "You've already asked {name}.",
+    "already_matched": "You're already matched with {name}.",
+    "declined": "{name} turned down a match. Leave it there.",
+    "self": "You can't match with yourself.",
+    "unknown": "We couldn't find that student.",
+}
+
+
+@app.route("/people/<int:other_id>/ask", methods=["POST"])
+@login_required
+def match_ask(other_id):
+    other = db.session.get(User, other_id)
+    outcome = matching.request_match(current_user.id, other_id)
+    flash(ASK_MESSAGES[outcome].format(name=other.name if other else "that student"))
+
+    if outcome in ("asked", "matched"):
+        return redirect(url_for("matches"))
+    return back_to_people()
+
+
+@app.route("/matches/<int:other_id>/<any(accept, decline, cancel):action>",
+           methods=["POST"])
+@login_required
+def match_respond(other_id, action):
+    other = db.session.get(User, other_id)
+    name = other.name if other else "that student"
+
+    if matching.respond_to_request(current_user.id, other_id, action):
+        flash({
+            "accept": f"You're matched with {name}.",
+            "decline": f"Turned down {name}.",
+            "cancel": f"Took back your request to {name}.",
+        }[action])
+    else:
+        flash("That request is no longer waiting on you.")
+
+    if action == "cancel":
+        return back_to_people()
     return redirect(url_for("matches"))
 
 

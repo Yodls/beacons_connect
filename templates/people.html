@@ -1,0 +1,99 @@
+{% extends "shell.html" %}
+{% block title %}Find people{% endblock %}
+
+{% block appstyle %}
+      .search { display: flex; gap: 0.4rem; align-items: center; }
+      .search input { margin: 0; flex: 1 1 auto; }
+      .search button { margin: 0; }
+      .state { color: #555; font-size: 0.85rem; }
+{% endblock %}
+
+{% block main %}
+  <h1>Find people</h1>
+  <p>Search by name and ask to match. They decide whether to accept.</p>
+
+  <form class="search" method="get" action="{{ url_for('people') }}">
+    <input name="q" value="{{ term }}" maxlength="120"
+           placeholder="Search by name" autofocus />
+    <button type="submit">Search</button>
+  </form>
+
+  {% if searched %}
+    <h2>{{ results | length }} result(s) for &ldquo;{{ term }}&rdquo;</h2>
+    {% for person in results %}
+      <div class="card">
+        <h3>
+          <span class="score">{{ "%g" % person.score }}</span>
+          {{ person.name }}
+        </h3>
+        {% if person.shared %}
+          <p class="why">In common: {{ person.shared | join(", ") }}</p>
+        {% else %}
+          <p class="why">Nothing in common from the questions.</p>
+        {% endif %}
+        <div class="actions">
+          {% if person.state == "matched" %}
+            <span class="state">Already matched.</span>
+            <form method="get"
+                  action="{{ url_for('chat', kind='match', target_id=person.user_id) }}">
+              <button type="submit">Chat</button>
+            </form>
+          {% elif person.state == "you_asked" %}
+            <span class="state">You've asked. Waiting on them.</span>
+            <form method="post"
+                  action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
+              <input type="hidden" name="q" value="{{ term }}" />
+              <button type="submit">Take it back</button>
+            </form>
+          {% elif person.state == "they_asked" %}
+            <span class="state">They asked you.</span>
+            <form method="post"
+                  action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+              <button type="submit">Accept</button>
+            </form>
+            <form method="post"
+                  action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
+              <button type="submit">Decline</button>
+            </form>
+          {% elif person.state == "declined" %}
+            <span class="state">A match here was turned down.</span>
+          {% else %}
+            {% if person.state == "ended" %}
+              <span class="state">You were matched before.</span>
+            {% endif %}
+            <form method="post"
+                  action="{{ url_for('match_ask', other_id=person.user_id) }}">
+              <input type="hidden" name="q" value="{{ term }}" />
+              <button type="submit">Ask to match</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <p class="why">
+        Nobody by that name has finished answering the questions.
+      </p>
+    {% endfor %}
+  {% endif %}
+
+  <h2>Requests you've sent</h2>
+  {% for person in sent %}
+    <div class="card">
+      <h3>{{ person.name }}</h3>
+      <p class="why">Waiting for them to accept.</p>
+      <div class="actions">
+        <form method="post"
+              action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
+          <input type="hidden" name="q" value="{{ term }}" />
+          <button type="submit">Take it back</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">You haven't asked anyone yet.</p>
+  {% endfor %}
+
+  <p class="nav">
+    <a href="{{ url_for('matches') }}">Back to your matches</a>
+  </p>
+{% endblock %}
