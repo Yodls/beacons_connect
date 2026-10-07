@@ -19,7 +19,9 @@
       </details>
 
       {% block sidebuttons %}
-        <button type="button" disabled>Find a Game</button>
+        <form method="get" action="{{ url_for('find_game') }}" style="margin:0">
+          <button type="submit">Find a Game</button>
+        </form>
         <form method="get" action="{{ url_for('game_lobby') }}" style="margin:0">
           <button type="submit">Play a Game</button>
         </form>

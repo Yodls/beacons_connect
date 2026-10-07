@@ -162,6 +162,9 @@ class Message(db.Model):
     club_id = db.Column(db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE"))
     # Singleton rooms everyone belongs to, e.g. the campus-wide "community".
     room = db.Column(db.String(32))
+    pairing_id = db.Column(
+        db.Integer, db.ForeignKey("game_pairings.id", ondelete="CASCADE")
+    )
     # A message may carry a "looking for a game" post, rendered as a card.
     post_id = db.Column(db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"))
     body = db.Column(db.Text, nullable=False)
@@ -170,12 +173,13 @@ class Message(db.Model):
     __table_args__ = (
         # A message hangs off exactly one chat, never both and never neither.
         db.CheckConstraint(
-            "num_nonnulls(match_id, club_id, room) = 1",
+            "num_nonnulls(match_id, club_id, room, pairing_id) = 1",
             name="ck_message_one_parent",
         ),
         db.Index("ix_messages_match", "match_id", "id"),
         db.Index("ix_messages_club", "club_id", "id"),
         db.Index("ix_messages_room", "room", "id"),
+        db.Index("ix_messages_pairing", "pairing_id", "id"),
     )
 
 
@@ -217,6 +221,47 @@ class GamePostRsvp(db.Model):
         db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
     )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class GameQueue(db.Model):
+    """One waiting slot per student, for in-person matchmaking."""
+
+    __tablename__ = "game_queue"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    game = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (db.Index("ix_queue_game", "game", "created_at"),)
+
+
+class GamePairing(db.Model):
+    """Two students the queue put together for one in-person game."""
+
+    __tablename__ = "game_pairings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_lo = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    user_hi = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    game = db.Column(db.Text, nullable=False)
+    status = db.Column(db.Text, nullable=False, default="open")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        # Ordered like matches, so a pair is stored one way round. Unlike
+        # matches there is no unique constraint: the same two people may be
+        # paired again for a different game.
+        db.CheckConstraint("user_lo < user_hi", name="ck_pairing_order"),
+        db.CheckConstraint("status IN ('open', 'closed')", name="ck_pairing_status"),
+        db.Index("ix_pairings_lo", "user_lo"),
+        db.Index("ix_pairings_hi", "user_hi"),
+    )
 
 
 class Game(db.Model):

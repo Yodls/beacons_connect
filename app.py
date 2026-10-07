@@ -31,8 +31,10 @@ from models import (
     Club,
     ClubMember,
     Game,
+    GamePairing,
     GamePost,
     GamePostRsvp,
+    GameQueue,
     Match,
     Message,
     Question,
@@ -161,6 +163,13 @@ COMMUNITY = "community"
 COMMUNITY_TITLE = "Beacons Center"
 POST_MODES = {"online": "Online", "inperson": "In person"}
 
+# Matchmaking pairs on an exact string, so the options are fixed rather than
+# free text - "bball" and "Basketball" must not miss each other.
+IN_PERSON_GAMES = (
+    "Basketball", "Soccer", "Volleyball", "Table tennis", "Tennis",
+    "Pool", "Chess", "Cards", "Spikeball", "Frisbee", "Badminton",
+)
+
 
 class _Room:
     """Stand-in parent for a singleton room, which has no table of its own."""
@@ -188,6 +197,17 @@ def chat_target(kind, target_id):
         # Everyone who has finished onboarding is in this one.
         return _Room(), COMMUNITY_TITLE
 
+    if kind == "pair":
+        pairing = db.session.get(GamePairing, target_id)
+        if pairing is None or current_user.id not in (pairing.user_lo,
+                                                      pairing.user_hi):
+            return None, None
+        other_id = (pairing.user_hi if pairing.user_lo == current_user.id
+                    else pairing.user_lo)
+        other = db.session.get(User, other_id)
+        name = other.name if other else "Partner"
+        return pairing, f"{pairing.game} with {name}"
+
     if kind == "club":
         if db.session.get(ClubMember, (current_user.id, target_id)) is None:
             return None, None
@@ -203,6 +223,8 @@ def attach_parent(message, kind, parent):
     """Point a message at exactly one parent, as the check constraint demands."""
     if kind == COMMUNITY:
         message.room = COMMUNITY
+    elif kind == "pair":
+        message.pairing_id = parent.id
     else:
         setattr(message, f"{kind}_id", parent.id)
 
@@ -210,6 +232,8 @@ def attach_parent(message, kind, parent):
 def message_filter(kind, parent):
     if kind == COMMUNITY:
         return Message.room == COMMUNITY
+    if kind == "pair":
+        return Message.pairing_id == parent.id
     column = Message.match_id if kind == "match" else Message.club_id
     return column == parent.id
 
@@ -286,6 +310,23 @@ def chat_list():
             "title": match["name"],
             "subtitle": "Your match",
         })
+    for pairing in db.session.scalars(
+        db.select(GamePairing).where(
+            db.or_(GamePairing.user_lo == current_user.id,
+                   GamePairing.user_hi == current_user.id),
+            GamePairing.status == "open",
+        )
+    ):
+        other_id = (pairing.user_hi if pairing.user_lo == current_user.id
+                    else pairing.user_lo)
+        other = db.session.get(User, other_id)
+        entries.append({
+            "kind": "pair",
+            "target_id": pairing.id,
+            "title": f"{pairing.game} with {other.name if other else 'Partner'}",
+            "subtitle": "Game pairing",
+        })
+
     for club in joined_clubs(current_user.id):
         entries.append({
             "kind": "club",
@@ -303,7 +344,8 @@ def chat_list():
     if newest:
         last[(COMMUNITY, 0)] = (newest[0], newest[1])
 
-    for kind, column in (("match", Message.match_id), ("club", Message.club_id)):
+    for kind, column in (("match", Message.match_id), ("club", Message.club_id),
+                         ("pair", Message.pairing_id)):
         for parent_id, body, when in db.session.execute(
             db.select(column, Message.body, Message.created_at)
             .where(column.is_not(None))
@@ -628,6 +670,121 @@ def game_action(game_id, action):
 POST_NOTE_MAX = 300
 
 
+@app.route("/find")
+@login_required
+def find_game():
+    waiting = db.session.get(GameQueue, current_user.id)
+
+    posts = db.session.scalars(
+        db.select(GamePost)
+        .where(GamePost.mode == "inperson", GamePost.status == "open")
+        .order_by(GamePost.created_at.desc())
+    ).all()
+
+    pairings = []
+    for pairing in db.session.scalars(
+        db.select(GamePairing)
+        .where(db.or_(GamePairing.user_lo == current_user.id,
+                      GamePairing.user_hi == current_user.id),
+               GamePairing.status == "open")
+        .order_by(GamePairing.created_at.desc())
+    ):
+        other_id = (pairing.user_hi if pairing.user_lo == current_user.id
+                    else pairing.user_lo)
+        other = db.session.get(User, other_id)
+        pairings.append({
+            "id": pairing.id,
+            "game": pairing.game,
+            "other": other.name if other else "Partner",
+        })
+
+    # How many others are waiting per game, so the page is honest about odds.
+    counts = dict(db.session.execute(
+        db.select(GameQueue.game, db.func.count())
+        .where(GameQueue.user_id != current_user.id)
+        .group_by(GameQueue.game)
+    ).all())
+
+    return render_template(
+        "find.html",
+        games=IN_PERSON_GAMES,
+        waiting=waiting,
+        counts=counts,
+        posts=[post_payload(p) for p in posts],
+        pairings=pairings,
+    )
+
+
+@app.route("/find/queue", methods=["POST"])
+@login_required
+def find_queue():
+    game = request.form.get("game", "")
+
+    if game not in IN_PERSON_GAMES:
+        flash("Pick a game from the list.")
+        return redirect(url_for("find_game"))
+
+    partner = db.session.scalars(
+        db.select(GameQueue)
+        .where(GameQueue.game == game, GameQueue.user_id != current_user.id)
+        .order_by(GameQueue.created_at)
+    ).first()
+
+    if partner is not None:
+        # Claim them by deleting their row: if another request got there first
+        # the delete affects nothing and we fall through to waiting instead.
+        claimed = db.session.execute(
+            db.delete(GameQueue).where(GameQueue.user_id == partner.user_id)
+        ).rowcount
+
+        if claimed == 1:
+            db.session.execute(
+                db.delete(GameQueue).where(GameQueue.user_id == current_user.id)
+            )
+            lo, hi = pair(current_user.id, partner.user_id)
+            pairing = GamePairing(user_lo=lo, user_hi=hi, game=game)
+            db.session.add(pairing)
+            db.session.commit()
+            flash(f"Paired for {game}. Say hello.")
+            return redirect(url_for("chat", kind="pair", target_id=pairing.id))
+
+    existing = db.session.get(GameQueue, current_user.id)
+    if existing is None:
+        db.session.add(GameQueue(user_id=current_user.id, game=game))
+    else:
+        existing.game = game
+        existing.created_at = datetime.utcnow()
+    db.session.commit()
+    flash(f"Waiting for someone who wants {game}.")
+    return redirect(url_for("find_game"))
+
+
+@app.route("/find/leave", methods=["POST"])
+@login_required
+def find_leave():
+    db.session.execute(
+        db.delete(GameQueue).where(GameQueue.user_id == current_user.id)
+    )
+    db.session.commit()
+    flash("You left the queue.")
+    return redirect(url_for("find_game"))
+
+
+@app.route("/pairings/<int:pairing_id>/close", methods=["POST"])
+@login_required
+def pairing_close(pairing_id):
+    pairing = db.session.get(GamePairing, pairing_id)
+
+    if pairing is None or current_user.id not in (pairing.user_lo, pairing.user_hi):
+        flash("That isn't your pairing.")
+    else:
+        pairing.status = "closed"
+        db.session.commit()
+        flash("Pairing closed.")
+
+    return redirect(url_for("find_game"))
+
+
 @app.route("/posts/new", methods=["POST"])
 @login_required
 def post_new():
@@ -672,6 +829,8 @@ def post_new():
         db.session.commit()
         flash("Posted to Beacons Center.")
 
+    if request.form.get("back") == "find":
+        return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
 
 
@@ -704,6 +863,8 @@ def post_rsvp(post_id):
                 db.session.commit()
                 flash(f"You're in for {post.game}.")
 
+    if request.form.get("back") == "find":
+        return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
 
 
