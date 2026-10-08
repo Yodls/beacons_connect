@@ -1,24 +1,22 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Sign in{% endblock %}
 
 {% block content %}
   <div class="auth">
     <div class="auth-card">
       <div class="auth-brand">
-        <span class="brand-mark">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="8" r="3" />
-            <path d="M12 11.5v9M8.5 20.5h7M4.5 4.5l1.8 1.2M19.5 4.5l-1.8 1.2M3 9.5h2M19 9.5h2" />
-          </svg>
-        </span>
-        <span class="brand-name">Beacons Center
+        <span class="brand-mark">{{ ui.icon("meet") }}</span>
+        <span>
+          <span class="brand-name">Beacons Center</span>
           <span class="brand-sub">UMass Boston</span>
         </span>
       </div>
 
+      {{ ui.flashes() }}
+
       <h1>Welcome back</h1>
-      <p class="sub">Sign in to see your friends and chats.</p>
+      <p class="lede">Sign in to see your friends and chats.</p>
 
       <form method="post">
         <label>Email <input type="email" name="email" required autofocus
@@ -28,7 +26,7 @@
         <button type="submit">Sign in</button>
       </form>
 
-      <p class="alt">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+      <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
     </div>
   </div>
 {% endblock %}

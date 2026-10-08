@@ -3,32 +3,51 @@
 {% block title %}Find people{% endblock %}
 
 {% block appstyle %}
-      .finder { background: linear-gradient(135deg, #1d4e89, #2f74bd 60%, #3f8ad0);
-        color: #fff; border-radius: 18px; padding: 1.3rem 1.4rem;
-        box-shadow: var(--sh2); margin-bottom: .4rem; }
-      .finder h1 { color: #fff; margin-bottom: .2rem; }
-      .finder p { color: #d6e5f6; font-size: .88rem; margin: 0 0 .9rem; }
+      .finder {
+        padding: 1.25rem 1.4rem;
+        background:
+          radial-gradient(120% 140% at 100% 0%, #1c6fb5 0%, transparent 62%),
+          var(--blue);
+        color: #fff; border-radius: 18px;
+        box-shadow: var(--shadow-2);
+      }
+      .finder h1 { color: #fff; }
+      .finder .lede { color: #d4e6f6; margin-bottom: .9rem; }
       .finder form { display: flex; gap: .5rem; }
-      .finder input { margin: 0; flex: 1 1 auto; border-color: transparent; }
-      .finder button { margin: 0; background: #fff; color: var(--brand);
-        white-space: nowrap; }
+      .finder input {
+        margin: 0; flex: 1 1 auto;
+        border-color: transparent; background: #fff;
+      }
+      .finder button {
+        margin: 0; background: #fff; color: var(--blue);
+        white-space: nowrap;
+      }
       .finder button:hover { background: #eaf1f9; }
-      .tag { display: inline-flex; align-items: center; flex: 0 0 auto;
-        padding: .18rem .55rem; border-radius: var(--pill);
-        font-size: .7rem; font-weight: 800; letter-spacing: .04em;
-        text-transform: uppercase; }
-      .tag.on { background: #e8f5ee; color: #12795a; }
-      .tag.wait { background: var(--gold-soft); color: #8a5a14; }
-      .tag.off { background: #fdecea; color: #93261e; }
-      .tag.past { background: var(--surface-2); color: var(--muted); }
-      .card.asked { border-color: var(--gold);
-        box-shadow: 0 0 0 3px var(--gold-soft); }
+
+      /* They are waiting on an answer from you. */
+      .card.asked {
+        border-color: var(--club);
+        box-shadow: 0 0 0 3px var(--club-bg), var(--shadow);
+      }
 {% endblock %}
 
+{#
+  Two things here are shaped by the tests rather than by taste.
+
+  A helper reads each person's state by splitting the body on the string
+  '<div class="card' and taking the fragment up to the next card, which has to
+  contain both the status tag and the action button. So a person card may
+  contain at most one further element whose class begins with "card" -- the
+  card-top row -- and no nested cards.
+
+  And the results heading is pinned: a test slices on "result(s) for", so the
+  <h2> keeps that exact wording. It is hand-written rather than run through
+  ui.section() because the typographic quotes would be escaped.
+#}
 {% block main %}
   <div class="finder">
     <h1>Find people</h1>
-    <p>Search by name and send a friend request. They decide whether to accept.</p>
+    <p class="lede">Search by name and send a friend request. They decide whether to accept.</p>
     <form method="get" action="{{ url_for('people') }}">
       <input name="q" value="{{ term }}" maxlength="120"
              placeholder="Search by name" autofocus />
@@ -37,88 +56,97 @@
   </div>
 
   {% if searched %}
-    <h2>{{ results | length }} result(s) for &ldquo;{{ term }}&rdquo;</h2>
-    {% for person in results %}
-      <div class="card {% if person.state == 'they_asked' %}asked{% endif %}">
-        <div class="card-top">
-          {{ ui.avatar(person.name, person.user_id) }}
-          <div class="grow">
-            <h3>{{ person.name }}</h3>
+    <section class="sec-friend">
+      <div class="sec sec-friend">
+        <span class="tag-dot">{{ ui.icon("search") }}</span>
+        <h2>{{ results | length }} result(s) for &ldquo;{{ term }}&rdquo;</h2>
+      </div>
+      <div class="grid two">
+        {% for person in results %}
+          <div class="card {% if person.state == 'they_asked' %}asked{% endif %}">
+            <div class="card-top">
+              {{ ui.avatar(person.name, person.user_id) }}
+              <div class="grow"><h3>{{ person.name }}</h3></div>
+              {% if person.state == "matched" %}
+                <span class="tag on">Friends</span>
+              {% elif person.state == "you_asked" %}
+                <span class="tag wait">Request sent</span>
+              {% elif person.state == "they_asked" %}
+                <span class="tag wait">Asked you</span>
+              {% elif person.state == "declined" %}
+                <span class="tag off">Declined</span>
+              {% elif person.state == "ended" %}
+                <span class="tag past">Were friends</span>
+              {% endif %}
+            </div>
+            <div class="actions">
+              {% if person.state == "matched" %}
+                <form method="get"
+                      action="{{ url_for('chat', kind='match', target_id=person.user_id) }}">
+                  <button type="submit">Chat</button>
+                </form>
+              {% elif person.state == "you_asked" %}
+                <form method="post"
+                      action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
+                  <input type="hidden" name="q" value="{{ term }}" />
+                  <button type="submit" class="ghost">Take it back</button>
+                </form>
+              {% elif person.state == "they_asked" %}
+                <form method="post"
+                      action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+                  <button type="submit">Accept</button>
+                </form>
+                <form method="post"
+                      action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
+                  <button type="submit" class="ghost">Decline</button>
+                </form>
+              {% elif person.state == "declined" %}
+                <span class="why">A request here was turned down.</span>
+              {% else %}
+                <form method="post"
+                      action="{{ url_for('match_ask', other_id=person.user_id) }}">
+                  <input type="hidden" name="q" value="{{ term }}" />
+                  <button type="submit">Send friend request</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
-          {% if person.state == "matched" %}
-            <span class="tag on">Friends</span>
-          {% elif person.state == "you_asked" %}
-            <span class="tag wait">Request sent</span>
-          {% elif person.state == "they_asked" %}
-            <span class="tag wait">Asked you</span>
-          {% elif person.state == "declined" %}
-            <span class="tag off">Declined</span>
-          {% elif person.state == "ended" %}
-            <span class="tag past">Were friends</span>
-          {% endif %}
-        </div>
-        <div class="actions">
-          {% if person.state == "matched" %}
-            <form method="get"
-                  action="{{ url_for('chat', kind='match', target_id=person.user_id) }}">
-              <button type="submit">Chat</button>
-            </form>
-          {% elif person.state == "you_asked" %}
+        {% else %}
+          <div class="empty">
+            <b>No one by that name.</b> Only students who have finished the
+            questions show up here.
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="sec-friend">
+    {{ ui.section("Requests you've sent", "friend", "arrow", sent | length) }}
+    <div class="grid two">
+      {% for person in sent %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(person.name, person.user_id) }}
+            <div class="grow">
+              <h3>{{ person.name }}</h3>
+              <span class="why">Waiting for them to accept</span>
+            </div>
+            <span class="tag wait">Pending</span>
+          </div>
+          <div class="actions">
             <form method="post"
                   action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
               <input type="hidden" name="q" value="{{ term }}" />
               <button type="submit" class="ghost">Take it back</button>
             </form>
-          {% elif person.state == "they_asked" %}
-            <form method="post"
-                  action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
-              <button type="submit">Accept</button>
-            </form>
-            <form method="post"
-                  action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
-              <button type="submit" class="ghost">Decline</button>
-            </form>
-          {% elif person.state == "declined" %}
-            <span class="why">A request here was turned down.</span>
-          {% else %}
-            <form method="post"
-                  action="{{ url_for('match_ask', other_id=person.user_id) }}">
-              <input type="hidden" name="q" value="{{ term }}" />
-              <button type="submit">Send friend request</button>
-            </form>
-          {% endif %}
+          </div>
         </div>
-      </div>
-    {% else %}
-      <div class="empty">
-        <b>No one by that name.</b> Only students who have finished the
-        questions show up here.
-      </div>
-    {% endfor %}
-  {% endif %}
-
-  <h2>Requests you've sent</h2>
-  {% for person in sent %}
-    <div class="card">
-      <div class="card-top">
-        {{ ui.avatar(person.name, person.user_id) }}
-        <div class="grow">
-          <h3>{{ person.name }}</h3>
-          <span class="why">Waiting for them to accept</span>
-        </div>
-        <span class="tag wait">Pending</span>
-      </div>
-      <div class="actions">
-        <form method="post"
-              action="{{ url_for('match_respond', other_id=person.user_id, action='cancel') }}">
-          <input type="hidden" name="q" value="{{ term }}" />
-          <button type="submit" class="ghost">Take it back</button>
-        </form>
-      </div>
+      {% else %}
+        <div class="empty">You haven't asked anyone yet.</div>
+      {% endfor %}
     </div>
-  {% else %}
-    <div class="empty">You haven't asked anyone yet.</div>
-  {% endfor %}
+  </section>
 
   <p class="nav"><a href="{{ url_for('matches') }}">Back to your friends &rarr;</a></p>
 {% endblock %}

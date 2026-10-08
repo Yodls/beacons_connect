@@ -3,65 +3,103 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block appstyle %}
-      .chathead { display: flex; align-items: center; gap: .75rem;
-        padding: .8rem 1rem; background: var(--surface);
+      .chathead {
+        display: flex; align-items: center; gap: .75rem;
+        padding: .8rem 1rem;
+        background: var(--surface);
         border: 1px solid var(--line); border-bottom: 0;
-        border-radius: var(--r) var(--r) 0 0; }
+        border-top: 3px solid var(--chat);
+        border-radius: var(--r) var(--r) 0 0;
+      }
       .chathead .grow { flex: 1 1 auto; min-width: 0; }
       .chathead h1 { font-size: 1.05rem; margin: 0; }
       .chathead .status { font-size: .76rem; color: var(--muted); font-weight: 600; }
-      .chathead .status::before { content: ""; display: inline-block;
-        width: 7px; height: 7px; border-radius: 50%; background: #35b37e;
-        margin-right: .35rem; vertical-align: middle; }
+      .chathead .status::before {
+        content: ""; display: inline-block;
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--place);
+        margin-right: .35rem; vertical-align: middle;
+      }
 
-      #log { background: var(--surface-2); border: 1px solid var(--line);
-        border-radius: 0 0 var(--r) var(--r); padding: 1.1rem;
-        height: 26rem; overflow-y: auto; display: flex; flex-direction: column; }
+      /* #log, .msg* and .composer are asserted to live in this page's own
+         stylesheet rather than the shared one: a test reads the CSSOM and
+         requires these rules to arrive with the chat and leave with it. */
+      #log {
+        height: 26rem; padding: 1.1rem; overflow-y: auto;
+        display: flex; flex-direction: column;
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 0 0 var(--r) var(--r);
+      }
 
-      .msg { display: flex; flex-direction: column; max-width: 74%;
-        margin: 0 0 .7rem; }
-      .msg .who { font-size: .72rem; font-weight: 700; color: var(--muted);
-        margin-bottom: .2rem; padding: 0 .2rem; }
-      .msg .body { display: block; padding: .55rem .8rem; background: #fff;
-        border: 1px solid var(--line); border-radius: 14px 14px 14px 4px;
+      .msg { display: flex; flex-direction: column; max-width: 74%; margin: 0 0 .7rem; }
+      .msg .who {
+        margin-bottom: .2rem; padding: 0 .2rem;
+        font-size: .72rem; font-weight: 700; color: var(--muted);
+      }
+      .msg .body {
+        display: block; padding: .55rem .8rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px 14px 14px 4px;
+        box-shadow: var(--shadow);
         white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem;
-        box-shadow: var(--sh1); }
-      .msg .at { font-size: .68rem; color: #93a2b3; margin-top: .18rem;
-        padding: 0 .2rem; font-variant-numeric: tabular-nums; }
+      }
+      .msg .at {
+        margin-top: .18rem; padding: 0 .2rem;
+        font-size: .68rem; color: #93a2b3;
+        font-variant-numeric: tabular-nums;
+      }
       .msg.mine { margin-left: auto; align-items: flex-end; }
-      .msg.mine .body { background: var(--brand); color: #fff;
-        border-color: transparent; border-radius: 14px 14px 4px 14px; }
+      .msg.mine .body {
+        background: var(--chat); color: #fff;
+        border-color: transparent; border-radius: 14px 14px 4px 14px;
+      }
 
-      #empty { margin: auto; text-align: center; color: var(--muted);
-        font-size: .88rem; }
+      #empty { margin: auto; text-align: center; color: var(--muted); font-size: .88rem; }
 
       .composer { display: flex; gap: .5rem; margin-top: .8rem; }
       .composer input { margin: 0; border-radius: var(--pill); padding: .7rem 1.1rem; }
-      .composer button { margin: 0; border-radius: var(--pill); padding: .7rem 1.3rem;
-        white-space: nowrap; }
-      .launch { display: flex; align-items: center; gap: .5rem; margin: .8rem 0 0;
-        padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--line);
-        border-radius: var(--r); box-shadow: var(--sh1); }
-      .launch-label { font-size: .76rem; font-weight: 800; letter-spacing: .05em;
-        text-transform: uppercase; color: var(--muted); }
+      .composer input:focus { border-color: var(--chat); }
+      .composer button {
+        margin: 0; border-radius: var(--pill); padding: .7rem 1.3rem;
+        background: var(--chat); white-space: nowrap;
+      }
+
+      .launch, .newpost {
+        margin: .8rem 0 0; padding: .7rem .8rem;
+        background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r);
+        box-shadow: var(--shadow);
+      }
+      .launch { display: flex; align-items: center; gap: .5rem; padding: .6rem .75rem; }
+      .launch-label, .newpost b {
+        font-size: .76rem; font-weight: 800;
+        letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+      }
       .launch select { width: auto; margin: 0; flex: 1 1 auto; }
-      .launch button { margin: 0; white-space: nowrap; padding: .45rem .9rem;
-        font-size: .82rem; }
-      .newpost { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
-        margin: .8rem 0 0; padding: .7rem .8rem; background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh1); }
-      .newpost b { flex: 1 1 100%; font-size: .76rem; font-weight: 800;
-        letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+      .launch button {
+        margin: 0; white-space: nowrap;
+        padding: .45rem .9rem; font-size: .82rem;
+      }
+
+      .newpost { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+      .newpost b { flex: 1 1 100%; }
       .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 7rem; }
       .newpost button { margin: 0; padding: .45rem .9rem; font-size: .82rem; }
-      .post { display: block; margin-top: .35rem; padding: .6rem .8rem;
-        background: var(--gold-soft); border: 1px solid #f0d9a8;
-        border-radius: 12px; }
+
+      /* A meetup posted into the room, rendered inside the message bubble. */
+      .post {
+        display: block; margin-top: .35rem; padding: .6rem .8rem;
+        background: var(--club-bg); border: 1px solid #f0d9a8;
+        border-radius: 12px;
+      }
       .post b { display: block; font-size: .95rem; }
-      .post .meta { display: block; color: #8a5a14; font-size: .76rem;
-        font-weight: 600; }
-      .post .note { display: block; font-size: .85rem; margin-top: .25rem;
-        color: var(--ink); }
+      .post .meta { display: block; color: #7d5512; font-size: .76rem; font-weight: 600; }
+      .post .note {
+        display: block; margin-top: .25rem;
+        font-size: .85rem; color: var(--ink);
+      }
       .post-actions { display: flex; gap: .4rem; margin-top: .5rem; }
       .post-actions form { margin: 0; }
       .post-actions button { margin: 0; padding: .3rem .75rem; font-size: .78rem; }

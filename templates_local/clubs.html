@@ -3,20 +3,44 @@
 {% block title %}All clubs{% endblock %}
 
 {% block appstyle %}
-      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-        gap: .7rem; margin-top: .9rem; }
-      .grid .card { margin-top: 0; display: flex; flex-direction: column; }
-      .grid .card .actions { margin-top: auto; padding-top: .7rem; }
-      .joined { display: inline-flex; align-items: center; gap: .25rem;
-        padding: .14rem .5rem; border-radius: var(--pill); flex: 0 0 auto;
-        background: #e8f5ee; color: #12795a; font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase; }
+      /* Its own class rather than an override of base's .grid, so the two
+         cannot fight over the column count. */
+      .clubgrid {
+        display: grid; gap: .7rem; margin-top: .9rem;
+        grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      }
+      .clubgrid .card { margin-top: 0; display: flex; flex-direction: column; }
+      .clubgrid .card .actions { margin-top: auto; padding-top: .7rem; }
+
+      .joined {
+        display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto;
+        padding: .14rem .5rem; border-radius: var(--pill);
+        background: var(--place-bg); color: var(--place);
+        font-size: .68rem; font-weight: 800;
+        letter-spacing: .04em; text-transform: uppercase;
+      }
       .joined::before { content: "\2713"; }
-      .counter { display: inline-block; padding: .2rem .6rem; border-radius: var(--pill);
-        background: var(--brand-soft); color: var(--brand);
-        font-size: .8rem; font-weight: 700; }
+
+      .counter {
+        display: inline-block; padding: .2rem .6rem;
+        border-radius: var(--pill);
+        background: var(--club-bg); color: #7d5512;
+        font-size: .8rem; font-weight: 700;
+      }
 {% endblock %}
 
+{#
+  Two counts are asserted on this page.
+
+  The <h1> is compared by exact textContent, so it stays bare -- no icon, no
+  span, nothing nested.
+
+  And the card class below is counted by literal string across the whole page
+  and must come out equal to the number of clubs. So nothing else here may
+  carry that class, and a club card must carry it alone -- the count includes
+  the closing quote, so adding a second class to the same attribute hides the
+  card from it.
+#}
 {% block main %}
   <h1>All clubs</h1>
   <p class="lede">
@@ -24,7 +48,7 @@
     <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
   </p>
 
-  <div class="grid">
+  <div class="clubgrid">
     {% for club in clubs %}
       <div class="card">
         <div class="card-top">

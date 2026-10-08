@@ -1,8 +1,47 @@
 {# Shared presentation helpers. Imported, never rendered on its own. #}
 
-{% macro avatar(label, seed, square=false) -%}
+{% macro icon(name) -%}
+  <svg class="icon" aria-hidden="true"><use href="#icon-{{ name }}" /></svg>
+{%- endmacro %}
+
+{% macro avatar(label, seed, square=false, sm=false) -%}
   {%- set parts = label.split() -%}
   {%- set initials = parts[0][0] ~ (parts[-1][0] if parts | length > 1 else "") -%}
-  <span class="avatar av-{{ seed % 6 }}{% if square %} sq{% endif %}"
+  <span class="avatar av-{{ seed % 6 }}{% if square %} sq{% endif %}{% if sm %} sm{% endif %}"
         aria-hidden="true">{{ initials | upper }}</span>
+{%- endmacro %}
+
+{#
+  A section band. The accent comes from `kind` as a class on the wrapper, never
+  as an inline style and never from a condition in the shared stylesheet --
+  that sheet has to stay byte-identical across pages, so the colour has to be
+  selected by markup inside #live.
+
+  The <h2> is emitted bare, with no attributes and no internal whitespace,
+  because a privacy test partitions a page on the exact string
+  "<h2>Your clubs</h2>".
+#}
+{% macro section(title, kind, name, count=none) -%}
+  <div class="sec sec-{{ kind }}">
+    <span class="tag-dot">{{ icon(name) }}</span>
+    <h2>{{ title }}</h2>
+    {%- if count is not none %}<span class="count">{{ count }}</span>{% endif %}
+  </div>
+{%- endmacro %}
+
+{#
+  Flashes. These used to live in base.html, but the new shell has a sticky top
+  bar and they would have rendered above it. Each layout places this itself.
+  get_flashed_messages is a Jinja global, so no `with context` is needed.
+#}
+{% macro flashes() -%}
+  {%- with msgs = get_flashed_messages() -%}
+    {%- if msgs %}
+      <div class="flashes">
+        {%- for message in msgs %}
+          <p class="flash">{{ message }}</p>
+        {%- endfor %}
+      </div>
+    {%- endif -%}
+  {%- endwith -%}
 {%- endmacro %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Verify your email{% endblock %}
 
 {% block style %}
@@ -6,7 +7,7 @@
         letter-spacing: .5em; text-indent: .5em; padding: .8rem .5rem;
         font-variant-numeric: tabular-nums; }
       .sent { display: inline-block; padding: .2rem .6rem; border-radius: var(--pill);
-        background: var(--brand-soft); color: var(--brand);
+        background: var(--friend-bg); color: var(--friend);
         font-size: .82rem; font-weight: 700; }
       .resend { margin-top: 1rem; padding-top: 1rem;
         border-top: 1px solid var(--line); text-align: center; }
@@ -17,20 +18,17 @@
   <div class="auth">
     <div class="auth-card">
       <div class="auth-brand">
-        <span class="brand-mark">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="8" r="3" />
-            <path d="M12 11.5v9M8.5 20.5h7M4.5 4.5l1.8 1.2M19.5 4.5l-1.8 1.2M3 9.5h2M19 9.5h2" />
-          </svg>
-        </span>
-        <span class="brand-name">Beacons Center
+        <span class="brand-mark">{{ ui.icon("meet") }}</span>
+        <span>
+          <span class="brand-name">Beacons Center</span>
           <span class="brand-sub">UMass Boston</span>
         </span>
       </div>
 
+      {{ ui.flashes() }}
+
       <h1>Check your email</h1>
-      <p class="sub">
+      <p class="lede">
         We sent a 6-digit code to <span class="sent">{{ email }}</span><br />
         It expires in 10 minutes.
       </p>

@@ -2,180 +2,240 @@
 {% import "_ui.html" as ui %}
 {% block title %}Your friends{% endblock %}
 
-{% block sidebuttons %}{% endblock %}
-
 {% block appstyle %}
-      .hero { background: linear-gradient(135deg, #1d4e89, #2f74bd 55%, #3f8ad0);
-        color: #fff; border-radius: 18px; padding: 1.4rem 1.5rem;
-        box-shadow: var(--sh2); margin-bottom: .4rem; }
-      .hero h1 { color: #fff; margin-bottom: .25rem; }
-      .hero p { color: #d6e5f6; font-size: .9rem; margin: 0; }
-      .hero a { color: #fff; text-decoration: underline; }
-      .stats { display: flex; gap: 1.4rem; margin-top: 1rem;
-        padding-top: .9rem; border-top: 1px solid rgba(255, 255, 255, .22); }
-      .stats b { display: block; font-size: 1.3rem; font-weight: 800; line-height: 1.1; }
-      .stats em { display: block; font-style: normal; font-size: .72rem;
-        color: #cfe0f3; font-weight: 600;
-        letter-spacing: .04em; text-transform: uppercase; }
-      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .5rem; }
-      .shared i { font-style: normal; font-size: .74rem; font-weight: 600;
+      .hero {
+        padding: 1.3rem 1.4rem;
+        background:
+          radial-gradient(120% 140% at 100% 0%, #1d3a6e 0%, transparent 60%),
+          var(--navy-deep);
+        color: #fff; border-radius: 18px;
+        box-shadow: var(--shadow-2);
+      }
+      .hero h1 { color: #fff; }
+      .hero .lede { color: #bed2ec; }
+      .hero .lede a { color: #fff; text-decoration: underline; }
+
+      .stats {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem;
+        margin-top: 1.1rem;
+      }
+      .stat {
+        padding: .6rem .7rem;
+        background: rgba(255, 255, 255, .08);
+        border: 1px solid rgba(255, 255, 255, .14);
+        border-radius: var(--r-sm);
+      }
+      .stat b { display: block; font-size: 1.35rem; font-weight: 800; line-height: 1.15; }
+      .stat em {
+        display: block; font-style: normal;
+        font-size: .66rem; font-weight: 700; color: #a9c2e2;
+        letter-spacing: .06em; text-transform: uppercase;
+      }
+
+      /* Someone is waiting on an answer, so it should catch the eye. */
+      .card.asked {
+        border-color: var(--club);
+        box-shadow: 0 0 0 3px var(--club-bg), var(--shadow);
+      }
+
+      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .45rem; }
+      .shared i {
+        font-style: normal; font-size: .72rem; font-weight: 600;
         padding: .14rem .5rem; border-radius: var(--pill);
         background: var(--surface-2); border: 1px solid var(--line);
-        color: var(--muted); }
-      .continue { display: block; margin-top: 1.6rem; padding: 1rem 1.2rem;
-        background: var(--surface); border: 1px solid var(--line-2);
-        border-radius: var(--r); box-shadow: var(--sh1); text-align: center;
-        font-weight: 700; }
-      .continue:hover { text-decoration: none; box-shadow: var(--sh2);
-        border-color: var(--brand); }
-      /* Someone is waiting on an answer, so it should catch the eye. */
-      .card.asked { border-color: var(--gold);
-        box-shadow: 0 0 0 3px var(--gold-soft); }
+        color: var(--muted);
+      }
+      .why-lead { margin: .7rem 0 0; color: var(--muted); font-size: .8rem; }
+
+      .continue {
+        display: flex; align-items: center; justify-content: center; gap: .4rem;
+        margin-top: 1.8rem; padding: .95rem 1.2rem;
+        background: var(--surface);
+        border: 1px solid var(--line-2); border-radius: var(--r);
+        box-shadow: var(--shadow);
+        font-weight: 700; text-align: center;
+      }
+      .continue:hover {
+        text-decoration: none; box-shadow: var(--shadow-2);
+        border-color: var(--friend);
+      }
 {% endblock %}
 
+{#
+  Document order is the privacy boundary on this page.
+
+  A test splits the body on the exact string "<h2>Your clubs</h2>" and requires
+  that nothing before it carries match scores or shared-answer markup. So the
+  two club bands -- the only things here that legitimately show a score and the
+  answers behind it -- have to stay last, and the three people bands above them
+  stay free of .score and .shared. Reordering the bands moves a privacy
+  assertion, not just some headings.
+
+  The <h1> also has to keep reading "friends" and the title "friend": the
+  browser harness lands here from /clubs and recognises the page by both.
+#}
 {% block main %}
   <div class="hero">
     <h1>Your friends and clubs</h1>
-    <p>
+    <p class="lede">
       Worked out from the answers you gave.
       <a href="{{ url_for('onboarding') }}">Change your answers</a>
       &middot;
       <a href="{{ url_for('people') }}">Find someone yourself</a>
     </p>
     <div class="stats">
-      <span><b>{{ matches | length }}</b><em>Friends</em></span>
-      <span><b>{{ joined | length }}</b><em>Clubs joined</em></span>
-      <span><b>{{ clubs | length }}</b><em>Suggested</em></span>
+      <span class="stat"><b>{{ matches | length }}</b><em>Friends</em></span>
+      <span class="stat"><b>{{ joined | length }}</b><em>Clubs joined</em></span>
+      <span class="stat"><b>{{ clubs | length }}</b><em>Suggested</em></span>
     </div>
   </div>
 
   {% if requests %}
-    <h2>Friend requests</h2>
-    {% for person in requests %}
-      <div class="card asked">
-        <div class="card-top">
-          {{ ui.avatar(person.name, person.user_id) }}
-          <div class="grow">
-            <h3>{{ person.name }}</h3>
-            <span class="why">Wants to be friends</span>
+    <section class="sec-friend">
+      {{ ui.section("Friend requests", "friend", "people", requests | length) }}
+      <div class="grid">
+        {% for person in requests %}
+          <div class="card asked">
+            <div class="card-top">
+              {{ ui.avatar(person.name, person.user_id) }}
+              <div class="grow">
+                <h3>{{ person.name }}</h3>
+                <span class="why">Wants to be friends</span>
+              </div>
+            </div>
+            <div class="actions">
+              <form method="post"
+                    action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+                <button type="submit">Accept</button>
+              </form>
+              <form method="post"
+                    action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
+                <button type="submit" class="ghost">Decline</button>
+              </form>
+            </div>
           </div>
-        </div>
-        <div class="actions">
-          <form method="post"
-                action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
-            <button type="submit">Accept</button>
-          </form>
-          <form method="post"
-                action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
-            <button type="submit" class="ghost">Decline</button>
-          </form>
-        </div>
+        {% endfor %}
       </div>
-    {% endfor %}
+    </section>
   {% endif %}
 
-  <h2>Your friends</h2>
-  {% for match in matches %}
-    <div class="card">
-      <div class="card-top">
-        {{ ui.avatar(match.name, match.user_id) }}
-        <div class="grow">
-          <h3>{{ match.name }}</h3>
+  <section class="sec-friend">
+    {{ ui.section("Your friends", "friend", "user", matches | length) }}
+    <div class="grid two">
+      {% for match in matches %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(match.name, match.user_id) }}
+            <div class="grow"><h3>{{ match.name }}</h3></div>
+          </div>
+          <div class="actions">
+            <form method="get"
+                  action="{{ url_for('chat', kind='match', target_id=match.user_id) }}">
+              <button type="submit">Chat</button>
+            </form>
+            <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
+              <button type="submit" class="ghost">Remove friend</button>
+            </form>
+          </div>
         </div>
-      </div>
-      <div class="actions">
-        <form method="get"
-              action="{{ url_for('chat', kind='match', target_id=match.user_id) }}">
-          <button type="submit">Chat</button>
-        </form>
-        <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
-          <button type="submit" class="ghost">Remove friend</button>
-        </form>
-      </div>
+      {% else %}
+        <div class="empty">
+          <b>No friends yet.</b> Send a request to someone below, or
+          <a href="{{ url_for('people') }}">search by name</a>.
+        </div>
+      {% endfor %}
     </div>
-  {% else %}
-    <div class="empty">
-      <b>No friends yet.</b> Send a request to someone below, or
-      <a href="{{ url_for('people') }}">search by name</a>.
-    </div>
-  {% endfor %}
+  </section>
 
-  <h2>People you might know</h2>
-  {% for rec in recs %}
-    <div class="card">
-      <div class="card-top">
-        {{ ui.avatar(rec.name, rec.user_id) }}
-        <div class="grow">
-          <h3>{{ rec.name }}</h3>
+  <section class="sec-friend">
+    {{ ui.section("People you might know", "friend", "search") }}
+    <div class="grid two">
+      {% for rec in recs %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(rec.name, rec.user_id) }}
+            <div class="grow"><h3>{{ rec.name }}</h3></div>
+          </div>
+          <div class="actions">
+            <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+              <button type="submit">Send friend request</button>
+            </form>
+          </div>
         </div>
-      </div>
-      <div class="actions">
-        <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
-          <button type="submit">Send friend request</button>
-        </form>
-      </div>
+      {% else %}
+        <div class="empty">
+          No suggestions from your answers right now.
+          <a href="{{ url_for('people') }}">Search by name</a> instead.
+        </div>
+      {% endfor %}
     </div>
-  {% else %}
-    <div class="empty">
-      No suggestions from your answers right now.
-      <a href="{{ url_for('people') }}">Search by name</a> instead.
-    </div>
-  {% endfor %}
+  </section>
 
-  <h2>Your clubs</h2>
-  {% for club in joined %}
-    <div class="card">
-      <div class="card-top">
-        {{ ui.avatar(club.name, club.id, square=true) }}
-        <div class="grow">
-          <h3>{{ club.name }}</h3>
-          <span class="why">{{ club.description }}</span>
+  {# Everything below this line may show scores and shared answers. #}
+  <section class="sec-club">
+    {{ ui.section("Your clubs", "club", "club", joined | length) }}
+    <div class="grid two">
+      {% for club in joined %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(club.name, club.id, square=true) }}
+            <div class="grow">
+              <h3>{{ club.name }}</h3>
+              <span class="why">{{ club.description }}</span>
+            </div>
+          </div>
+          <div class="actions">
+            <form method="get"
+                  action="{{ url_for('chat', kind='club', target_id=club.id) }}">
+              <button type="submit">Club space</button>
+            </form>
+            <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+              <input type="hidden" name="back" value="matches" />
+              <button type="submit" class="ghost">Leave</button>
+            </form>
+          </div>
         </div>
-      </div>
-      <div class="actions">
-        <form method="get"
-              action="{{ url_for('chat', kind='club', target_id=club.id) }}">
-          <button type="submit">Club space</button>
-        </form>
-        <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
-          <input type="hidden" name="back" value="matches" />
-          <button type="submit" class="ghost">Leave</button>
-        </form>
-      </div>
+      {% else %}
+        <div class="empty">
+          You haven't joined any clubs yet. Try one of the suggestions below.
+        </div>
+      {% endfor %}
     </div>
-  {% else %}
-    <div class="empty">
-      You haven't joined any clubs yet. Try one of the suggestions below.
-    </div>
-  {% endfor %}
+  </section>
 
-  <h2>Clubs you might like</h2>
-  {% for club in clubs %}
-    <div class="card">
-      <div class="card-top">
-        {{ ui.avatar(club.name, club.club_id, square=true) }}
-        <div class="grow">
-          <h3>{{ club.name }}</h3>
-          <span class="why">{{ club.description }}</span>
+  <section class="sec-club">
+    {{ ui.section("Clubs you might like", "club", "star") }}
+    <div class="grid two">
+      {% for club in clubs %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(club.name, club.club_id, square=true) }}
+            <div class="grow">
+              <h3>{{ club.name }}</h3>
+              <span class="why">{{ club.description }}</span>
+            </div>
+            <span class="score">{{ "%g" % club.score }}</span>
+          </div>
+          <p class="why-lead">Suggested because you picked:</p>
+          <div class="shared">
+            {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
+          </div>
+          <div class="actions">
+            <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
+              <input type="hidden" name="back" value="matches" />
+              <button type="submit">Join</button>
+            </form>
+          </div>
         </div>
-        <span class="score">{{ "%g" % club.score }}</span>
-      </div>
-      <p class="why">Suggested because you picked:</p>
-      <div class="shared">
-        {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
-      </div>
-      <div class="actions">
-        <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
-          <input type="hidden" name="back" value="matches" />
-          <button type="submit">Join</button>
-        </form>
-      </div>
+      {% else %}
+        <div class="empty">No new suggestions from your answers right now.</div>
+      {% endfor %}
     </div>
-  {% else %}
-    <div class="empty">No new suggestions from your answers right now.</div>
-  {% endfor %}
+  </section>
 
   <p class="nav"><a href="{{ url_for('clubs') }}">Browse all clubs &rarr;</a></p>
 
-  <a class="continue" href="{{ url_for('index') }}">Continue to Beacons Center &rarr;</a>
+  <a class="continue" href="{{ url_for('index') }}">
+    Continue to Beacons Center {{ ui.icon("arrow") }}
+  </a>
 {% endblock %}

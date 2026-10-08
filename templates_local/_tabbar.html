@@ -1,0 +1,39 @@
+{#
+  The bottom nav.
+
+  Called .tabbar, not .dock: that class belongs to the friends panel and is
+  pinned byte-for-byte by its tests.
+
+  These are anchors rather than the mockup's <button>s, deliberately. The
+  browser harness navigates by real hrefs, so this is what makes /, /matches
+  and the community room reachable from every page.
+
+  It stays data-free apart from pending_count. Rendering anything else risks
+  putting a page's own strings onto every other page -- the community room's
+  title, for one, must not appear on /matches.
+#}
+{%- import "_ui.html" as ui -%}
+{%- set here = request.endpoint -%}
+<nav class="tabbar" aria-label="Sections">
+  <a class="tab sec-chat {% if here == 'index' %}on{% endif %}"
+     href="{{ url_for('index') }}">{{ ui.icon("home") }}Home</a>
+
+  <a class="tab sec-friend {% if here == 'matches' %}on{% endif %}"
+     href="{{ url_for('matches') }}">{{ ui.icon("people") }}Friends
+    {%- if pending_count %}<span class="tab-count">{{ pending_count }}</span>{% endif -%}
+  </a>
+
+  <a class="tab sec-game {% if here == 'game_lobby' %}on{% endif %}"
+     href="{{ url_for('game_lobby') }}">{{ ui.icon("game") }}Games</a>
+
+  {# No label on purpose, as in the mockup. It also keeps the room's own
+     title off every page. #}
+  <a class="tab-new" href="{{ url_for('chat', kind='community', target_id=0) }}"
+     aria-label="Post to the community room">{{ ui.icon("plus") }}</a>
+
+  <a class="tab sec-place {% if here == 'find_game' %}on{% endif %}"
+     href="{{ url_for('find_game') }}">{{ ui.icon("meet") }}Meet up</a>
+
+  <a class="tab sec-club {% if here == 'clubs' %}on{% endif %}"
+     href="{{ url_for('clubs') }}">{{ ui.icon("club") }}Clubs</a>
+</nav>
