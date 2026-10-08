@@ -36,12 +36,8 @@
     {% for rec in recs %}
       <div class="card">
         <h3>
-          <span class="score">{{ "%g" % rec.score }}</span>
           {{ rec.name }}
         </h3>
-        {% if rec.shared %}
-          <p class="why">{{ rec.shared[:3] | join(", ") }}</p>
-        {% endif %}
         <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
           <input type="hidden" name="back" value="home" />
           <button type="submit">Send friend request</button>

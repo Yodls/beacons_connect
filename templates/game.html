@@ -128,7 +128,10 @@
         });
     }
 
-    var gameTimer = setInterval(pollGame, 2500);
+    // Registered with the enhancer rather than setInterval, so a
+    // navigation stops it instead of leaving it polling a page that
+    // is no longer on screen.
+    var gameTimer = Beacon.every(pollGame, 2500);
   })();
 </script>
 
@@ -204,7 +207,7 @@
         });
     }
 
-    var chatTimer = setInterval(poll, 4000);
+    var chatTimer = Beacon.every(poll, 4000);
   })();
 </script>
 {% endif %}

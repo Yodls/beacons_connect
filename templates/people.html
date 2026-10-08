@@ -23,14 +23,8 @@
     {% for person in results %}
       <div class="card">
         <h3>
-          <span class="score">{{ "%g" % person.score }}</span>
           {{ person.name }}
         </h3>
-        {% if person.shared %}
-          <p class="why">In common: {{ person.shared | join(", ") }}</p>
-        {% else %}
-          <p class="why">Nothing in common from the questions.</p>
-        {% endif %}
         <div class="actions">
           {% if person.state == "matched" %}
             <span class="state">Already friends.</span>

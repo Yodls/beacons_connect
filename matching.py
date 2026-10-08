@@ -204,8 +204,7 @@ _SEARCH_SQL = """
 
 _REQUESTS_SQL = """
     SELECT other.id   AS user_id,
-           other.name AS name,
-           m.score    AS score
+           other.name AS name
     FROM matches m
     JOIN "user" other
       ON other.id = CASE WHEN m.user_lo = :user_id THEN m.user_hi ELSE m.user_lo END
@@ -238,11 +237,10 @@ def recommend_clubs(user_id, limit=10):
 def recommend_people(user_id, limit=4, gender_bonus=0):
     """Students worth sending a friend request to. Reads only, writes nothing.
 
-    `gender_bonus` steers the order without touching the number on the card:
-    the ranking uses it, the score returned is the shared-answer total, which
-    is what `pair_score` recomputes everywhere else. Returning the ranking
-    score instead would show the same person a different number here than on
-    the search page.
+    `gender_bonus` steers the order only. The score returned is the
+    shared-answer total, not the ranking total -- nothing shows it to anyone,
+    but keeping the two distinct is what lets a test watch the ranking SQL
+    behave.
     """
     rows = db.session.execute(
         db.text(_CANDIDATES_SQL),
@@ -253,26 +251,22 @@ def recommend_people(user_id, limit=4, gender_bonus=0):
         "user_id": row["user_id"],
         "name": row["name"],
         "score": float(row["shared_score"]),
-        "shared": shared_labels(user_id, row["user_id"]),
     } for row in rows]
 
 
 def active_matches(user_id):
-    rows = db.session.execute(db.text(_ACTIVE_SQL), {"user_id": user_id}).mappings().all()
+    """Your friends, best score first. One query -- the score comes along
+    because _ACTIVE_SQL orders on it, not because anything displays it."""
+    rows = db.session.execute(
+        db.text(_ACTIVE_SQL), {"user_id": user_id}
+    ).mappings().all()
 
-    out = []
-    for row in rows:
-        shared = db.session.execute(
-            db.text(_SHARED_SQL), {"user_id": user_id, "other_id": row["user_id"]}
-        ).scalar()
-        out.append({
-            "user_id": row["user_id"],
-            "name": row["name"],
-            "email": row["email"],
-            "score": float(row["score"]),
-            "shared": list(shared or []),
-        })
-    return out
+    return [{
+        "user_id": row["user_id"],
+        "name": row["name"],
+        "email": row["email"],
+        "score": float(row["score"]),
+    } for row in rows]
 
 
 def end_match(user_id, other_id):
@@ -329,57 +323,9 @@ def _like(term):
 
 
 def search_people(user_id, term, limit=SEARCH_LIMIT):
-    """Students whose name contains `term`, with what you share and where you stand."""
-    term = (term or "").strip()
-    if len(term) < SEARCH_MIN:
-        return []
+    """Students whose name contains `term`, and where you stand with each.
 
-    rows = db.session.execute(
-        db.text(_SEARCH_SQL),
-        {"user_id": user_id, "term": _like(term), "limit": limit},
-    ).mappings().all()
-
-    out = []
-    for row in rows:
-        out.append({
-            "user_id": row["user_id"],
-            "name": row["name"],
-            "score": pair_score(user_id, row["user_id"]),
-            "shared": shared_labels(user_id, row["user_id"]),
-            "state": match_state(user_id, row["status"], row["requested_by"]),
-        })
-    return out
-
-
-# The three below back the dock, which renders on every page. They reuse the
-# same SQL as the fuller functions above but skip the per-row enrichment those
-# do -- shared_labels and pair_score each cost a query per row, and the dock
-# shows neither. One query each, so the dock adds two per page load.
-
-def friend_names(user_id):
-    """Your friends, names only, best score first. Caller trims for display."""
-    rows = db.session.execute(
-        db.text(_ACTIVE_SQL), {"user_id": user_id}
-    ).mappings().all()
-    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
-
-
-def incoming_names(user_id):
-    """Friend requests waiting on you, names only, newest first.
-
-    Returns every one, so the caller gets the badge count and the rows it
-    shows from a single query.
-    """
-    rows = db.session.execute(
-        db.text(_REQUESTS_SQL.format(direction="<>")), {"user_id": user_id}
-    ).mappings().all()
-    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
-
-
-def search_names(user_id, term, limit=5):
-    """Name search for the dock: who they are and where you stand, nothing else.
-
-    `state` is free here -- match_state is pure Python over the status and
+    One query. `state` is free: match_state is pure Python over the status and
     requested_by columns the LEFT JOIN already returns.
     """
     term = (term or "").strip()
@@ -390,31 +336,51 @@ def search_names(user_id, term, limit=5):
         db.text(_SEARCH_SQL),
         {"user_id": user_id, "term": _like(term), "limit": limit},
     ).mappings().all()
+
     return [{
-        "user_id": r["user_id"],
-        "name": r["name"],
-        "state": match_state(user_id, r["status"], r["requested_by"]),
-    } for r in rows]
+        "user_id": row["user_id"],
+        "name": row["name"],
+        "state": match_state(user_id, row["status"], row["requested_by"]),
+    } for row in rows]
+
+
+# The dock renders on every page, so these are the cheap shapes it asks for.
+# They are now thin names over the fuller functions: once nothing displayed a
+# score or a shared-answer list, the fuller ones stopped costing a query per
+# row and the two sets collapsed into each other.
+
+def friend_names(user_id):
+    """Your friends, best score first. Caller trims for display."""
+    return [{"user_id": f["user_id"], "name": f["name"]}
+            for f in active_matches(user_id)]
 
 
 def _requests(user_id, direction):
     rows = db.session.execute(
         db.text(_REQUESTS_SQL.format(direction=direction)), {"user_id": user_id}
     ).mappings().all()
-    return [{
-        "user_id": r["user_id"],
-        "name": r["name"],
-        "score": float(r["score"]),
-        "shared": shared_labels(user_id, r["user_id"]),
-    } for r in rows]
+    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
 
 
 def incoming_requests(user_id):
+    """Friend requests waiting on you, newest first.
+
+    Returns every one, so a caller gets the badge count and the rows it shows
+    from a single query.
+    """
     return _requests(user_id, "<>")
 
 
 def outgoing_requests(user_id):
     return _requests(user_id, "=")
+
+
+# The dock asks for fewer rows; otherwise these are the same questions.
+incoming_names = incoming_requests
+
+
+def search_names(user_id, term, limit=5):
+    return search_people(user_id, term, limit)
 
 
 def request_match(user_id, other_id):

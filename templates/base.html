@@ -90,14 +90,26 @@
         .dock { right: 0.5rem; bottom: 0.5rem; width: calc(100vw - 1rem); }
         .dock-body { max-height: 50vh; }
       }
-      {% block style %}{% endblock %}
     </style>
   </head>
   <body>
-    {% for message in get_flashed_messages() %}
-      <p class="flash">{{ message }}</p>
-    {% endfor %}
-    {% block content %}{% endblock %}
-    {% block script %}{% endblock %}
+    {# First, so window.Beacon exists before any page script runs. #}
+    {% include "_enhance.html" %}
+    {# Everything a navigation replaces lives in here. The enhancer sits
+       outside it so a swap cannot destroy it. #}
+    <div id="live">
+      {# The page's own CSS, inside #live on purpose: a navigation replaces the
+         contents of #live, so anything outside it would keep the PREVIOUS
+         page's rules -- which is what broke the chat box and ran the interest
+         labels together. Still the last stylesheet in the document, so a page
+         rule beats a base rule exactly as it did in <head>. A <style> here is
+         non-conforming per the spec and applied by every engine; leave it. #}
+      <style id="pagecss">{% block style %}{% endblock %}</style>
+      {% for message in get_flashed_messages() %}
+        <p class="flash">{{ message }}</p>
+      {% endfor %}
+      {% block content %}{% endblock %}
+      {% block script %}{% endblock %}
+    </div>
   </body>
 </html>
