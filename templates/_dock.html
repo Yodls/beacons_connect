@@ -1,0 +1,216 @@
+{#
+  The friends dock: search, requests and friends, on every page that renders
+  the shell. Included rather than wrapped in a block, because a block can be
+  overridden to empty by one page and silently disappear -- which is exactly
+  what `sidebuttons` does on /matches.
+
+  Deliberately avoids some markup other pages' tests slice on: no `card` class
+  (/clubs counts those), no top-level heading (that is the signed-in-name
+  probe), and it
+  never prints your own name.
+#}
+<details class="dock" {% if dock_term %}open{% endif %}>
+  <summary>
+    Friends
+    {%- if pending_count %}<span class="pill">{{ pending_count }}</span>{% endif %}
+  </summary>
+
+  <div class="dock-body">
+    {# A plain GET back to the page you are on, so this works with no JS. The
+       current query args are replayed as hidden fields: action="" would keep
+       the path but drop them, losing /people?q= on submit. #}
+    <form class="dock-find" method="get" action="{{ request.path }}">
+      {%- for key, values in request.args.lists() if key != dock_param -%}
+        {%- for value in values -%}
+          <input type="hidden" name="{{ key }}" value="{{ value }}" />
+        {%- endfor -%}
+      {%- endfor -%}
+      <input name="{{ dock_param }}" value="{{ dock_term or '' }}" maxlength="120"
+             placeholder="Find people" aria-label="Find people" />
+      <button type="submit">Go</button>
+    </form>
+
+    <div id="dock-results">
+    {% if dock_short %}
+      <p class="dock-note">At least {{ search_min }} characters.</p>
+    {% elif dock_term %}
+      <h4>Results for &ldquo;{{ dock_term }}&rdquo;</h4>
+      {% for person in dock_results %}
+        <div class="dock-row">
+          <span class="grow">{{ person.name }}</span>
+          {% if person.state == "matched" %}
+            <a href="{{ url_for('chat', kind='match', target_id=person.user_id) }}">Chat</a>
+          {% elif person.state == "you_asked" %}
+            <span class="dock-quiet">Pending</span>
+          {% elif person.state == "they_asked" %}
+            <form method="post"
+                  action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+              <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+              <button type="submit">Accept</button>
+            </form>
+          {% elif person.state == "declined" %}
+            <span class="dock-quiet">Declined</span>
+          {% else %}
+            <form method="post" action="{{ url_for('match_ask', other_id=person.user_id) }}">
+              <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+              <button type="submit">Add</button>
+            </form>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="dock-note">Nobody by that name.</p>
+      {% endfor %}
+      {% if dock_results %}
+        <a class="dock-more" href="{{ url_for('people', q=dock_term) }}">See the full search &rarr;</a>
+      {% endif %}
+    {% endif %}
+    </div>
+
+    {% if dock_requests %}
+      <h4>Waiting on you</h4>
+      {% for person in dock_requests %}
+        <div class="dock-row">
+          <span class="grow">{{ person.name }}</span>
+          <form method="post"
+                action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+            <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+            <button type="submit">Accept</button>
+          </form>
+          <form method="post"
+                action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
+            <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+            <button type="submit">Deny</button>
+          </form>
+        </div>
+      {% endfor %}
+      {% if pending_count > dock_requests | length %}
+        <a class="dock-more" href="{{ url_for('matches') }}">
+          {{ pending_count - dock_requests | length }} more &rarr;</a>
+      {% endif %}
+    {% endif %}
+
+    <h4>Your friends</h4>
+    {% for friend in dock_friends %}
+      <div class="dock-row">
+        <a class="grow"
+           href="{{ url_for('chat', kind='match', target_id=friend.user_id) }}">{{ friend.name }}</a>
+      </div>
+    {% else %}
+      <p class="dock-note">
+        No friends yet. Search above, or
+        <a href="{{ url_for('matches') }}">see who's suggested</a>.
+      </p>
+    {% endfor %}
+    {% if dock_friends_more %}
+      <a class="dock-more" href="{{ url_for('matches') }}">See all &rarr;</a>
+    {% endif %}
+  </div>
+</details>
+
+<script>
+  // Typeahead for the dock's search. Lives inline here rather than in the
+  // page-level script block, because chat.html, game.html and find.html all
+  // override that block without calling super, which would drop this on
+  // three pages -- chat being the one that matters most.
+  //
+  // Without it the dock still works: the form is a plain GET that the server
+  // answers on whichever page it lands on. This only saves the navigation.
+  (function () {
+    var form = document.querySelector(".dock-find");
+    var box = document.getElementById("dock-results");
+    if (!form || !box || !window.fetch) { return; }
+
+    var param = {{ dock_param | tojson }};
+    var field = form.querySelector("input[name=" + JSON.stringify(param) + "]");
+    if (!field) { return; }
+
+    var url = {{ url_for('dock_search') | tojson }};
+    var minimum = {{ search_min | tojson }};
+    var timer = null;
+    var inflight = null;
+    var last = field.value;
+
+    function node(tag, cls, text) {
+      var el = document.createElement(tag);
+      if (cls) { el.className = cls; }
+      // textContent, never innerHTML: these are names people typed in.
+      if (text !== undefined) { el.textContent = text; }
+      return el;
+    }
+
+    function row(person) {
+      var line = node("div", "dock-row");
+      line.appendChild(node("span", "grow", person.name));
+
+      if (person.link) {
+        var link = node("a", null, person.label);
+        link.href = person.link;
+        line.appendChild(link);
+      } else if (person.post) {
+        // Adding or accepting changes data, so it stays a real form post and
+        // the server keeps deciding what is allowed. The URL comes from the
+        // server too, so nothing here assembles a path.
+        var f = node("form");
+        f.method = "post";
+        f.action = person.post;
+        var back = node("input");
+        back.type = "hidden";
+        back.name = "dock_back";
+        back.value = location.pathname + location.search;
+        f.appendChild(back);
+        var go = node("button", null, person.label);
+        go.type = "submit";
+        f.appendChild(go);
+        line.appendChild(f);
+      } else {
+        line.appendChild(node("span", "dock-quiet", person.label));
+      }
+      return line;
+    }
+
+    function render(data) {
+      box.textContent = "";
+      if (data.short) {
+        box.appendChild(node("p", "dock-note",
+          "At least " + minimum + " characters."));
+        return;
+      }
+      if (!data.term) { return; }
+
+      box.appendChild(node("h4", null, "Results for “" + data.term + "”"));
+      if (!data.results.length) {
+        box.appendChild(node("p", "dock-note", "Nobody by that name."));
+        return;
+      }
+      data.results.forEach(function (person) { box.appendChild(row(person)); });
+      if (data.all) {
+        var more = node("a", "dock-more", "See the full search →");
+        more.href = data.all;
+        box.appendChild(more);
+      }
+    }
+
+    function look() {
+      var term = field.value.trim();
+      if (term === last) { return; }
+      last = term;
+
+      if (inflight) { inflight.abort(); }
+      if (!term) { box.textContent = ""; return; }
+
+      var controller = new AbortController();
+      inflight = controller;
+      fetch(url + "?" + param + "=" + encodeURIComponent(term),
+            {headers: {"Accept": "application/json"}, signal: controller.signal})
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { if (data) { render(data); } })
+        // On any failure leave whatever the server rendered in place.
+        .catch(function () {});
+    }
+
+    field.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(look, 250);
+    });
+  })();
+</script>

@@ -15,7 +15,6 @@
         <summary>&#9776;</summary>
         <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
           if pending_count %} ({{ pending_count }}){% endif %}</a>
-        <a href="{{ url_for('people') }}">Find people</a>
         <a href="{{ url_for('clubs') }}">Browse all clubs</a>
         <a href="{{ url_for('logout') }}">Sign out</a>
       </details>
@@ -36,4 +35,8 @@
       {% endblock %}
     </div>
   </div>
+
+  {# Included, not a block: a block can be emptied by one page and vanish,
+     which is what sidebuttons does on /matches. #}
+  {% include "_dock.html" %}
 {% endblock %}

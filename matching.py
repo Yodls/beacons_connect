@@ -319,17 +319,24 @@ def match_state(user_id, status, requested_by):
     return "ended"
 
 
+def _like(term):
+    """A LIKE pattern for a literal search term, wildcards escaped.
+
+    Without this, searching for "100%" would match anything.
+    """
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def search_people(user_id, term, limit=SEARCH_LIMIT):
     """Students whose name contains `term`, with what you share and where you stand."""
     term = (term or "").strip()
     if len(term) < SEARCH_MIN:
         return []
 
-    # Escape the wildcards so a search for "100%" looks for that, not anything.
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     rows = db.session.execute(
         db.text(_SEARCH_SQL),
-        {"user_id": user_id, "term": f"%{escaped}%", "limit": limit},
+        {"user_id": user_id, "term": _like(term), "limit": limit},
     ).mappings().all()
 
     out = []
@@ -342,6 +349,52 @@ def search_people(user_id, term, limit=SEARCH_LIMIT):
             "state": match_state(user_id, row["status"], row["requested_by"]),
         })
     return out
+
+
+# The three below back the dock, which renders on every page. They reuse the
+# same SQL as the fuller functions above but skip the per-row enrichment those
+# do -- shared_labels and pair_score each cost a query per row, and the dock
+# shows neither. One query each, so the dock adds two per page load.
+
+def friend_names(user_id):
+    """Your friends, names only, best score first. Caller trims for display."""
+    rows = db.session.execute(
+        db.text(_ACTIVE_SQL), {"user_id": user_id}
+    ).mappings().all()
+    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
+
+
+def incoming_names(user_id):
+    """Friend requests waiting on you, names only, newest first.
+
+    Returns every one, so the caller gets the badge count and the rows it
+    shows from a single query.
+    """
+    rows = db.session.execute(
+        db.text(_REQUESTS_SQL.format(direction="<>")), {"user_id": user_id}
+    ).mappings().all()
+    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
+
+
+def search_names(user_id, term, limit=5):
+    """Name search for the dock: who they are and where you stand, nothing else.
+
+    `state` is free here -- match_state is pure Python over the status and
+    requested_by columns the LEFT JOIN already returns.
+    """
+    term = (term or "").strip()
+    if len(term) < SEARCH_MIN:
+        return []
+
+    rows = db.session.execute(
+        db.text(_SEARCH_SQL),
+        {"user_id": user_id, "term": _like(term), "limit": limit},
+    ).mappings().all()
+    return [{
+        "user_id": r["user_id"],
+        "name": r["name"],
+        "state": match_state(user_id, r["status"], r["requested_by"]),
+    } for r in rows]
 
 
 def _requests(user_id, direction):

@@ -1,6 +1,7 @@
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import (
@@ -142,25 +143,55 @@ def require_onboarding():
     return redirect(url_for("onboarding"))
 
 
-@app.context_processor
-def inject_pending():
-    """How many friend requests are waiting on an answer from you.
+DOCK_FRIENDS = 8
+DOCK_REQUESTS = 3
+DOCK_RESULTS = 5
+# The dock's own search term. Namespaced so it cannot collide with /people?q=.
+DOCK_PARAM = "fq"
 
-    This runs for every template, the signed-out ones included, so the
-    authentication check is what keeps the login page from blowing up.
+
+@app.context_processor
+def inject_dock():
+    """Everything the friends dock needs, on every page that renders the shell.
+
+    A context processor rather than a before_request on purpose: Flask only
+    calls these from its render paths, so the chat and game pollers -- which
+    return jsonify several times a minute -- pay nothing for this.
+
+    Two queries per authenticated page render, via the deliberately slim
+    helpers in matching.py. Reaching for active_matches or incoming_requests
+    here instead would make it two queries plus one per row.
     """
     if not current_user.is_authenticated:
         return {}
 
-    return {"pending_count": db.session.scalar(
-        db.select(db.func.count()).select_from(Match).where(
-            Match.status == "invited",
-            # Requests you sent are not waiting on you.
-            Match.requested_by != current_user.id,
-            db.or_(Match.user_lo == current_user.id,
-                   Match.user_hi == current_user.id),
-        )
-    )}
+    # The auth pages and onboarding render base.html, never the shell, so the
+    # dock cannot appear on them. Bail before paying for data nobody shows.
+    if request.endpoint in ONBOARDING_EXEMPT or request.endpoint == "onboarding":
+        return {}
+
+    # Both come back whole, so the counts and the rows shown cost one query
+    # each. Requests you sent are not waiting on you, and incoming_names
+    # already filters those out.
+    waiting = matching.incoming_names(current_user.id)
+    friends = matching.friend_names(current_user.id)
+
+    term = request.args.get(DOCK_PARAM, "").strip()
+    return {
+        "pending_count": len(waiting),
+        "dock_requests": waiting[:DOCK_REQUESTS],
+        "dock_friends": friends[:DOCK_FRIENDS],
+        "dock_friends_more": len(friends) > DOCK_FRIENDS,
+        "dock_term": term,
+        "dock_short": bool(term) and len(term) < matching.SEARCH_MIN,
+        "dock_results": (matching.search_names(current_user.id, term,
+                                               limit=DOCK_RESULTS)
+                         if term else []),
+        # The templates need both so the name of the param and the minimum
+        # length cannot drift from what this function enforces.
+        "dock_param": DOCK_PARAM,
+        "search_min": matching.SEARCH_MIN,
+    }
 
 
 RETURN_TO = {"matches", "clubs"}
@@ -184,6 +215,25 @@ def back_to_people():
     """Back to the search, carrying the term so the results are still there."""
     term = request.form.get("q", "").strip()
     return redirect(url_for("people", q=term) if term else url_for("people"))
+
+
+def dock_back():
+    """Where a dock action came from, or None if it did not come from the dock.
+
+    The dock rides on every page, so unlike back_to() it cannot work off a
+    whitelist of endpoints -- it has to send you back to an arbitrary path.
+    That is the whole risk here, so anything that could leave this site is
+    refused and the caller falls back to its usual destination.
+    """
+    raw = request.form.get("dock_back", "")
+    if not raw or not raw.startswith("/") or raw.startswith("//"):
+        return None
+
+    parts = urlsplit(raw)
+    if parts.scheme or parts.netloc:
+        return None
+
+    return redirect(raw)
 
 
 MESSAGE_MAX = 2000
@@ -1040,6 +1090,48 @@ def people():
     )
 
 
+def dock_row(person):
+    """One search hit, with the URL and label its state calls for.
+
+    Built here rather than in the browser so the dock's script never has to
+    assemble a path, and so the choice of action stays in one place.
+    """
+    state = person["state"]
+    row = {"user_id": person["user_id"], "name": person["name"], "state": state}
+
+    if state == "matched":
+        row["link"] = url_for("chat", kind="match", target_id=person["user_id"])
+        row["label"] = "Chat"
+    elif state == "they_asked":
+        row["post"] = url_for("match_respond", other_id=person["user_id"],
+                              action="accept")
+        row["label"] = "Accept"
+    elif state in ("none", "ended"):
+        row["post"] = url_for("match_ask", other_id=person["user_id"])
+        row["label"] = "Add"
+    else:
+        # you_asked / declined: nothing to do from here.
+        row["label"] = "Pending" if state == "you_asked" else "Declined"
+
+    return row
+
+
+@app.route("/dock/search")
+@login_required
+def dock_search():
+    """The dock's typeahead. The dock works without this: its form is a plain
+    GET that the context processor answers on whichever page it lands on."""
+    term = request.args.get(DOCK_PARAM, "").strip()
+    hits = (matching.search_names(current_user.id, term, limit=DOCK_RESULTS)
+            if term else [])
+    return jsonify({
+        "term": term,
+        "short": bool(term) and len(term) < matching.SEARCH_MIN,
+        "results": [dock_row(p) for p in hits],
+        "all": url_for("people", q=term) if term else None,
+    })
+
+
 ASK_MESSAGES = {
     "asked": "Friend request sent to {name}.",
     "matched": "You and {name} are friends now — they had already asked you.",
@@ -1058,6 +1150,10 @@ def match_ask(other_id):
     outcome = matching.request_match(current_user.id, other_id)
     flash(ASK_MESSAGES[outcome].format(name=other.name if other else "that student"))
 
+    # Checked first: an action taken in the dock returns to the page it was
+    # taken on. Everything below keeps the destination it always had.
+    if (back := dock_back()) is not None:
+        return back
     if request.form.get("back") == "home":
         return redirect(url_for("index"))
     if outcome in ("asked", "matched"):
@@ -1081,6 +1177,8 @@ def match_respond(other_id, action):
     else:
         flash("That friend request is no longer waiting on you.")
 
+    if (back := dock_back()) is not None:
+        return back
     if action == "cancel":
         return back_to_people()
     return redirect(url_for("matches"))
