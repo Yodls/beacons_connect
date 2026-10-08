@@ -151,6 +151,22 @@ ONBOARDING_EXEMPT = {
 }
 
 
+# Pages that only make sense before you are signed in. Guarding the endpoint
+# rather than the page body covers POST as well as GET, which is the part that
+# matters: login() accepts POST, and login_user() would otherwise let someone
+# already signed in submit the form and land on whichever account it named.
+GUEST_ONLY = {"login", "register", "verify", "resend_code"}
+
+
+@app.before_request
+def guests_only():
+    if request.endpoint in GUEST_ONLY and current_user.is_authenticated:
+        flash("You're already signed in.")
+        return redirect(url_for("index"))
+
+    return None
+
+
 @app.before_request
 def require_onboarding():
     if request.endpoint is None or request.endpoint in ONBOARDING_EXEMPT:
