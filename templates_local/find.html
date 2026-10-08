@@ -1,0 +1,195 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Meet up in person{% endblock %}
+
+{% block appstyle %}
+      .queuebox { background: linear-gradient(135deg, #1d4e89, #2f74bd 60%, #3f8ad0);
+        color: #fff; border-radius: 18px; padding: 1.3rem 1.4rem;
+        box-shadow: var(--sh2); margin-top: .6rem; }
+      .queuebox h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
+      .queuebox p { color: #d6e5f6; font-size: .86rem; margin: 0 0 .9rem; }
+      .queuebox form { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .queuebox select { width: auto; flex: 1 1 11rem; margin: 0;
+        border-color: transparent; }
+      .queuebox button { margin: 0; background: #fff; color: var(--brand);
+        white-space: nowrap; }
+      .queuebox button:hover { background: #eaf1f9; }
+      .queuebox .waiting { display: inline-flex; align-items: center; gap: .4rem;
+        padding: .2rem .6rem; border-radius: var(--pill);
+        background: rgba(255,255,255,.18); font-size: .8rem; font-weight: 700; }
+      .queuebox .waiting::before { content: ""; width: 7px; height: 7px;
+        border-radius: 50%; background: #ffd27a; }
+
+      .newpost { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+      .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
+      .newpost button { margin: 0; white-space: nowrap; }
+      .meta { display: block; color: var(--muted); font-size: .82rem; }
+      .going { display: inline-flex; align-items: center; gap: .3rem;
+        margin-top: .4rem; padding: .16rem .55rem; border-radius: var(--pill);
+        background: var(--surface-2); color: var(--muted);
+        font-size: .76rem; font-weight: 700; }
+      .going.full { background: #fdecea; color: #93261e; }
+{% endblock %}
+
+{% block main %}
+  <h1>Meet up in person!</h1>
+  <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
+
+  <h2>Matchmaking</h2>
+  <div class="queuebox">
+    {% if waiting %}
+      <h3>Waiting for {{ waiting.game }}</h3>
+      <p>
+        {% if counts.get(waiting.game) %}
+          <span class="waiting">{{ counts[waiting.game] }} other student(s) waiting</span>
+        {% else %}
+          Nobody else has picked it yet &mdash; you're first in line.
+        {% endif %}
+      </p>
+      <form method="post" action="{{ url_for('find_leave') }}">
+        <button type="submit">Leave the queue</button>
+      </form>
+    {% else %}
+      <h3>Get paired with someone</h3>
+      <p>You'll be matched with the next student who picks the same game.</p>
+      <form method="post" action="{{ url_for('find_queue') }}">
+        <select name="game" required>
+          {% for game in games %}
+            <option value="{{ game }}">
+              {{ game }}{% if counts.get(game) %} &mdash; {{ counts[game] }} waiting{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <button type="submit">Find me someone</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <h2>Your pairings</h2>
+  {% for pairing in pairings %}
+    <div class="card">
+      <div class="card-top">
+        {{ ui.avatar(pairing.other, pairing.id) }}
+        <div class="grow">
+          <h3>{{ pairing.game }}</h3>
+          <span class="meta">with {{ pairing.other }}</span>
+        </div>
+      </div>
+      <div class="actions">
+        <form method="get"
+              action="{{ url_for('chat', kind='pair', target_id=pairing.id) }}">
+          <button type="submit">Open chat</button>
+        </form>
+        <form method="post"
+              action="{{ url_for('pairing_close', pairing_id=pairing.id) }}">
+          <button type="submit" class="ghost">Close</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">No pairings yet. Join the queue above.</div>
+  {% endfor %}
+
+  <h2>Post a meetup</h2>
+  <div class="card">
+    <form class="newpost" method="post" action="{{ url_for('post_new') }}">
+      <input type="hidden" name="mode" value="inperson" />
+      <input type="hidden" name="back" value="find" />
+      <select name="game" class="act" required>
+        {% for a in catalogue %}
+          {% if a.in_person %}
+            <option value="{{ a.name }}"
+                    data-online="{{ 1 if a.online else 0 }}"
+                    data-inperson="1">{{ a.name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <select name="location" class="loc" required>
+        <option value="">Where</option>
+        {% for a in catalogue %}
+          {% if a.locations %}
+            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
+              {% for loc in a.locations %}
+                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <input name="max_players" type="number" min="2" max="50" value="4" />
+      <input name="when_text" maxlength="120" placeholder="When" />
+      <input name="note" maxlength="300" placeholder="Note (optional)" />
+      <button type="submit">Post it</button>
+    </form>
+  </div>
+
+  <h2>Open meetups</h2>
+  {% for post in posts %}
+    <div class="card">
+      <div class="card-top">
+        {{ ui.avatar(post.game, post.id, square=true) }}
+        <div class="grow">
+          <h3>{{ post.game }}</h3>
+          <span class="meta">
+            {{ post.location or "Somewhere on campus" }}
+            {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
+          </span>
+        </div>
+      </div>
+      {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
+      <span class="going {% if post.full %}full{% endif %}">
+        {{ post.count }} of {{ post.max_players }} going{% if post.going %}
+        &middot; {{ post.going | join(", ") }}{% endif %}
+      </span>
+      <div class="actions">
+        <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+          <input type="hidden" name="back" value="find" />
+          <button type="submit"
+                  {% if post.full and not post.im_going %}disabled{% endif %}>
+            {{ "Leave" if post.im_going else "I'm in" }}
+          </button>
+        </form>
+        {% if post.mine %}
+          <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
+            <input type="hidden" name="back" value="find" />
+            <button type="submit" class="ghost">Cancel meetup</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">No in-person meetups posted yet. Add one above.</div>
+  {% endfor %}
+{% endblock %}
+
+{% block script %}
+<script>
+  // Narrows the location list to the chosen activity. Without this the form
+  // still works: every location is listed under its activity and the server
+  // validates the pair.
+  (function () {
+    document.querySelectorAll("form .act").forEach(function (act) {
+      var form = act.closest("form");
+      var loc = form.querySelector(".loc");
+      if (!loc) { return; }
+
+      function sync() {
+        var name = act.value;
+        form.querySelectorAll(".loc optgroup").forEach(function (g) {
+          g.hidden = g.dataset.act !== name;
+        });
+        Array.prototype.forEach.call(loc.options, function (o) {
+          if (!o.value) { return; }
+          var show = o.dataset.act === name;
+          o.hidden = !show;
+          o.disabled = !show;
+        });
+        if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
+      }
+
+      act.addEventListener("change", sync);
+      sync();
+    });
+  })();
+</script>
+{% endblock %}

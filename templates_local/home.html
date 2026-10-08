@@ -1,0 +1,116 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Beacons Center{% endblock %}
+
+{% block appstyle %}
+      /* The rail lives inside main, as a second column of .page. Overriding
+         .shell instead would land after base.html's collapse media query and
+         beat it, leaving three columns on a phone. */
+      .page { max-width: 72rem; }
+      .homegrid { display: grid; grid-template-columns: minmax(0, 1fr) 18rem;
+        gap: 1.5rem; align-items: start; }
+      @media (max-width: 62rem) { .homegrid { grid-template-columns: 1fr; } }
+
+      .chatrow { display: flex; align-items: center; gap: .8rem;
+        padding: .75rem .9rem; margin-top: .55rem; background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r);
+        color: inherit; font-weight: 400; box-shadow: var(--sh1);
+        transition: box-shadow .15s, border-color .15s, transform .08s; }
+      .chatrow:hover { text-decoration: none; box-shadow: var(--sh2);
+        border-color: var(--line-2); transform: translateY(-1px); }
+      .chatrow .mid { flex: 1 1 auto; min-width: 0; display: block; }
+      .chatrow .name { display: block; font-weight: 700; font-size: .95rem;
+        letter-spacing: -.01em; }
+      .chatrow .last { display: block; margin: .1rem 0 0; color: var(--muted); font-size: .84rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .chatrow .last.none { font-style: italic; opacity: .75; }
+      .tag { flex: 0 0 auto; padding: .15rem .5rem; border-radius: var(--pill);
+        font-size: .68rem; font-weight: 800; letter-spacing: .04em;
+        text-transform: uppercase; }
+      .tag.match { background: var(--brand-soft); color: var(--brand); }
+      .tag.club { background: #e8f5ee; color: var(--ok, #12795a); }
+      .tag.community { background: var(--surface-2); color: var(--muted); }
+      .tag.pair { background: var(--gold-soft); color: #8a5a14; }
+      .chev { flex: 0 0 auto; color: var(--line-2); font-size: 1.1rem; }
+
+      .rail h2 { margin-top: 0; font-size: .95rem; }
+      .rail .card { padding: .7rem .8rem; }
+      .rail .card h3 { font-size: .9rem; }
+      .rail .card-top { gap: .55rem; }
+      .rail button { width: 100%; margin: .6rem 0 0; padding: .4rem;
+        font-size: .8rem; }
+      .waiting { display: block; padding: .6rem .8rem; margin-bottom: 1rem;
+        background: var(--gold-soft); border: 1px solid var(--gold);
+        border-radius: var(--r); color: #7a4f10;
+        font-size: .83rem; font-weight: 700; }
+      .waiting:hover { text-decoration: none; box-shadow: var(--sh1); }
+{% endblock %}
+
+{% block main %}
+  <div class="homegrid">
+    <div>
+      <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
+      <p class="lede">
+        {% if chats %}
+          {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }} open.
+        {% else %}
+          Your conversations will live here.
+        {% endif %}
+      </p>
+
+      <h2>My Chats</h2>
+      {% for chat in chats %}
+        <a class="chatrow"
+           href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
+          {{ ui.avatar(chat.title, chat.target_id, square=(chat.kind == "club")) }}
+          <span class="mid">
+            <span class="name">{{ chat.title }}</span>
+            <span class="last {% if not chat.preview %}none{% endif %}">
+              {%- if chat.preview %}{{ chat.preview }}{% else %}No messages yet &mdash; say hello{% endif -%}
+            </span>
+          </span>
+          <span class="tag {{ chat.kind }}">{{ chat.tag }}</span>
+          <span class="chev">&rsaquo;</span>
+        </a>
+      {% else %}
+        <div class="empty">
+          <b>No chats yet.</b> Send someone a friend request or join a club and
+          the conversation shows up here.
+          <p style="margin:.6rem 0 0">
+            <a href="{{ url_for('matches') }}">See your friends and club suggestions &rarr;</a>
+          </p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <aside class="rail">
+      {% if pending_count %}
+        <a class="waiting" href="{{ url_for('matches') }}">
+          {{ pending_count }} friend request{{ "" if pending_count == 1 else "s" }}
+          waiting &rarr;
+        </a>
+      {% endif %}
+
+      <h2>People you might like</h2>
+      {% for rec in recs %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(rec.name, rec.user_id) }}
+            <div class="grow">
+              <h3>{{ rec.name }}</h3>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+            <input type="hidden" name="back" value="home" />
+            <button type="submit">Send friend request</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>No suggestions right now.</b>
+          <a href="{{ url_for('people') }}">Search by name</a> instead.
+        </div>
+      {% endfor %}
+    </aside>
+  </div>
+{% endblock %}

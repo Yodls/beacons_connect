@@ -1,0 +1,153 @@
+{#
+  Makes clicks and form submits swap the page instead of reloading it.
+
+  Nothing on the server changes: every route still returns the same redirect
+  and the same HTML, and with JavaScript off every form still posts and
+  reloads exactly as before. This only intercepts the navigation and puts the
+  server's own markup in place, so there is still one source of truth for what
+  a page looks like.
+
+  Lives outside #live and binds on `document`, so a swap never destroys it.
+#}
+<script>
+  (function () {
+    "use strict";
+
+    // Page scripts register their pollers here so a swap can stop them.
+    // Without it every navigation would leave its poller running against
+    // nodes that are no longer in the document -- visit a chat five times and
+    // five of them are fetching.
+    //
+    // Defined before the capability check below on purpose: if this browser
+    // cannot do swapping, the pollers must still work.
+    var timers = [];
+    window.Beacon = {
+      every: function (fn, ms) {
+        var id = setInterval(fn, ms);
+        timers.push(id);
+        return id;
+      }
+    };
+
+    if (!window.fetch || !window.history.pushState || !window.DOMParser) { return; }
+
+    function live() { return document.getElementById("live"); }
+
+    function sameOrigin(href) {
+      try { return new URL(href, location.href).origin === location.origin; }
+      catch (e) { return false; }
+    }
+
+    // innerHTML never runs <script>, so each one is replaced with a fresh node.
+    function runScripts(root) {
+      Array.prototype.forEach.call(root.querySelectorAll("script"), function (old) {
+        var fresh = document.createElement("script");
+        Array.prototype.forEach.call(old.attributes, function (a) {
+          fresh.setAttribute(a.name, a.value);
+        });
+        fresh.textContent = old.textContent;
+        old.parentNode.replaceChild(fresh, old);
+      });
+    }
+
+    function swap(html, url, keepScroll) {
+      var here = live();
+      var doc = new DOMParser().parseFromString(html, "text/html");
+      var next = doc.getElementById("live");
+      // Not one of our pages (an error page, say). Let the browser have it.
+      if (!here || !next) { return false; }
+
+      // <details> state lives in the DOM, so a swap would otherwise close the
+      // dock out from under you the moment you used it.
+      var dock = here.querySelector(".dock");
+      var wasOpen = dock ? dock.hasAttribute("open") : false;
+
+      timers.forEach(clearInterval);
+      timers = [];
+
+      here.innerHTML = next.innerHTML;
+      if (doc.title) { document.title = doc.title; }
+
+      if (wasOpen) {
+        var fresh = here.querySelector(".dock");
+        if (fresh) { fresh.setAttribute("open", ""); }
+      }
+
+      runScripts(here);
+      if (!keepScroll) { window.scrollTo(0, 0); }
+      if (url && url !== location.href) {
+        history.pushState({beacon: true}, "", url);
+      }
+      return true;
+    }
+
+    function go(url, options) {
+      var from = location.pathname;
+      return fetch(url, Object.assign({credentials: "same-origin"}, options || {}))
+        .then(function (r) {
+          return r.text().then(function (html) {
+            var landed = from;
+            try { landed = new URL(r.url).pathname; } catch (e) {}
+            // Staying on the same page -- sending a chat, joining a club --
+            // should not jump you to the top of it. That jump is most of what
+            // made these feel like reloads.
+            if (!swap(html, r.url, landed === from)) {
+              throw new Error("unswappable");
+            }
+          });
+        });
+    }
+
+    document.addEventListener("submit", function (e) {
+      var form = e.target;
+      if (!(form instanceof HTMLFormElement)) { return; }
+      if (form.hasAttribute("data-full")) { return; }
+      if (form.target && form.target !== "_self") { return; }
+
+      var action = form.getAttribute("action") || location.href;
+      if (!sameOrigin(action)) { return; }
+
+      var method = (form.getAttribute("method") || "get").toLowerCase();
+      var data = new FormData(form);
+      e.preventDefault();
+
+      if (method !== "post") {
+        var url = new URL(action, location.href);
+        url.search = new URLSearchParams(data).toString();
+        var target = url.toString();
+        go(target).catch(function () { location.href = target; });
+        return;
+      }
+
+      go(new URL(action, location.href).toString(), {method: "post", body: data})
+        // Any failure falls back to a real submit, so the worst case is
+        // exactly how the app behaved before this file existed.
+        .catch(function () { form.submit(); });
+    });
+
+    document.addEventListener("click", function (e) {
+      if (e.defaultPrevented || e.button !== 0) { return; }
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) { return; }
+
+      var node = e.target;
+      var link = node && node.closest ? node.closest("a[href]") : null;
+      if (!link || link.hasAttribute("data-full") || link.hasAttribute("download")) {
+        return;
+      }
+      if (link.target && link.target !== "_self") { return; }
+      if (!sameOrigin(link.href)) { return; }
+
+      var url = new URL(link.href, location.href);
+      // Leave in-page anchors to the browser.
+      if (url.hash && url.pathname === location.pathname
+          && url.search === location.search) { return; }
+
+      e.preventDefault();
+      go(url.toString()).catch(function () { location.href = link.href; });
+    });
+
+    window.addEventListener("popstate", function () {
+      go(location.href).catch(function () { location.reload(); });
+    });
+  })();
+</script>

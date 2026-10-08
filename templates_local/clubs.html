@@ -1,0 +1,60 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}All clubs{% endblock %}
+
+{% block appstyle %}
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+        gap: .7rem; margin-top: .9rem; }
+      .grid .card { margin-top: 0; display: flex; flex-direction: column; }
+      .grid .card .actions { margin-top: auto; padding-top: .7rem; }
+      .joined { display: inline-flex; align-items: center; gap: .25rem;
+        padding: .14rem .5rem; border-radius: var(--pill); flex: 0 0 auto;
+        background: #e8f5ee; color: #12795a; font-size: .68rem; font-weight: 800;
+        letter-spacing: .04em; text-transform: uppercase; }
+      .joined::before { content: "\2713"; }
+      .counter { display: inline-block; padding: .2rem .6rem; border-radius: var(--pill);
+        background: var(--brand-soft); color: var(--brand);
+        font-size: .8rem; font-weight: 700; }
+{% endblock %}
+
+{% block main %}
+  <h1>All clubs</h1>
+  <p class="lede">
+    Every club on campus.
+    <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
+  </p>
+
+  <div class="grid">
+    {% for club in clubs %}
+      <div class="card">
+        <div class="card-top">
+          {{ ui.avatar(club.name, club.id, square=true) }}
+          <div class="grow">
+            <h3>{{ club.name }}</h3>
+          </div>
+          {% if club.id in joined_ids %}<span class="joined">Joined</span>{% endif %}
+        </div>
+        <p class="why">{{ club.description }}</p>
+        <div class="actions">
+          {% if club.id in joined_ids %}
+            <form method="get"
+                  action="{{ url_for('chat', kind='club', target_id=club.id) }}">
+              <button type="submit">Club space</button>
+            </form>
+            <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+              <input type="hidden" name="back" value="clubs" />
+              <button type="submit" class="ghost">Leave</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
+              <input type="hidden" name="back" value="clubs" />
+              <button type="submit">Join</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <p class="nav"><a href="{{ url_for('matches') }}">&larr; Back to your friends</a></p>
+{% endblock %}

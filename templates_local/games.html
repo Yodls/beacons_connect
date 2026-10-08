@@ -1,0 +1,94 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Play an online game{% endblock %}
+
+{% block appstyle %}
+      .starter { background: linear-gradient(135deg, #1d4e89, #2f74bd 60%, #3f8ad0);
+        color: #fff; border-radius: 18px; padding: 1.3rem 1.4rem;
+        box-shadow: var(--sh2); margin-top: .6rem; }
+      .starter h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
+      .starter p { color: #d6e5f6; font-size: .86rem; margin: 0 0 .9rem; }
+      .starter form { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .starter select { width: auto; flex: 1 1 9rem; margin: 0; border-color: transparent; }
+      .starter button { margin: 0; background: #fff; color: var(--brand);
+        white-space: nowrap; }
+      .starter button:hover { background: #eaf1f9; }
+      .pill { display: inline-flex; align-items: center; gap: .3rem; flex: 0 0 auto;
+        padding: .18rem .55rem; border-radius: var(--pill);
+        font-size: .7rem; font-weight: 800; letter-spacing: .04em;
+        text-transform: uppercase; }
+      .pill.you { background: var(--gold-soft); color: #8a5a14; }
+      .pill.them { background: var(--surface-2); color: var(--muted); }
+      .pill.done { background: #e8f5ee; color: #12795a; }
+      .pill.dead { background: #fdecea; color: #93261e; }
+{% endblock %}
+
+{% block main %}
+  <h1>Play an online game</h1>
+  <p class="lede">Turn-based games against your friends.</p>
+
+  <h2>Start a game</h2>
+  {% if opponents %}
+    <div class="starter">
+      <h3>Challenge a friend</h3>
+      <p>They'll get an invite and the board opens as soon as they accept.</p>
+      <form method="post" action="{{ url_for('game_new') }}">
+        <select name="kind" required>
+          {% for key, label in kinds %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <select name="opponent_id" required>
+          {% for match in opponents %}
+            <option value="{{ match.user_id }}">{{ match.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Send invite</button>
+      </form>
+    </div>
+  {% else %}
+    <div class="empty">
+      <b>No friends yet.</b> You need someone to play against.
+      <p style="margin:.6rem 0 0">
+        <a href="{{ url_for('matches') }}">See your friends &rarr;</a>
+      </p>
+    </div>
+  {% endif %}
+
+  <h2>Your games</h2>
+  {% for row in rows %}
+    <div class="card">
+      <div class="card-top">
+        {{ ui.avatar(row.opponent, row.game.id, square=true) }}
+        <div class="grow">
+          <h3>{{ row.label }}</h3>
+          <span class="why">with {{ row.opponent }}</span>
+        </div>
+        {% if row.game.status == "invited" %}
+          <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
+            {{- "Invited you" if row.waiting_on_you else "Invite sent" -}}
+          </span>
+        {% elif row.game.status == "active" %}
+          <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
+            {{- "Your turn" if row.waiting_on_you else "Their turn" -}}
+          </span>
+        {% elif row.game.status == "declined" %}
+          <span class="pill dead">Declined</span>
+        {% elif row.game.outcome == "draw" %}
+          <span class="pill done">Draw</span>
+        {% elif row.game.winner_id == current_user.id %}
+          <span class="pill done">You won</span>
+        {% else %}
+          <span class="pill dead">You lost</span>
+        {% endif %}
+      </div>
+      <div class="actions">
+        <form method="get" action="{{ url_for('game_view', game_id=row.game.id) }}">
+          <button type="submit">Open</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">No games yet. Send an invite above to get started.</div>
+  {% endfor %}
+{% endblock %}

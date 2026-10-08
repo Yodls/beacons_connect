@@ -1,0 +1,294 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block appstyle %}
+      .chathead { display: flex; align-items: center; gap: .75rem;
+        padding: .8rem 1rem; background: var(--surface);
+        border: 1px solid var(--line); border-bottom: 0;
+        border-radius: var(--r) var(--r) 0 0; }
+      .chathead .grow { flex: 1 1 auto; min-width: 0; }
+      .chathead h1 { font-size: 1.05rem; margin: 0; }
+      .chathead .status { font-size: .76rem; color: var(--muted); font-weight: 600; }
+      .chathead .status::before { content: ""; display: inline-block;
+        width: 7px; height: 7px; border-radius: 50%; background: #35b37e;
+        margin-right: .35rem; vertical-align: middle; }
+
+      #log { background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: 0 0 var(--r) var(--r); padding: 1.1rem;
+        height: 26rem; overflow-y: auto; display: flex; flex-direction: column; }
+
+      .msg { display: flex; flex-direction: column; max-width: 74%;
+        margin: 0 0 .7rem; }
+      .msg .who { font-size: .72rem; font-weight: 700; color: var(--muted);
+        margin-bottom: .2rem; padding: 0 .2rem; }
+      .msg .body { display: block; padding: .55rem .8rem; background: #fff;
+        border: 1px solid var(--line); border-radius: 14px 14px 14px 4px;
+        white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem;
+        box-shadow: var(--sh1); }
+      .msg .at { font-size: .68rem; color: #93a2b3; margin-top: .18rem;
+        padding: 0 .2rem; font-variant-numeric: tabular-nums; }
+      .msg.mine { margin-left: auto; align-items: flex-end; }
+      .msg.mine .body { background: var(--brand); color: #fff;
+        border-color: transparent; border-radius: 14px 14px 4px 14px; }
+
+      #empty { margin: auto; text-align: center; color: var(--muted);
+        font-size: .88rem; }
+
+      .composer { display: flex; gap: .5rem; margin-top: .8rem; }
+      .composer input { margin: 0; border-radius: var(--pill); padding: .7rem 1.1rem; }
+      .composer button { margin: 0; border-radius: var(--pill); padding: .7rem 1.3rem;
+        white-space: nowrap; }
+      .launch { display: flex; align-items: center; gap: .5rem; margin: .8rem 0 0;
+        padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--line);
+        border-radius: var(--r); box-shadow: var(--sh1); }
+      .launch-label { font-size: .76rem; font-weight: 800; letter-spacing: .05em;
+        text-transform: uppercase; color: var(--muted); }
+      .launch select { width: auto; margin: 0; flex: 1 1 auto; }
+      .launch button { margin: 0; white-space: nowrap; padding: .45rem .9rem;
+        font-size: .82rem; }
+      .newpost { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+        margin: .8rem 0 0; padding: .7rem .8rem; background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh1); }
+      .newpost b { flex: 1 1 100%; font-size: .76rem; font-weight: 800;
+        letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+      .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 7rem; }
+      .newpost button { margin: 0; padding: .45rem .9rem; font-size: .82rem; }
+      .post { display: block; margin-top: .35rem; padding: .6rem .8rem;
+        background: var(--gold-soft); border: 1px solid #f0d9a8;
+        border-radius: 12px; }
+      .post b { display: block; font-size: .95rem; }
+      .post .meta { display: block; color: #8a5a14; font-size: .76rem;
+        font-weight: 600; }
+      .post .note { display: block; font-size: .85rem; margin-top: .25rem;
+        color: var(--ink); }
+      .post-actions { display: flex; gap: .4rem; margin-top: .5rem; }
+      .post-actions form { margin: 0; }
+      .post-actions button { margin: 0; padding: .3rem .75rem; font-size: .78rem; }
+{% endblock %}
+
+{% block main %}
+  <p style="margin:0 0 .7rem"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
+
+  <div class="chathead">
+    {{ ui.avatar(title, target_id, square=(kind == "club")) }}
+    <div class="grow">
+      <h1>{{ title }}</h1>
+      <span class="status">{{ subtitle }}</span>
+    </div>
+  </div>
+
+  {% if kind == "match" %}
+    <form class="launch" method="post" action="{{ url_for('game_new') }}">
+      <span class="launch-label">Play together</span>
+      <select name="kind" required>
+        {% for key, label in game_kinds %}
+          <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="opponent_id" value="{{ target_id }}" />
+      <button type="submit">Start a game</button>
+    </form>
+  {% endif %}
+
+  {% if kind == "community" %}
+    <form class="newpost" method="post" action="{{ url_for('post_new') }}">
+      <b>Looking for a game?</b>
+      <select name="game" class="act" required>
+        {% for a in catalogue %}
+          <option value="{{ a.name }}"
+                  data-online="{{ 1 if a.online else 0 }}"
+                  data-inperson="{{ 1 if a.in_person else 0 }}">{{ a.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="mode" class="mode">
+        {% for key, label in post_modes.items() %}
+          <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="location" class="loc">
+        <option value="">Where</option>
+        {% for a in catalogue %}
+          {% if a.locations %}
+            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
+              {% for loc in a.locations %}
+                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <input name="max_players" type="number" min="2" max="50" value="2" />
+      <input name="when_text" maxlength="120" placeholder="When (optional)" />
+      <input name="note" maxlength="300" placeholder="Note (optional)" />
+      <button type="submit">Post</button>
+    </form>
+  {% endif %}
+
+  <div id="log">
+    {% for message in messages %}
+      <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
+        <span class="who">{{ message.name }}</span>
+        <span class="body">{{ message.body }}</span>
+        {% if message.post %}
+          <span class="post">
+            <b>{{ message.post.game }}</b>
+            <span class="meta">{{ message.post.mode_label }}
+              {%- if message.post.location %} &middot; {{ message.post.location }}{% endif -%}
+              {%- if message.post.when_text %} &middot; {{ message.post.when_text }}{% endif -%}
+            </span>
+            {% if message.post.note %}<span class="note">{{ message.post.note }}</span>{% endif %}
+            <span class="meta">
+              {{ message.post.count }} of {{ message.post.max_players }} going{% if message.post.going %}:
+              {{ message.post.going | join(", ") }}{% endif %}
+            </span>
+            <span class="post-actions">
+              {% if message.post.status != "open" %}
+                <span class="meta">Closed</span>
+              {% else %}
+                <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                  <button type="submit"
+                          {% if message.post.full and not message.post.im_going %}disabled{% endif %}>
+                    {{ "Leave" if message.post.im_going else "I'm in" }}
+                  </button>
+                </form>
+                {% if message.post.mine %}
+                  <form method="post" action="{{ url_for('post_close', post_id=message.post.id) }}">
+                    <button type="submit">Close</button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </span>
+          </span>
+        {% endif %}
+        <span class="at">{{ message.at }}</span>
+      </p>
+    {% else %}
+      <p class="why" id="empty">No messages yet. Say hello.</p>
+    {% endfor %}
+  </div>
+
+  <form class="composer" method="post">
+    <input name="body" maxlength="2000" autocomplete="off" autofocus
+           placeholder="Write a message&hellip;" required />
+    <button type="submit">Send</button>
+  </form>
+{% endblock %}
+
+{% block script %}
+<script>
+  // Narrows mode and location to whatever activity is picked. Without this the
+  // form still works: every location is listed under its activity and the
+  // server validates the pair.
+  (function () {
+    document.querySelectorAll("form .act").forEach(function (act) {
+      var form = act.closest("form");
+      var mode = form.querySelector(".mode");
+      var loc = form.querySelector(".loc");
+
+      function sync() {
+        var opt = act.options[act.selectedIndex];
+        var name = opt.value;
+        var online = opt.dataset.online === "1";
+        var inperson = opt.dataset.inperson === "1";
+
+        if (mode) {
+          Array.prototype.forEach.call(mode.options, function (o) {
+            var ok = o.value === "online" ? online : inperson;
+            o.hidden = !ok;
+            o.disabled = !ok;
+          });
+          if (mode.options[mode.selectedIndex].disabled) {
+            Array.prototype.some.call(mode.options, function (o, i) {
+              if (!o.disabled) { mode.selectedIndex = i; return true; }
+              return false;
+            });
+          }
+        }
+
+        if (loc) {
+          var wanted = !mode || mode.value === "inperson";
+          loc.closest("form").querySelectorAll(".loc optgroup").forEach(function (g) {
+            g.hidden = !(wanted && g.dataset.act === name);
+          });
+          Array.prototype.forEach.call(loc.options, function (o) {
+            if (!o.value) { return; }
+            var show = wanted && o.dataset.act === name;
+            o.hidden = !show;
+            o.disabled = !show;
+          });
+          if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
+          loc.hidden = !wanted;
+        }
+      }
+
+      act.addEventListener("change", sync);
+      if (mode) { mode.addEventListener("change", sync); }
+      sync();
+    });
+  })();
+</script>
+<script>
+  (function () {
+    var log = document.getElementById("log");
+    var url = {{ url_for("chat_messages", kind=kind, target_id=target_id) | tojson }};
+    var me = {{ current_user.id | tojson }};
+    var last = 0;
+    var failures = 0;
+
+    document.querySelectorAll("#log .msg").forEach(function (el) {
+      last = Math.max(last, parseInt(el.dataset.id, 10) || 0);
+    });
+    log.scrollTop = log.scrollHeight;
+
+    function span(cls, text) {
+      var el = document.createElement("span");
+      el.className = cls;
+      // textContent, never innerHTML: this is user-written text.
+      el.textContent = text;
+      return el;
+    }
+
+    function add(message) {
+      var empty = document.getElementById("empty");
+      if (empty) { empty.remove(); }
+
+      var p = document.createElement("p");
+      p.className = "msg" + (message.user_id === me ? " mine" : "");
+      p.dataset.id = message.id;
+      p.appendChild(span("who", message.name));
+      p.appendChild(span("body", message.body));
+      p.appendChild(span("at", message.at || ""));
+      log.appendChild(p);
+    }
+
+    function poll() {
+      if (document.hidden) { return; }
+      fetch(url + "?after=" + last, { headers: { "Accept": "application/json" } })
+        .then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        })
+        .then(function (rows) {
+          failures = 0;
+          if (!rows.length) { return; }
+          var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+          rows.forEach(function (m) {
+            add(m);
+            last = Math.max(last, m.id);
+          });
+          if (stuck) { log.scrollTop = log.scrollHeight; }
+        })
+        .catch(function () {
+          failures += 1;
+          if (failures >= 5) { clearInterval(timer); }
+        });
+    }
+
+    // Registered with the enhancer rather than setInterval, so a
+    // navigation stops it instead of leaving it polling a page that
+    // is no longer on screen.
+    var timer = Beacon.every(poll, 4000);
+  })();
+</script>
+{% endblock %}

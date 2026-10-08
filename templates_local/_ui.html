@@ -1,0 +1,8 @@
+{# Shared presentation helpers. Imported, never rendered on its own. #}
+
+{% macro avatar(label, seed, square=false) -%}
+  {%- set parts = label.split() -%}
+  {%- set initials = parts[0][0] ~ (parts[-1][0] if parts | length > 1 else "") -%}
+  <span class="avatar av-{{ seed % 6 }}{% if square %} sq{% endif %}"
+        aria-hidden="true">{{ initials | upper }}</span>
+{%- endmacro %}
