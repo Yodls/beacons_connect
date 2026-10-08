@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}Beacons Center{% endblock %}</title>
+    <title>{% if db_banner %}[{{ db_banner }}] {% endif %}{% block title %}Beacons Center{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet"
@@ -290,6 +290,15 @@
     {# Everything a navigation replaces lives in here. The enhancer sits
        outside it so a swap cannot destroy it. #}
     <div id="live">
+      {# Shown only when this process is NOT on the live database. Inline
+         style rather than a <style> tag, and inside #live, so it does not
+         disturb the head-CSS invariant tests/test_enhance.py asserts. #}
+      {% if db_banner %}
+        <p style="margin:0;padding:.3rem .8rem;background:#8a5a14;color:#fff;
+                  font:600 12px/1.6 system-ui,sans-serif;letter-spacing:.04em">
+          development database &middot; {{ db_banner }}
+        </p>
+      {% endif %}
       {# The page's own CSS, inside #live on purpose: a navigation replaces the
          contents of #live, so anything outside it would keep the PREVIOUS
          page's rules -- which is what broke the chat box and ran the interest

@@ -73,6 +73,28 @@ app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
 app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
 
+# A development database is one whose name ends in _dev, and the UI says so
+# when it is on one. Asked this way round, the same code drops onto a live
+# server with no configuration and no flag to remember: whatever the production
+# database is called, DB_BANNER is None and the banner cannot render.
+#
+# Asking the opposite -- "is this NOT the live database?" -- needs the live name
+# written down here, which is the one thing this file cannot know. It was
+# briefly `LIVE_DB = "capstone"`, which would have put a development bar on any
+# server whose database had a different name.
+#
+# tests/_env.py refuses to run against anything that is not a _dev database, so
+# this is one shared definition rather than two.
+DB_NAME = urlsplit(app.config["SQLALCHEMY_DATABASE_URI"]).path.lstrip("/")
+DEV_DB = DB_NAME.endswith("_dev")
+DB_BANNER = DB_NAME if DEV_DB else None
+
+
+@app.context_processor
+def inject_db_banner():
+    return {"db_banner": DB_BANNER}
+
+
 # A gitignored templates_local/ overrides templates/ when it exists, so local
 # UI experiments stay off the repository. No folder, no change in behaviour.
 _local_ui = os.path.join(app.root_path, "templates_local")

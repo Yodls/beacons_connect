@@ -1,4 +1,8 @@
 .env
+# any .env variant (backups, per-machine copies) -- these hold
+# live credentials. The example is the one exception.
+.env.*
+.env.example
 __pycache__/
 *.pyc
 .venv/
@@ -7,3 +11,4 @@ migrations/versions/*.pyc
 capstone_test.py
 db/
 tests/
+.env.bak.20261008-003250
