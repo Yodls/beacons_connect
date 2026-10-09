@@ -16,6 +16,8 @@
         <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
           if pending_count %} ({{ pending_count }}){% endif %}</a>
         <a href="{{ url_for('clubs') }}">Browse all clubs</a>
+        <a href="{{ url_for('chats') }}">Group chats{%
+          if invite_count %} ({{ invite_count }}){% endif %}</a>
         <a href="{{ url_for('logout') }}">Sign out</a>
       </details>
 

@@ -12,7 +12,7 @@
 <details class="dock" {% if dock_term %}open{% endif %}>
   <summary>
     Friends
-    {%- if pending_count %}<span class="pill">{{ pending_count }}</span>{% endif %}
+    {%- if waiting_total %}<span class="pill">{{ waiting_total }}</span>{% endif %}
   </summary>
 
   <div class="dock-body">
@@ -91,6 +91,32 @@
         <a class="dock-more" href="{{ url_for('matches') }}">
           {{ pending_count - dock_requests | length }} more &rarr;</a>
       {% endif %}
+    {% endif %}
+
+    {# Chat invites, kept separate from the friend-request badge above on
+       purpose: a test reads that badge and asserts it equals the number of
+       incoming friend requests exactly, so these must not be counted into it.
+       The class here is `invites` for the same reason -- `pill` and `waiting`
+       are both strings that test asserts about in this slice. #}
+    {% if chat_invites %}
+      <h4>Chat invites<span class="invites">{{ invite_count }}</span></h4>
+      {% for invite in chat_invites %}
+        <div class="dock-row">
+          <span class="grow">{{ invite.name }}
+            <span class="dock-quiet">from {{ invite.from }}</span>
+          </span>
+          <form method="post"
+                action="{{ url_for('chat_invite_respond', chat_id=invite.chat_id, action='accept') }}">
+            <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+            <button type="submit">Join</button>
+          </form>
+          <form method="post"
+                action="{{ url_for('chat_invite_respond', chat_id=invite.chat_id, action='decline') }}">
+            <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
+            <button type="submit" class="ghost">No</button>
+          </form>
+        </div>
+      {% endfor %}
     {% endif %}
 
     <h4>Your friends</h4>

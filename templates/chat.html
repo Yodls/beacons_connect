@@ -35,6 +35,72 @@
   {% if pronouns %}<p class="pronouns">{{ pronouns }}</p>{% endif %}
   <p class="nav" style="margin-top:0"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
 
+  {% if group %}
+    <div class="card">
+      <p class="why">
+        Join code <b>{{ group.code }}</b> &middot;
+        {{ "Public" if group.is_public else "Private" }} &middot;
+        {{ members | length }} member(s)
+      </p>
+
+      {% if invitable %}
+        <form method="post" action="{{ url_for('chat_invite', chat_id=group.id) }}">
+          <select name="other_id" required>
+            {% for friend in invitable %}
+              <option value="{{ friend.user_id }}">{{ friend.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Invite</button>
+        </form>
+      {% else %}
+        <p class="why">Everyone you are friends with is already in here.</p>
+      {% endif %}
+
+      <p class="why">In this chat:</p>
+      {% for person in members %}
+        <p class="why">
+          {{ person.name }}
+          {%- if person.id == group.owner_id %} (made it){% endif %}
+          {% if is_owner and person.id != group.owner_id %}
+            <form method="post" style="display:inline"
+                  action="{{ url_for('chat_remove', chat_id=group.id, user_id=person.id) }}">
+              <button type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </p>
+      {% endfor %}
+
+      <div class="actions">
+        {% if is_owner %}
+          {# Handing over is how whoever made the chat gets out of it. #}
+          {% set others = members | rejectattr("id", "equalto", group.owner_id) | list %}
+          {% if others %}
+            <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+              <select name="successor" required>
+                <option value="">Hand over to&hellip;</option>
+                {% for person in others %}
+                  <option value="{{ person.id }}">{{ person.name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit">Hand over and leave</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+              <button type="submit">Leave and close it</button>
+            </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('chat_delete', chat_id=group.id) }}">
+            <button type="submit">Delete this chat</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+            <button type="submit">Leave</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
   {% if kind == "match" %}
     <form class="launch" method="post" action="{{ url_for('game_new') }}">
       <input type="hidden" name="opponent_id" value="{{ target_id }}" />

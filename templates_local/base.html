@@ -303,6 +303,17 @@
       .av-4 { background: linear-gradient(135deg, #8a3f86, #bd73b3); }
       .av-5 { background: linear-gradient(135deg, #d9620f, #ea9150); }
 
+      /* The chat-invite count. Deliberately not .pill or .waiting: both of
+         those are strings a test asserts about inside the friends panel's
+         slice of the page, and this sits in exactly that slice. */
+      .invites {
+        display: inline-block; min-width: 1.1rem; margin-left: .35rem;
+        padding: 0 .3rem;
+        background: var(--chat); color: #fff;
+        border-radius: var(--pill);
+        font-size: .68rem; font-weight: 800; text-align: center;
+      }
+
       /* ---------- pronouns ---------- */
       /* Its own class, deliberately not .tag: that one carries the friend
          status on /people, which a test reads. It also keeps clear of pill,

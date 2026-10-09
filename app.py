@@ -28,9 +28,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import games as rules
 import matching
+from sqlalchemy.exc import IntegrityError
+
 from models import (
     Activity,
     ActivityLocation,
+    Chat,
+    ChatInvite,
+    ChatMember,
     Club,
     ClubMember,
     Game,
@@ -39,12 +44,14 @@ from models import (
     GamePostRsvp,
     GameQueue,
     Match,
+    MESSAGE_PARENTS,
     Message,
     PRONOUNS,
     Question,
     User,
     UserAnswer,
     db,
+    new_code,
     pair,
     pronoun_label,
 )
@@ -198,9 +205,12 @@ def inject_dock():
     calls these from its render paths, so the chat and game pollers -- which
     return jsonify several times a minute -- pay nothing for this.
 
-    Two queries per authenticated page render, via the deliberately slim
+    Three queries per authenticated page render, via the deliberately slim
     helpers in matching.py. Reaching for active_matches or incoming_requests
-    here instead would make it two queries plus one per row.
+    here instead would make it one query plus one per row.
+
+    The third is the pending chat invites. It is a constant cost whatever the
+    numbers involved, which is what the query-count test actually pins.
     """
     if not current_user.is_authenticated:
         return {}
@@ -216,9 +226,29 @@ def inject_dock():
     waiting = matching.incoming_names(current_user.id)
     friends = matching.friend_names(current_user.id)
 
+    # Deliberately separate from `waiting`. A test reads the badge out of the
+    # dock and asserts it equals len(incoming_names) exactly, so folding chat
+    # invites into pending_count would make that badge lie about what it counts.
+    invites = db.session.execute(
+        db.select(Chat, User.name)
+        .join(ChatInvite, ChatInvite.chat_id == Chat.id)
+        .join(User, User.id == ChatInvite.invited_by)
+        .where(ChatInvite.user_id == current_user.id,
+               ChatInvite.status == "invited")
+        .order_by(ChatInvite.created_at.desc())
+    ).all()
+
     term = request.args.get(DOCK_PARAM, "").strip()
     return {
         "pending_count": len(waiting),
+        "chat_invites": [{"chat_id": chat.id, "name": chat.name, "from": who}
+                         for chat, who in invites[:DOCK_REQUESTS]],
+        "invite_count": len(invites),
+        # What the panel badge shows. Separate from pending_count on purpose:
+        # that one is also the home banner, which says "friend request" in
+        # words and is read back by a test, so widening it would make the
+        # banner miscount rather than mislabel -- a much harder bug to spot.
+        "waiting_total": len(waiting) + len(invites),
         "dock_requests": waiting[:DOCK_REQUESTS],
         "dock_friends": friends[:DOCK_FRIENDS],
         "dock_friends_more": len(friends) > DOCK_FRIENDS,
@@ -234,7 +264,7 @@ def inject_dock():
     }
 
 
-RETURN_TO = {"matches", "clubs"}
+RETURN_TO = {"matches", "clubs", "chats"}
 
 
 def joined_clubs(user_id):
@@ -243,6 +273,16 @@ def joined_clubs(user_id):
         .join(ClubMember, ClubMember.club_id == Club.id)
         .where(ClubMember.user_id == user_id)
         .order_by(Club.name)
+    ).all()
+
+
+def joined_chats(user_id):
+    """The student-made chats someone is in. joined_clubs' shape."""
+    return db.session.scalars(
+        db.select(Chat)
+        .join(ChatMember, ChatMember.chat_id == Chat.id)
+        .where(ChatMember.user_id == user_id)
+        .order_by(Chat.name)
     ).all()
 
 
@@ -291,12 +331,14 @@ CHAT_SUBTITLE = {
     "match": "Friend",
     "pair": "Game pairing",
     "club": "Club space",
+    "group": "Group chat",
 }
 CHAT_TAG = {
     COMMUNITY: "Campus",
     "match": "Friend",
     "pair": "Game",
     "club": "Club",
+    "group": "Group",
 }
 
 def activity_catalogue(in_person_only=False):
@@ -358,6 +400,16 @@ def chat_target(kind, target_id):
         name = other.name if other else "Partner"
         return pairing, f"{pairing.game} with {name}"
 
+    if kind == "group":
+        # Membership is the only key. A join code gets you a ChatMember row;
+        # it is never itself permission to read a chat.
+        if db.session.get(ChatMember, (current_user.id, target_id)) is None:
+            return None, None
+        chat = db.session.get(Chat, target_id)
+        if chat is None:
+            return None, None
+        return chat, chat.name
+
     if kind == "club":
         if db.session.get(ClubMember, (current_user.id, target_id)) is None:
             return None, None
@@ -370,22 +422,23 @@ def chat_target(kind, target_id):
 
 
 def attach_parent(message, kind, parent):
-    """Point a message at exactly one parent, as the check constraint demands."""
+    """Point a message at exactly one parent, as the check constraint demands.
+
+    The kind-to-column mapping lives in models.MESSAGE_PARENTS, so adding a
+    chat kind does not mean remembering this function, message_filter and the
+    chat list separately.
+    """
     if kind == COMMUNITY:
+        # The one kind with no table: its column holds a name, not an id.
         message.room = COMMUNITY
-    elif kind == "pair":
-        message.pairing_id = parent.id
-    else:
-        setattr(message, f"{kind}_id", parent.id)
+        return
+    setattr(message, MESSAGE_PARENTS[kind].key, parent.id)
 
 
 def message_filter(kind, parent):
     if kind == COMMUNITY:
         return Message.room == COMMUNITY
-    if kind == "pair":
-        return Message.pairing_id == parent.id
-    column = Message.match_id if kind == "match" else Message.club_id
-    return column == parent.id
+    return MESSAGE_PARENTS[kind] == parent.id
 
 
 def chat_rows(kind, parent, after=0):
@@ -479,6 +532,9 @@ def chat_list():
     for club in joined_clubs(current_user.id):
         entries.append(chat_entry("club", club.id, club.name))
 
+    for chat in joined_chats(current_user.id):
+        entries.append(chat_entry("group", chat.id, chat.name))
+
     last = {}
     newest = db.session.execute(
         db.select(Message.body, Message.created_at)
@@ -488,8 +544,7 @@ def chat_list():
     if newest:
         last[(COMMUNITY, 0)] = (newest[0], newest[1])
 
-    for kind, column in (("match", Message.match_id), ("club", Message.club_id),
-                         ("pair", Message.pairing_id)):
+    for kind, column in MESSAGE_PARENTS.items():
         for parent_id, body, when in db.session.execute(
             db.select(column, Message.body, Message.created_at)
             .where(column.is_not(None))
@@ -569,12 +624,26 @@ def chat(kind, target_id):
     # this without a second query.
     other = db.session.get(User, target_id) if kind == "match" else None
 
+    # Only a group chat has a code, a member list and an owner. The invite
+    # picker offers your friends, since inviting a stranger by name is what
+    # the code is for.
+    group = parent if kind == "group" else None
+    invitable = []
+    if group is not None:
+        inside = {m.id for m in chat_members(group.id)}
+        invitable = [f for f in matching.friend_names(current_user.id)
+                     if f["user_id"] not in inside]
+
     return render_template(
         "chat.html",
         kind=kind,
         target_id=target_id,
         title=title,
         pronouns=pronoun_label(other.pronouns) if other else None,
+        group=group,
+        members=chat_members(group.id) if group is not None else [],
+        is_owner=group is not None and group.owner_id == current_user.id,
+        invitable=invitable,
         subtitle=CHAT_SUBTITLE[kind],
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
@@ -1101,6 +1170,268 @@ def leave_club(club_id):
         flash(f"You left {club.name}.")
 
     return back_to()
+
+
+# ---------------------------------------------------------------- group chats
+# A chat a student made. Membership is the only key: a join code buys you a
+# ChatMember row and nothing else, so every route below re-checks membership
+# or ownership rather than trusting how you got here.
+
+CODE_TRIES = 8
+
+
+def is_member(chat_id, user_id=None):
+    user_id = current_user.id if user_id is None else user_id
+    return db.session.get(ChatMember, (user_id, chat_id)) is not None
+
+
+def chat_members(chat_id):
+    """Everyone in a chat, by name."""
+    return db.session.scalars(
+        db.select(User)
+        .join(ChatMember, ChatMember.user_id == User.id)
+        .where(ChatMember.chat_id == chat_id)
+        .order_by(User.name)
+    ).all()
+
+
+@app.route("/chats")
+@login_required
+def chats():
+    """The hub: make one, join one by code, or browse the public ones."""
+    mine = joined_chats(current_user.id)
+    mine_ids = {c.id for c in mine}
+
+    public = db.session.scalars(
+        db.select(Chat).where(Chat.is_public.is_(True)).order_by(Chat.name)
+    ).all()
+
+    counts = dict(db.session.execute(
+        db.select(ChatMember.chat_id, db.func.count())
+        .group_by(ChatMember.chat_id)
+    ).all())
+
+    return render_template(
+        "chats.html",
+        mine=[{"chat": c, "members": counts.get(c.id, 0),
+               "owner": c.owner_id == current_user.id} for c in mine],
+        public=[{"chat": c, "members": counts.get(c.id, 0),
+                 "joined": c.id in mine_ids} for c in public],
+    )
+
+
+@app.route("/chats/new", methods=["POST"])
+@login_required
+def chat_new():
+    name = request.form.get("name", "").strip()
+    is_public = request.form.get("visibility") == "public"
+
+    if not name:
+        flash("Give the chat a name.")
+        return redirect(url_for("chats"))
+    if len(name) > 80:
+        flash("Chat names are limited to 80 characters.")
+        return redirect(url_for("chats"))
+
+    # Insert and retry rather than checking first: two people creating a chat
+    # in the same moment could both pass a pre-check and then collide.
+    for _ in range(CODE_TRIES):
+        chat = Chat(name=name, code=new_code(), is_public=is_public,
+                    owner_id=current_user.id)
+        db.session.add(chat)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            continue
+        db.session.add(ChatMember(user_id=current_user.id, chat_id=chat.id))
+        db.session.commit()
+        flash(f"{chat.name} is ready. Share the code {chat.code} to let people in.")
+        return redirect(url_for("chat", kind="group", target_id=chat.id))
+
+    flash("Could not generate a join code. Please try again.")
+    return redirect(url_for("chats"))
+
+
+@app.route("/chats/join", methods=["POST"])
+@login_required
+def chat_join():
+    # Codes get typed off a screenshot or read down a phone, so case and
+    # stray spaces are not the student's problem to get right.
+    code = request.form.get("code", "").strip().upper()
+
+    if not code:
+        flash("Enter a join code.")
+        return redirect(url_for("chats"))
+
+    chat = db.session.scalar(db.select(Chat).filter_by(code=code))
+    if chat is None:
+        flash("No chat has that code.")
+    elif is_member(chat.id):
+        flash(f"You are already in {chat.name}.")
+        return redirect(url_for("chat", kind="group", target_id=chat.id))
+    else:
+        db.session.add(ChatMember(user_id=current_user.id, chat_id=chat.id))
+        # An outstanding invite to a chat you joined by code anyway is spent.
+        invite = db.session.get(ChatInvite, (chat.id, current_user.id))
+        if invite is not None and invite.status == "invited":
+            invite.status = "accepted"
+        db.session.commit()
+        flash(f"You joined {chat.name}.")
+        return redirect(url_for("chat", kind="group", target_id=chat.id))
+
+    return redirect(url_for("chats"))
+
+
+@app.route("/chats/<int:chat_id>/invite", methods=["POST"])
+@login_required
+def chat_invite(chat_id):
+    """Any member may invite. Only the invitee can turn it into membership."""
+    chat = db.session.get(Chat, chat_id)
+    other_id = request.form.get("other_id", "")
+    other = db.session.get(User, int(other_id)) if other_id.isdigit() else None
+
+    if chat is None or not is_member(chat_id):
+        flash("That chat is not yours to invite to.")
+    elif other is None:
+        flash("We couldn't find that student.")
+    elif other.id == current_user.id:
+        flash("You are already in it.")
+    elif is_member(chat_id, other.id):
+        flash(f"{other.name} is already in {chat.name}.")
+    else:
+        invite = db.session.get(ChatInvite, (chat_id, other.id))
+        if invite is not None and invite.status == "invited":
+            flash(f"{other.name} already has an invite to {chat.name}.")
+        else:
+            if invite is None:
+                db.session.add(ChatInvite(chat_id=chat_id, user_id=other.id,
+                                          invited_by=current_user.id,
+                                          status="invited"))
+            else:
+                # A declined invite is not final, unlike a declined friend
+                # request: people change their minds about a group.
+                invite.status = "invited"
+                invite.invited_by = current_user.id
+            db.session.commit()
+            flash(f"Invited {other.name} to {chat.name}.")
+
+    return redirect(url_for("chat", kind="group", target_id=chat_id))
+
+
+@app.route("/chats/<int:chat_id>/invite/<action>", methods=["POST"])
+@login_required
+def chat_invite_respond(chat_id, action):
+    invite = db.session.get(ChatInvite, (chat_id, current_user.id))
+    chat = db.session.get(Chat, chat_id)
+
+    if invite is None or invite.status != "invited" or chat is None:
+        flash("That invite is no longer waiting.")
+    elif action == "accept":
+        invite.status = "accepted"
+        if not is_member(chat_id):
+            db.session.add(ChatMember(user_id=current_user.id, chat_id=chat_id))
+        db.session.commit()
+        flash(f"You joined {chat.name}.")
+        return dock_back() or redirect(
+            url_for("chat", kind="group", target_id=chat_id))
+    elif action == "decline":
+        invite.status = "declined"
+        db.session.commit()
+        flash(f"You turned down {chat.name}.")
+    else:
+        flash("Unknown action.")
+
+    return dock_back() or redirect(url_for("chats"))
+
+
+@app.route("/chats/<int:chat_id>/leave", methods=["POST"])
+@login_required
+def chat_leave(chat_id):
+    """Leaving, including the owner handing the chat on.
+
+    One route for every case, so there is a single place that decides what
+    leaving means. An owner used to be refused outright, which left whoever
+    made a chat stuck in it unless they deleted it for everyone.
+    """
+    chat = db.session.get(Chat, chat_id)
+    membership = db.session.get(ChatMember, (current_user.id, chat_id))
+
+    if chat is None or membership is None:
+        flash("You are not in that chat.")
+        return redirect(url_for("chats"))
+
+    if chat.owner_id != current_user.id:
+        db.session.delete(membership)
+        db.session.commit()
+        flash(f"You left {chat.name}.")
+        return redirect(url_for("chats"))
+
+    # Everyone else still in it. Also the whitelist the successor is checked
+    # against, so a posted id cannot name a non-member or the owner.
+    others = [m for m in chat_members(chat_id) if m.id != current_user.id]
+
+    if not others:
+        # Nobody to hand it to, and an empty chat is just clutter.
+        name = chat.name
+        db.session.delete(chat)
+        db.session.commit()
+        flash(f"You left and closed {name}.")
+        return redirect(url_for("chats"))
+
+    raw = request.form.get("successor", "")
+    successor = next((m for m in others if str(m.id) == raw), None)
+
+    if successor is None:
+        flash(f"Choose who should take over {chat.name} before you leave.")
+        return redirect(url_for("chat", kind="group", target_id=chat_id))
+
+    chat.owner_id = successor.id
+    db.session.delete(membership)
+    db.session.commit()
+    flash(f"{successor.name} now manages {chat.name}. You have left.")
+    return redirect(url_for("chats"))
+
+
+@app.route("/chats/<int:chat_id>/remove/<int:user_id>", methods=["POST"])
+@login_required
+def chat_remove(chat_id, user_id):
+    chat = db.session.get(Chat, chat_id)
+
+    if chat is None or chat.owner_id != current_user.id:
+        flash("Only the person who made the chat can remove people.")
+    elif user_id == current_user.id:
+        flash("You cannot remove yourself. Delete the chat instead.")
+    else:
+        membership = db.session.get(ChatMember, (user_id, chat_id))
+        other = db.session.get(User, user_id)
+        if membership is None:
+            flash("They are not in that chat.")
+        else:
+            db.session.delete(membership)
+            db.session.commit()
+            flash(f"Removed {other.name if other else 'that student'} "
+                  f"from {chat.name}.")
+
+    return redirect(url_for("chat", kind="group", target_id=chat_id))
+
+
+@app.route("/chats/<int:chat_id>/delete", methods=["POST"])
+@login_required
+def chat_delete(chat_id):
+    chat = db.session.get(Chat, chat_id)
+
+    if chat is None or chat.owner_id != current_user.id:
+        flash("Only the person who made the chat can delete it.")
+        return redirect(url_for("chats"))
+
+    name = chat.name
+    # Messages, memberships and invites go with it: each of those tables
+    # declares ON DELETE CASCADE against chats.id.
+    db.session.delete(chat)
+    db.session.commit()
+    flash(f"Deleted {name}.")
+    return redirect(url_for("chats"))
 
 
 @app.route("/matches/<int:other_id>/unmatch", methods=["POST"])

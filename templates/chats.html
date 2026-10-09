@@ -1,0 +1,80 @@
+{% extends "shell.html" %}
+{% block title %}Group chats{% endblock %}
+
+{% block main %}
+  <h1>Group chats</h1>
+  <p>Make a chat, join one with a code, or look through the public ones.</p>
+
+  <h2>Start a chat</h2>
+  <div class="card">
+    <form method="post" action="{{ url_for('chat_new') }}">
+      <label>Name <input name="name" maxlength="80" required
+                         placeholder="Thursday study group" /></label>
+      <label>
+        <input type="radio" name="visibility" value="private" checked />
+        Private &mdash; not listed, but the code still works
+      </label>
+      <label>
+        <input type="radio" name="visibility" value="public" />
+        Public &mdash; listed below for anyone to join
+      </label>
+      <button type="submit">Create</button>
+    </form>
+  </div>
+
+  <h2>Join with a code</h2>
+  <div class="card">
+    <form method="post" action="{{ url_for('chat_join') }}">
+      <label>Code <input name="code" maxlength="16" required
+                         placeholder="e.g. 7FQK2M" /></label>
+      <button type="submit">Join</button>
+    </form>
+  </div>
+
+  <h2>Your chats</h2>
+  {% for row in mine %}
+    <div class="card">
+      <h3>{{ row.chat.name }}</h3>
+      <p class="why">
+        {{ row.members }} member(s) &middot;
+        {{ "Public" if row.chat.is_public else "Private" }} &middot;
+        code {{ row.chat.code }}
+        {%- if row.owner %} &middot; you made this{% endif %}
+      </p>
+      <div class="actions">
+        <form method="get"
+              action="{{ url_for('chat', kind='group', target_id=row.chat.id) }}">
+          <button type="submit">Open</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">You are not in any group chats yet.</p>
+  {% endfor %}
+
+  <h2>Public chats</h2>
+  {% for row in public %}
+    <div class="card">
+      <h3>{{ row.chat.name }}</h3>
+      <p class="why">{{ row.members }} member(s)</p>
+      <div class="actions">
+        {% if row.joined %}
+          <form method="get"
+                action="{{ url_for('chat', kind='group', target_id=row.chat.id) }}">
+            <button type="submit">Open</button>
+          </form>
+        {% else %}
+          {# The code is what joining takes, so the directory just supplies it. #}
+          <form method="post" action="{{ url_for('chat_join') }}">
+            <input type="hidden" name="code" value="{{ row.chat.code }}" />
+            <button type="submit">Join</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <p class="why">No public chats yet.</p>
+  {% endfor %}
+
+  <p class="nav"><a href="{{ url_for('index') }}">&larr; Back to your chats</a></p>
+{% endblock %}

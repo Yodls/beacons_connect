@@ -1,5 +1,6 @@
 # Kept out of app.py: `python app.py` loads it as __main__, so importing app
 # from here would build a second Flask app and a second db session.
+import secrets
 from datetime import datetime
 
 from flask_login import UserMixin
@@ -156,6 +157,86 @@ class ClubMember(db.Model):
     joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
+# Join codes are read aloud and typed by hand, so the alphabet leaves out every
+# glyph that gets mistaken for another: no O or 0, no I, 1 or L.
+CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+CODE_LENGTH = 6
+
+
+def new_code():
+    """One candidate join code. Uniqueness is the database's job, not this
+    function's -- callers insert and retry, because checking first and then
+    inserting is a race."""
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
+
+
+class Chat(db.Model):
+    """A chat a student made, as opposed to one the app handed them.
+
+    Public only means listed in the directory. Every chat's code works either
+    way, so "private" is unlisted rather than sealed.
+    """
+    __tablename__ = "chats"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.Text, nullable=False)
+    code = db.Column(db.String(16), unique=True, nullable=False)
+    is_public = db.Column(db.Boolean, nullable=False, default=False,
+                          server_default="false")
+    # Follows the author_id idiom already on GamePost.
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint("length(btrim(name)) > 0", name="ck_chats_name"),
+        db.Index("ix_chats_public", "is_public"),
+    )
+
+
+class ChatMember(db.Model):
+    """Who is in a chat. ClubMember's shape, for the same reason."""
+    __tablename__ = "chat_members"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    chat_id = db.Column(
+        db.Integer, db.ForeignKey("chats.id", ondelete="CASCADE"), primary_key=True
+    )
+    joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class ChatInvite(db.Model):
+    """An invitation waiting on someone, modelled on Match's status column.
+
+    Unlike a declined friend request, a declined invite is not final: it can be
+    sent again, and joining by code never consults this table at all, so
+    declining never locks anyone out of a chat they later want.
+    """
+    __tablename__ = "chat_invites"
+
+    chat_id = db.Column(
+        db.Integer, db.ForeignKey("chats.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    invited_by = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    status = db.Column(db.String(12), nullable=False, default="invited",
+                       server_default="invited")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint("status IN ('invited', 'accepted', 'declined')",
+                           name="ck_chat_invites_status"),
+        db.Index("ix_chat_invites_user", "user_id", "status"),
+    )
+
+
 class Match(db.Model):
     __tablename__ = "matches"
 
@@ -201,6 +282,15 @@ class Match(db.Model):
     )
 
 
+# The columns a message may hang off, in the order they appear inside the live
+# CHECK constraint. Keep that order: the rendered constraint text is what
+# db/schema_diff.py compares between databases, so reordering here would make a
+# freshly created database look like it had drifted from a migrated one.
+MESSAGE_PARENT_COLUMNS = ("match_id", "club_id", "room", "pairing_id", "chat_id")
+
+ONE_PARENT = "num_nonnulls(" + ", ".join(MESSAGE_PARENT_COLUMNS) + ") = 1"
+
+
 class Message(db.Model):
     __tablename__ = "messages"
 
@@ -215,6 +305,8 @@ class Message(db.Model):
     pairing_id = db.Column(
         db.Integer, db.ForeignKey("game_pairings.id", ondelete="CASCADE")
     )
+    # A chat a student made, as opposed to the singleton `room` above.
+    chat_id = db.Column(db.Integer, db.ForeignKey("chats.id", ondelete="CASCADE"))
     # A message may carry a "looking for a game" post, rendered as a card.
     post_id = db.Column(db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"))
     body = db.Column(db.Text, nullable=False)
@@ -222,15 +314,28 @@ class Message(db.Model):
 
     __table_args__ = (
         # A message hangs off exactly one chat, never both and never neither.
-        db.CheckConstraint(
-            "num_nonnulls(match_id, club_id, room, pairing_id) = 1",
-            name="ck_message_one_parent",
-        ),
+        db.CheckConstraint(ONE_PARENT, name="ck_message_one_parent"),
         db.Index("ix_messages_match", "match_id", "id"),
         db.Index("ix_messages_club", "club_id", "id"),
         db.Index("ix_messages_room", "room", "id"),
         db.Index("ix_messages_pairing", "pairing_id", "id"),
+        db.Index("ix_messages_chat", "chat_id", "id"),
     )
+
+
+# Every chat kind that has a table of its own, and the messages column that
+# points at it. Adding a kind means adding one entry here: attach_parent,
+# message_filter and the chat list all read this rather than each keeping their
+# own if/elif chain.
+#
+# The "room" column is deliberately absent. It holds a name, not an id, so the
+# singleton community room stays an explicit special case in the three callers.
+MESSAGE_PARENTS = {
+    "match": Message.match_id,
+    "club": Message.club_id,
+    "pair": Message.pairing_id,
+    "group": Message.chat_id,
+}
 
 
 class GamePost(db.Model):

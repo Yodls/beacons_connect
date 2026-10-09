@@ -52,6 +52,8 @@
           <small>{{ current_user.email }}</small>
           <a href="{{ url_for('onboarding') }}">Change your answers</a>
           <a href="{{ url_for('people') }}">Find people</a>
+          <a href="{{ url_for('chats') }}">Group chats{%
+            if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
           <a href="{{ url_for('logout') }}">Sign out</a>
         </div>
       </details>

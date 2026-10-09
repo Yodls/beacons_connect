@@ -103,6 +103,47 @@
       .post-actions { display: flex; gap: .4rem; margin-top: .5rem; }
       .post-actions form { margin: 0; }
       .post-actions button { margin: 0; padding: .3rem .75rem; font-size: .78rem; }
+      /* The group-chat strip under the header: code, visibility, invite. */
+      .groupbar {
+        display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
+        margin-top: .7rem; padding: .6rem .8rem;
+        background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r);
+        box-shadow: var(--shadow);
+      }
+      .groupbar form { display: flex; gap: .4rem; margin: 0 0 0 auto; }
+      .groupbar select { width: auto; margin: 0; max-width: 11rem; }
+      .groupbar button { margin: 0; padding: .35rem .8rem; font-size: .8rem; }
+      .code {
+        display: inline-block; padding: .05rem .4rem;
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-weight: 700; letter-spacing: .08em;
+        user-select: all;
+      }
+      .vis {
+        display: inline-block; padding: .05rem .4rem;
+        border-radius: var(--pill);
+        font-size: .68rem; font-weight: 800;
+        letter-spacing: .04em; text-transform: uppercase;
+      }
+      .vis.open { background: var(--place-bg); color: var(--place); }
+      .vis.shut { background: var(--surface-2); color: var(--muted); }
+      .roster { margin-top: .5rem; }
+      .roster > summary {
+        padding: .45rem .8rem; cursor: pointer; list-style: none;
+        background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r);
+        font-size: .82rem; font-weight: 700; color: var(--muted);
+      }
+      .roster > summary::-webkit-details-marker { display: none; }
+      .roster-body {
+        padding: .3rem .8rem .6rem;
+        background: var(--surface);
+        border: 1px solid var(--line); border-top: 0;
+        border-radius: 0 0 var(--r) var(--r);
+      }
 {% endblock %}
 
 {% block main %}
@@ -119,6 +160,82 @@
       </span>
     </div>
   </div>
+
+  {% if group %}
+    <div class="groupbar">
+      <span class="why">
+        Code <span class="code">{{ group.code }}</span>
+        &middot; <span class="vis {{ 'open' if group.is_public else 'shut' }}">
+          {{- "Public" if group.is_public else "Private" -}}
+        </span>
+        &middot; {{ members | length }} member{{ "" if members | length == 1 else "s" }}
+      </span>
+
+      {% if invitable %}
+        <form method="post" action="{{ url_for('chat_invite', chat_id=group.id) }}">
+          <select name="other_id" required>
+            {% for friend in invitable %}
+              <option value="{{ friend.user_id }}">{{ friend.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Invite</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <details class="roster">
+      <summary>Who is in here &middot; {{ members | length }}</summary>
+      <div class="roster-body">
+        {% for person in members %}
+          <div class="dock-row">
+            {{ ui.avatar(person.name, person.id) }}
+            <span class="grow">{{ person.name }}
+              {%- if person.id == group.owner_id %}
+                <span class="dock-quiet">made it</span>
+              {% endif -%}
+            </span>
+            {% if is_owner and person.id != group.owner_id %}
+              <form method="post"
+                    action="{{ url_for('chat_remove', chat_id=group.id, user_id=person.id) }}">
+                <button type="submit" class="ghost">Remove</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="actions">
+          {% if is_owner %}
+            {# Handing over is the way out for whoever made the chat. The
+               picker lists the other members only; the route re-checks that,
+               so a posted id cannot name an outsider. #}
+            {% set others = members | rejectattr("id", "equalto", group.owner_id) | list %}
+            {% if others %}
+              <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+                <select name="successor" required>
+                  <option value="">Hand over to&hellip;</option>
+                  {% for person in others %}
+                    <option value="{{ person.id }}">{{ person.name }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="ghost">Hand over and leave</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+                <button type="submit" class="ghost">Leave and close it</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('chat_delete', chat_id=group.id) }}">
+              <button type="submit" class="ghost">Delete this chat</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+              <button type="submit" class="ghost">Leave</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </details>
+  {% endif %}
 
   {% if kind == "match" %}
     <form class="launch" method="post" action="{{ url_for('game_new') }}">

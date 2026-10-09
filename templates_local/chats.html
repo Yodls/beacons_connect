@@ -1,0 +1,163 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Group chats{% endblock %}
+
+{% block appstyle %}
+      .maker {
+        padding: 1.25rem 1.4rem; margin-top: .6rem;
+        background:
+          radial-gradient(120% 140% at 100% 0%, #1b96a3 0%, transparent 62%),
+          var(--chat);
+        color: #fff; border-radius: 18px;
+        box-shadow: var(--shadow-2);
+      }
+      .maker h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
+      .maker p { color: #d6f1f4; font-size: .86rem; margin: 0 0 .9rem; }
+      .maker input[type="text"] { margin: 0; background: #fff; border-color: transparent; }
+      .maker button {
+        margin: 0; background: #fff; color: var(--chat); white-space: nowrap;
+      }
+      .maker button:hover { background: #e8f7f8; }
+      .maker .line { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .maker .line input[type="text"] { flex: 1 1 12rem; }
+      .picks { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: .7rem 0 0; }
+      .picks label {
+        display: flex; align-items: center; gap: .35rem; margin: 0;
+        font-size: .82rem; font-weight: 600; color: #eaf8f9;
+      }
+      .picks input { margin: 0; width: auto; }
+
+      /* The code is the whole point of the card, and it gets read aloud and
+         typed, so it is monospaced and roomy rather than pretty. */
+      .code {
+        display: inline-block; padding: .1rem .45rem;
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: .86rem; font-weight: 700; letter-spacing: .08em;
+        user-select: all;
+      }
+      .vis {
+        display: inline-block; padding: .08rem .45rem;
+        border-radius: var(--pill);
+        font-size: .7rem; font-weight: 800;
+        letter-spacing: .04em; text-transform: uppercase;
+      }
+      .vis.open { background: var(--place-bg); color: var(--place); }
+      .vis.shut { background: var(--surface-2); color: var(--muted); }
+{% endblock %}
+
+{% block main %}
+  <h1>Group chats</h1>
+  <p class="lede">Make a chat, join one with a code, or look through the public ones.</p>
+
+  <section class="sec-chat">
+    {{ ui.section("Start a chat", "chat", "plus") }}
+    <div class="maker">
+      <h3>Name it and go</h3>
+      <p>You get a join code to share. You can invite people once you are in.</p>
+      <form method="post" action="{{ url_for('chat_new') }}">
+        <div class="line">
+          <input type="text" name="name" maxlength="80" required
+                 placeholder="Thursday study group" />
+          <button type="submit">Create</button>
+        </div>
+        <div class="picks">
+          <label>
+            <input type="radio" name="visibility" value="private" checked />
+            Private &mdash; unlisted, code still works
+          </label>
+          <label>
+            <input type="radio" name="visibility" value="public" />
+            Public &mdash; anyone can find it
+          </label>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="sec-chat">
+    {{ ui.section("Join with a code", "chat", "search") }}
+    <div class="card">
+      <form class="newpost" method="post" action="{{ url_for('chat_join') }}">
+        <input name="code" maxlength="16" required placeholder="e.g. 7FQK2M"
+               autocapitalize="characters" autocomplete="off" />
+        <button type="submit">Join</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="sec-chat">
+    {{ ui.section("Your chats", "chat", "talk", mine | length) }}
+    <div class="grid two">
+      {% for row in mine %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(row.chat.name, row.chat.id, square=true) }}
+            <div class="grow">
+              <h3>{{ row.chat.name }}</h3>
+              <span class="why">
+                {{ row.members }} member{{ "" if row.members == 1 else "s" }}
+                {%- if row.owner %} &middot; you made this{% endif %}
+              </span>
+            </div>
+            <span class="vis {{ 'open' if row.chat.is_public else 'shut' }}">
+              {{- "Public" if row.chat.is_public else "Private" -}}
+            </span>
+          </div>
+          <p class="why">Code <span class="code">{{ row.chat.code }}</span></p>
+          <div class="actions">
+            <form method="get"
+                  action="{{ url_for('chat', kind='group', target_id=row.chat.id) }}">
+              <button type="submit">Open</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>No group chats yet.</b> Make one above, or join with a code
+          somebody sent you.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="sec-place">
+    {{ ui.section("Public chats", "place", "people", public | length) }}
+    <div class="grid two">
+      {% for row in public %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(row.chat.name, row.chat.id, square=true) }}
+            <div class="grow">
+              <h3>{{ row.chat.name }}</h3>
+              <span class="why">
+                {{ row.members }} member{{ "" if row.members == 1 else "s" }}
+              </span>
+            </div>
+          </div>
+          <div class="actions">
+            {% if row.joined %}
+              <form method="get"
+                    action="{{ url_for('chat', kind='group', target_id=row.chat.id) }}">
+                <button type="submit">Open</button>
+              </form>
+            {% else %}
+              {# Joining takes a code, so the directory simply supplies it
+                 rather than inventing a second way in. #}
+              <form method="post" action="{{ url_for('chat_join') }}">
+                <input type="hidden" name="code" value="{{ row.chat.code }}" />
+                <button type="submit">Join</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>No public chats yet.</b> Make one and mark it public to start
+          the list off.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
