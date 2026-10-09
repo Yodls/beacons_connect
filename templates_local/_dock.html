@@ -1,18 +1,30 @@
 {#
-  The friends dock: search, requests and friends, on every page that renders
-  the shell. Included rather than wrapped in a block, because a block can be
-  overridden to empty by one page and silently disappear -- which is exactly
-  what `sidebuttons` does on /matches.
+  The friends panel: search, requests and friends, on every page that renders
+  the shell. It lives in slot 2 of the bottom nav (see _tabbar.html) and opens
+  upward from there. It used to be a separate fixed chip floating over the
+  bottom-right of every page, which covered page content and duplicated the
+  nav's own Friends link.
+
+  Included rather than wrapped in a block, because a block can be overridden to
+  empty by one page and silently disappear -- which is exactly what
+  `sidebuttons` used to do on /matches.
 
   Deliberately avoids some markup other pages' tests slice on: no `card` class
   (/clubs counts those), no top-level heading (that is the signed-in-name
-  probe), and it
-  never prints your own name.
+  probe), and it never prints your own name.
 #}
 {% import "_ui.html" as ui %}
 <details class="dock" {% if dock_term %}open{% endif %}>
-  <summary>
-    Friends
+  {# The opening tag above is byte-pinned -- a test matches
+     `<details class="dock" >` and `<details class="dock" open>` literally, and
+     slices the page on it -- so the class attribute may never gain a second
+     class. Everything visual therefore hangs off .tabbar/.dock-body selectors.
+
+     The summary is pinned by nothing, so it takes .tab and renders as one of
+     the nav's slots. The badge span, however, is matched by
+     `class="pill">(\d+)<` and must keep no internal whitespace. #}
+  <summary class="tab">
+    {{ ui.icon("people") }}Friends
     {%- if pending_count %}<span class="pill">{{ pending_count }}</span>{% endif %}
   </summary>
 
@@ -106,9 +118,13 @@
         <a href="{{ url_for('matches') }}">see who's suggested</a>.
       </p>
     {% endfor %}
-    {% if dock_friends_more %}
-      <a class="dock-more" href="{{ url_for('matches') }}">See all &rarr;</a>
-    {% endif %}
+    {# Unconditional on purpose. With slot 2 of the nav now opening this panel
+       instead of linking to /matches, this is the only link to the full
+       friends page on most pages -- and the browser harness clicks it. Keep it
+       outside every {% if %}. #}
+    <a class="dock-all" href="{{ url_for('matches') }}">
+      {%- if dock_friends_more %}See all your friends{% else %}Friends and clubs{% endif %} &rarr;
+    </a>
   </div>
 </details>
 

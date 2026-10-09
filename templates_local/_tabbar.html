@@ -5,12 +5,15 @@
   pinned byte-for-byte by its tests.
 
   These are anchors rather than the mockup's <button>s, deliberately. The
-  browser harness navigates by real hrefs, so this is what makes /, /matches
-  and the community room reachable from every page.
+  browser harness navigates by real hrefs, so this is what makes /, the
+  community room and the rest reachable from every page.
 
-  It stays data-free apart from pending_count. Rendering anything else risks
-  putting a page's own strings onto every other page -- the community room's
-  title, for one, must not appear on /matches.
+  Slot 2 is the friends panel itself rather than a link. It used to be an
+  <a href="/matches"> sitting a few pixels from the panel's own floating chip,
+  which was both redundant and in the way; the panel now opens from this slot
+  and carries the link to /matches inside it. That makes the panel the only
+  thing here that renders data -- and the dock's trailing <script> is
+  display:none, so six grid cells still hold six visible slots.
 #}
 {%- import "_ui.html" as ui -%}
 {%- set here = request.endpoint -%}
@@ -18,10 +21,7 @@
   <a class="tab sec-chat {% if here == 'index' %}on{% endif %}"
      href="{{ url_for('index') }}">{{ ui.icon("home") }}Home</a>
 
-  <a class="tab sec-friend {% if here == 'matches' %}on{% endif %}"
-     href="{{ url_for('matches') }}">{{ ui.icon("people") }}Friends
-    {%- if pending_count %}<span class="tab-count">{{ pending_count }}</span>{% endif -%}
-  </a>
+  {% include "_dock.html" %}
 
   <a class="tab sec-game {% if here == 'game_lobby' %}on{% endif %}"
      href="{{ url_for('game_lobby') }}">{{ ui.icon("game") }}Games</a>

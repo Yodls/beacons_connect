@@ -353,7 +353,30 @@
       }
       .tab-new:hover { background: var(--blue-deep); text-decoration: none; }
       .tab-new .icon { width: 24px; height: 24px; }
-      .tab-count {
+      /* ---------- the friends panel ---------- */
+      /* It is slot 2 of the nav, so it is an ordinary grid item. position:
+         relative only so .dock-body can anchor to it; the <details> itself
+         gets no box of its own. Its class attribute is byte-pinned to exactly
+         "dock", which is why every rule here is an ancestor or descendant
+         selector rather than a second class. */
+      .dock {
+        position: relative;
+        --kind: var(--friend); --kind-bg: var(--friend-bg);
+      }
+      /* The summary is styled as a tab. It carries class="tab" too, so this
+         only adds what a <summary> needs on top of that. */
+      .dock > summary { list-style: none; cursor: pointer; }
+      .dock > summary::-webkit-details-marker { display: none; }
+      .dock[open] > summary { color: #fff; }
+      .dock[open] > summary .icon { color: var(--kind); }
+      .dock[open] > summary::after {
+        content: ""; position: absolute; bottom: 3px;
+        width: 18px; height: 3px; border-radius: 3px;
+        background: var(--kind);
+      }
+      /* Scoped to the dock on purpose: the games lobby has its own .pill for
+         whose-turn-is-it, and an unscoped rule here tints those orange. */
+      .dock .pill {
         position: absolute; top: 2px; left: calc(50% + 5px);
         min-width: 17px; height: 17px; padding: 0 4px;
         background: var(--game); color: #fff;
@@ -361,43 +384,30 @@
         font-size: .62rem; font-weight: 800;
         display: grid; place-items: center;
       }
-
-      /* ---------- the friends panel ---------- */
-      /* Sits above the nav rather than beside it: a 540px centred pill leaves
-         too little room at 1000px for a 20rem panel. */
-      .dock {
-        position: fixed; z-index: 40;
-        right: 16px; bottom: calc(var(--tabbar-h) + 28px);
+      /* The panel. Anchored to the slot's left edge and hanging rightward:
+         20rem from slot 2 of a 540px bar ends well inside it, so it never
+         needs clamping on a desktop width. */
+      .dock-body {
+        position: absolute; bottom: calc(100% + 14px); left: 0;
         width: 20rem; max-width: calc(100vw - 32px);
+        max-height: min(58vh, 25rem); overflow-y: auto;
+        padding: .6rem .8rem .8rem;
         background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r);
-        box-shadow: var(--shadow-3);
-        --kind: var(--friend); --kind-bg: var(--friend-bg);
-      }
-      .dock > summary {
-        display: flex; align-items: center; gap: .5rem;
-        padding: .6rem .8rem;
-        list-style: none; cursor: pointer;
+        border: 1px solid var(--line-2);
+        border-top: 3px solid var(--friend);
         border-radius: var(--r);
-        font-size: .88rem; font-weight: 800;
+        box-shadow: var(--shadow-3);
       }
-      .dock > summary::-webkit-details-marker { display: none; }
-      .dock > summary .icon { width: 18px; height: 18px; color: var(--friend); }
-      .dock:not([open]) > summary:hover { background: var(--surface-2); }
-      .dock[open] { border-top: 3px solid var(--friend); }
-      .dock[open] > summary {
-        border-bottom: 1px solid var(--line);
-        border-radius: var(--r) var(--r) 0 0;
+      /* The caret belongs on .dock, not .dock-body: that one scrolls, so it
+         would clip anything hanging outside its box. */
+      .dock[open]::after {
+        content: ""; position: absolute; bottom: calc(100% + 9px); left: 26px;
+        width: 10px; height: 10px;
+        background: var(--surface);
+        border-right: 1px solid var(--line-2);
+        border-bottom: 1px solid var(--line-2);
+        transform: rotate(45deg);
       }
-      /* Scoped to the dock on purpose: the games lobby has its own .pill for
-         whose-turn-is-it, and an unscoped rule here tints those orange. */
-      .dock .pill {
-        margin-left: auto; min-width: 1.15rem; padding: 0 .35rem;
-        background: var(--game); color: #fff;
-        border-radius: var(--pill);
-        font-size: .7rem; font-weight: 800; text-align: center;
-      }
-      .dock-body { max-height: min(58vh, 25rem); overflow-y: auto; padding: .6rem .8rem .8rem; }
       .dock-find { display: flex; gap: .4rem; }
       .dock-find input { padding: .4rem .55rem; font-size: .85rem; }
       .dock-find button { padding: .4rem .7rem; font-size: .8rem; }
@@ -418,6 +428,13 @@
       .dock-row button { padding: .22rem .5rem; font-size: .76rem; }
       .dock-note { margin-top: .35rem; color: var(--muted); font-size: .82rem; }
       .dock-more { display: block; margin-top: .55rem; font-size: .82rem; }
+      /* The way to the full friends page, now that the nav slot opens this
+         panel instead of linking there. */
+      .dock-all {
+        display: block; margin-top: .7rem; padding-top: .6rem;
+        border-top: 1px solid var(--line);
+        font-size: .82rem; font-weight: 700;
+      }
 
       /* ---------- sign-in pages ---------- */
       .auth {
@@ -499,11 +516,17 @@
           height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
           padding: 0 4px env(safe-area-inset-bottom);
         }
-        .dock {
-          left: 8px; right: 8px; width: auto;
+        /* Pinned to the viewport instead of the slot, because slot 2 of an
+           edge-to-edge bar is only ~60px in and a 20rem panel would run off
+           the right. `fixed` is safe only here: above 700px .tabbar carries a
+           transform, which would make it the containing block, but at this
+           width the bar sets transform: none. */
+        .dock-body {
+          position: fixed; left: 8px; right: 8px; width: auto;
           bottom: calc(var(--tabbar-h) + 10px + env(safe-area-inset-bottom));
+          max-height: 46vh;
         }
-        .dock-body { max-height: 46vh; }
+        .dock[open]::after { display: none; }
       }
       @media (max-width: 420px) {
         .brand-name { display: none; }

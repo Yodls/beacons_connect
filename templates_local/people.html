@@ -122,7 +122,15 @@
   {% endif %}
 
   <section class="sec-friend">
-    {{ ui.section("Requests you've sent", "friend", "arrow", sent | length) }}
+    {# Hand-written rather than ui.section(): the apostrophe is autoescaped to
+       &#39; when it travels as a macro argument, and two suites match this
+       heading's literal text. Text written straight into a template is not
+       escaped, which is the whole difference. #}
+    <div class="sec sec-friend">
+      <span class="tag-dot">{{ ui.icon("arrow") }}</span>
+      <h2>Requests you've sent</h2>
+      <span class="count">{{ sent | length }}</span>
+    </div>
     <div class="grid two">
       {% for person in sent %}
         <div class="card">

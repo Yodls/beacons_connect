@@ -9,10 +9,11 @@
 
   - the top bar comes before main, so the signed-in name and avatar sit ahead
     of every delimiter the tests slice pages on;
-  - the tab bar comes before the dock, so it stays out of the slice that is
-    audited for the absence of the user's own name and of score/shared markup;
-  - the dock comes last, because a test requires it to appear after the first
-    <h1> in source order.
+  - the tab bar comes last, and the friends panel rides inside it as one of
+    its slots, because a test requires the panel to appear after the first
+    <h1> in source order and audits everything after it for the absence of the
+    user's own name and of score/shared markup. The nav slots that follow the
+    panel carry only icons and short labels, so that audit still holds.
 #}
 {% block content %}
   <header class="topbar">
@@ -62,7 +63,7 @@
     {% block main %}{% endblock %}
   </main>
 
+  {# Includes the friends panel as one of its slots. Included, not a block: a
+     block can be emptied by one page and vanish. #}
   {% include "_tabbar.html" %}
-  {# Included, not a block: a block can be emptied by one page and vanish. #}
-  {% include "_dock.html" %}
 {% endblock %}

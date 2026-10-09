@@ -50,7 +50,7 @@
       });
     }
 
-    function swap(html, url, keepScroll) {
+    function swap(html, url, keepScroll, keepDock) {
       var here = live();
       var doc = new DOMParser().parseFromString(html, "text/html");
       var next = doc.getElementById("live");
@@ -58,8 +58,15 @@
       if (!here || !next) { return false; }
 
       // <details> state lives in the DOM, so a swap would otherwise close the
-      // dock out from under you the moment you used it.
-      var dock = here.querySelector(".dock");
+      // friends panel out from under you the moment you used it -- accepting a
+      // request would hide the next one.
+      //
+      // Only its own forms count as using it. Following a link out of the
+      // panel, including its own "Friends and clubs" link, is a request to go
+      // somewhere, so the panel has done its job and should get out of the
+      // way. The server already renders it closed on a page with no search
+      // term; this is what stops us putting it back.
+      var dock = keepDock ? here.querySelector(".dock") : null;
       var wasOpen = dock ? dock.hasAttribute("open") : false;
 
       timers.forEach(clearInterval);
@@ -81,7 +88,7 @@
       return true;
     }
 
-    function go(url, options) {
+    function go(url, options, keepDock) {
       var from = location.pathname;
       return fetch(url, Object.assign({credentials: "same-origin"}, options || {}))
         .then(function (r) {
@@ -91,7 +98,7 @@
             // Staying on the same page -- sending a chat, joining a club --
             // should not jump you to the top of it. That jump is most of what
             // made these feel like reloads.
-            if (!swap(html, r.url, landed === from)) {
+            if (!swap(html, r.url, landed === from, keepDock)) {
               throw new Error("unswappable");
             }
           });
@@ -109,17 +116,21 @@
 
       var method = (form.getAttribute("method") || "get").toLowerCase();
       var data = new FormData(form);
+      // Searching, accepting, adding: these are the panel acting on itself,
+      // and it has to still be there afterwards.
+      var ownForm = !!form.closest(".dock");
       e.preventDefault();
 
       if (method !== "post") {
         var url = new URL(action, location.href);
         url.search = new URLSearchParams(data).toString();
         var target = url.toString();
-        go(target).catch(function () { location.href = target; });
+        go(target, null, ownForm).catch(function () { location.href = target; });
         return;
       }
 
-      go(new URL(action, location.href).toString(), {method: "post", body: data})
+      go(new URL(action, location.href).toString(),
+         {method: "post", body: data}, ownForm)
         // Any failure falls back to a real submit, so the worst case is
         // exactly how the app behaved before this file existed.
         .catch(function () { form.submit(); });
