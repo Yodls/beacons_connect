@@ -26,10 +26,10 @@ cd beacons_connect
 ### 3. Install the required modules
 
 ```bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-> On Windows, use `pip` instead of `pip3`.
+> On Mac or Linux, use `pip3` instead of `pip`.
 
 ### 4. Set up your environment variables
 
@@ -66,10 +66,10 @@ Just move it into the `beacons_connect` folder and skip to step 5.
 ### 5. Start the server
 
 ```bash
-python3 app.py
+python app.py
 ```
 
-> On Windows, use `python` instead of `python3`.
+> On Mac or Linux, use `python3` instead of `python`.
 
 The database tables are created automatically the first time the app runs.
 
