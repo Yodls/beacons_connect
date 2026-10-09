@@ -24,6 +24,7 @@
       <div class="card">
         <h3>
           {{ person.name }}
+          {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
         </h3>
         <div class="actions">
           {% if person.state == "matched" %}
@@ -73,7 +74,9 @@
   <h2>Requests you've sent</h2>
   {% for person in sent %}
     <div class="card">
-      <h3>{{ person.name }}</h3>
+      <h3>{{ person.name }}
+        {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+      </h3>
       <p class="why">Waiting for them to accept.</p>
       <div class="actions">
         <form method="post"

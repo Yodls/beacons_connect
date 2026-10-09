@@ -10,6 +10,12 @@
         letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
       }
       legend { width: 100%; }
+      /* The pronouns fieldset is marked with an icon instead of a number,
+         because it is not one of the numbered questions. */
+      .qnum .icon { width: 13px; height: 13px; }
+      .pronoun-pick { display: block; margin: 0; }
+      .pronoun-pick select { margin-top: .25rem; max-width: 18rem; }
+      .pronoun-pick .hint { margin-top: .3rem; }
 {% endblock %}
 
 {#
@@ -38,6 +44,22 @@
       </p>
 
       <form method="post">
+        {# Not one of the questionnaire's questions -- it is a column on the
+           account, so it sits above them and outside the numbered run. The
+           route only writes it when it comes back in the POST. #}
+        <fieldset>
+          <legend><span class="qnum">{{ ui.icon("user") }}</span>Your pronouns</legend>
+          <label class="pronoun-pick">
+            <select name="pronouns">
+              {% for slug, label in pronoun_options.items() %}
+                <option value="{{ slug }}"
+                        {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <span class="hint">Shown next to your name to other students.</span>
+          </label>
+        </fieldset>
+
         {% for question in questions %}
           <fieldset>
             <legend>

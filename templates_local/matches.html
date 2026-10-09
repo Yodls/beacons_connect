@@ -99,7 +99,9 @@
             <div class="card-top">
               {{ ui.avatar(person.name, person.user_id) }}
               <div class="grow">
-                <h3>{{ person.name }}</h3>
+                <h3>{{ person.name }}
+                  {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+                </h3>
                 <span class="why">Wants to be friends</span>
               </div>
             </div>
@@ -126,7 +128,11 @@
         <div class="card">
           <div class="card-top">
             {{ ui.avatar(match.name, match.user_id) }}
-            <div class="grow"><h3>{{ match.name }}</h3></div>
+            <div class="grow">
+              <h3>{{ match.name }}
+                {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
+              </h3>
+            </div>
           </div>
           <div class="actions">
             <form method="get"
@@ -154,7 +160,11 @@
         <div class="card">
           <div class="card-top">
             {{ ui.avatar(rec.name, rec.user_id) }}
-            <div class="grow"><h3>{{ rec.name }}</h3></div>
+            <div class="grow">
+              <h3>{{ rec.name }}
+                {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
+              </h3>
+            </div>
           </div>
           <div class="actions">
             <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">

@@ -13,6 +13,16 @@
         {% endfor %}
       </select>
     </label>
+    {# Not required: "Prefer not to say" starts selected, so leaving it alone
+       is itself an answer. Changeable later on /onboarding. #}
+    <label>Pronouns
+      <select name="pronouns">
+        {% for slug, label in pronoun_options.items() %}
+          <option value="{{ slug }}"
+                  {% if slug == "unspecified" %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Email <input type="email" name="email" required /></label>
     <label>Password <input type="password" name="password" required /></label>
     <label>Confirm password <input type="password" name="confirm_password" required /></label>

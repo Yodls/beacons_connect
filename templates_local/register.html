@@ -25,16 +25,27 @@
       <p class="lede">Open to UMass Boston students.</p>
 
       <form method="post">
+        <label>Your name
+          <input name="name" maxlength="120" required autofocus
+                 placeholder="Alex Rivera" />
+        </label>
+
         <div class="row">
-          <label>Your name
-            <input name="name" maxlength="120" required autofocus
-                   placeholder="Alex Rivera" />
-          </label>
           <label>Gender
             <select name="gender" required>
               <option value="">Choose one</option>
               {% for slug, label in genders.items() %}
                 <option value="{{ slug }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {# Not required: "Prefer not to say" starts selected, so leaving this
+             alone is itself an answer. Changeable later on /onboarding. #}
+          <label>Pronouns
+            <select name="pronouns">
+              {% for slug, label in pronoun_options.items() %}
+                <option value="{{ slug }}"
+                        {% if slug == "unspecified" %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
           </label>

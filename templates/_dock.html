@@ -37,7 +37,9 @@
       <h4>Results for &ldquo;{{ dock_term }}&rdquo;</h4>
       {% for person in dock_results %}
         <div class="dock-row">
-          <span class="grow">{{ person.name }}</span>
+          <span class="grow">{{ person.name }}
+            {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+          </span>
           {% if person.state == "matched" %}
             <a href="{{ url_for('chat', kind='match', target_id=person.user_id) }}">Chat</a>
           {% elif person.state == "you_asked" %}
@@ -70,7 +72,9 @@
       <h4>Waiting on you</h4>
       {% for person in dock_requests %}
         <div class="dock-row">
-          <span class="grow">{{ person.name }}</span>
+          <span class="grow">{{ person.name }}
+            {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+          </span>
           <form method="post"
                 action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
             <input type="hidden" name="dock_back" value="{{ request.full_path }}" />
@@ -93,7 +97,9 @@
     {% for friend in dock_friends %}
       <div class="dock-row">
         <a class="grow"
-           href="{{ url_for('chat', kind='match', target_id=friend.user_id) }}">{{ friend.name }}</a>
+           href="{{ url_for('chat', kind='match', target_id=friend.user_id) }}">{{ friend.name }}
+           {%- if friend.pronouns %} <span class="pronouns">{{ friend.pronouns }}</span>{% endif -%}
+         </a>
       </div>
     {% else %}
       <p class="dock-note">
@@ -140,7 +146,16 @@
 
     function row(person) {
       var line = node("div", "dock-row");
-      line.appendChild(node("span", "grow", person.name));
+      var who = node("span", "grow", person.name);
+      // textContent all the way down: a test asserts this file
+      // assigns no innerHTML, because these are names people typed.
+      if (person.pronouns) {
+        // A real space, not just the margin: this text gets read out
+        // and copied, and the plain template set has no margin at all.
+        who.appendChild(document.createTextNode(" "));
+        who.appendChild(node("span", "pronouns", person.pronouns));
+      }
+      line.appendChild(who);
 
       if (person.link) {
         var link = node("a", null, person.label);

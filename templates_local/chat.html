@@ -111,8 +111,12 @@
   <div class="chathead">
     {{ ui.avatar(title, target_id, square=(kind == "club")) }}
     <div class="grow">
+      {# The chip stays outside the <h1>: the browser harness identifies pages
+         by h1 textContent, so the heading has to read exactly the title. #}
       <h1>{{ title }}</h1>
-      <span class="status">{{ subtitle }}</span>
+      <span class="status">{{ subtitle }}
+        {%- if pronouns %} <span class="pronouns">{{ pronouns }}</span>{% endif -%}
+      </span>
     </div>
   </div>
 

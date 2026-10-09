@@ -8,6 +8,22 @@
   <p>This is how we find students you'd actually get along with. You can change your answers later.</p>
 
   <form method="post">
+    {# A column on the account rather than one of the questionnaire's
+       questions, so it sits outside the numbered run. The route writes it
+       only when it comes back in the POST. #}
+    <fieldset>
+      <legend>Your pronouns</legend>
+      <label>
+        <select name="pronouns">
+          {% for slug, label in pronoun_options.items() %}
+            <option value="{{ slug }}"
+                    {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="why">Shown next to your name to other students.</p>
+    </fieldset>
+
     {% for question in questions %}
       <fieldset>
         <legend>{{ question.prompt }}</legend>

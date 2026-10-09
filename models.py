@@ -7,11 +7,40 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# The pronouns we offer and how they are written out. Kept next to the CHECK
+# constraint below so the values the database accepts and the labels the site
+# shows cannot drift apart.
+#
+# This lives here rather than beside GENDERS in app.py because matching.py
+# needs it too, and matching.py cannot import app -- that import runs the
+# other way.
+PRONOUNS = {
+    "she": "she/her",
+    "he": "he/him",
+    "they": "they/them",
+    "unspecified": "Prefer not to say",
+}
+
+
+def pronoun_label(slug):
+    """What to show beside a name, or None when there is nothing to show.
+
+    Choosing not to say is not something to announce next to every mention of
+    someone, so it renders as nothing at all. Every display surface goes
+    through here, which is what keeps that decision in one place.
+    """
+    return PRONOUNS.get(slug) if slug in ("she", "he", "they") else None
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     gender = db.Column(db.String(12), nullable=False)
+    # server_default earns its place twice: it backfills existing rows when the
+    # column is added to a live database, and it lets the test suites keep
+    # building User(...) without naming this field.
+    pronouns = db.Column(db.String(16), nullable=False,
+                         default="unspecified", server_default="unspecified")
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
@@ -23,6 +52,10 @@ class User(UserMixin, db.Model):
         db.CheckConstraint(
             "gender IN ('man', 'woman', 'nonbinary', 'undisclosed')",
             name="ck_user_gender",
+        ),
+        db.CheckConstraint(
+            "pronouns IN ('she', 'he', 'they', 'unspecified')",
+            name="ck_user_pronouns",
         ),
     )
 

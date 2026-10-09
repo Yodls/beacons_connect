@@ -303,6 +303,20 @@
       .av-4 { background: linear-gradient(135deg, #8a3f86, #bd73b3); }
       .av-5 { background: linear-gradient(135deg, #d9620f, #ea9150); }
 
+      /* ---------- pronouns ---------- */
+      /* Its own class, deliberately not .tag: that one carries the friend
+         status on /people, which a test reads. It also keeps clear of pill,
+         card, score, shared and waiting, all of which are strings some suite
+         counts or forbids. */
+      .pronouns {
+        display: inline-block; margin-left: .35rem;
+        padding: .05rem .4rem;
+        background: var(--surface-2); color: var(--muted);
+        border-radius: var(--pill);
+        font-size: .72rem; font-weight: 600;
+        white-space: nowrap; vertical-align: middle;
+      }
+
       /* ---------- the waiting banner (home) ---------- */
       /* A test reads the number straight out of this element, so the digits
          must be the first text after the tag -- no icon, no span. */

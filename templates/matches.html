@@ -18,6 +18,7 @@
       <div class="card">
         <h3>
           {{ person.name }}
+          {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
         </h3>
         <p class="why">
           Wants to be friends.
@@ -41,6 +42,7 @@
     <div class="card">
       <h3>
         {{ match.name }}
+        {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
       </h3>
       <div class="actions">
         <form method="get"
@@ -64,6 +66,7 @@
     <div class="card">
       <h3>
         {{ rec.name }}
+        {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
       </h3>
       <div class="actions">
         <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">

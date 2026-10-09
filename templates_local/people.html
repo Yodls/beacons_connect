@@ -66,7 +66,11 @@
           <div class="card {% if person.state == 'they_asked' %}asked{% endif %}">
             <div class="card-top">
               {{ ui.avatar(person.name, person.user_id) }}
-              <div class="grow"><h3>{{ person.name }}</h3></div>
+              <div class="grow">
+                <h3>{{ person.name }}
+                  {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+                </h3>
+              </div>
               {% if person.state == "matched" %}
                 <span class="tag on">Friends</span>
               {% elif person.state == "you_asked" %}
@@ -137,7 +141,9 @@
           <div class="card-top">
             {{ ui.avatar(person.name, person.user_id) }}
             <div class="grow">
-              <h3>{{ person.name }}</h3>
+              <h3>{{ person.name }}
+                {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+              </h3>
               <span class="why">Waiting for them to accept</span>
             </div>
             <span class="tag wait">Pending</span>

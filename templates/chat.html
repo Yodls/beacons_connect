@@ -29,7 +29,10 @@
 {% endblock %}
 
 {% block main %}
+  {# The chip stays outside the <h1>: tests identify pages by that heading's
+     text, so it has to read exactly the title. #}
   <h1>{{ title }}</h1>
+  {% if pronouns %}<p class="pronouns">{{ pronouns }}</p>{% endif %}
   <p class="nav" style="margin-top:0"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
 
   {% if kind == "match" %}

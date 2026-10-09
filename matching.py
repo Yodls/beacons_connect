@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 
-from models import Match, User, UserAnswer, db, pair
+from models import Match, User, UserAnswer, db, pair, pronoun_label
 
 _CLUBS_SQL = """
     WITH mine AS (
@@ -104,6 +104,7 @@ _CANDIDATES_SQL = """
     )
     SELECT s.other_id     AS user_id,
            them.name      AS name,
+           them.pronouns  AS pronouns,
            s.shared_score AS shared_score,
            s.shared_score + CASE
                WHEN me.gender IN ('man', 'woman') AND me.gender = them.gender
@@ -126,10 +127,11 @@ _CANDIDATES_SQL = """
 """
 
 _ACTIVE_SQL = """
-    SELECT other.id    AS user_id,
-           other.name  AS name,
-           other.email AS email,
-           m.score     AS score
+    SELECT other.id       AS user_id,
+           other.name     AS name,
+           other.pronouns AS pronouns,
+           other.email    AS email,
+           m.score        AS score
     FROM matches m
     JOIN "user" other
       ON other.id = CASE WHEN m.user_lo = :user_id THEN m.user_hi ELSE m.user_lo END
@@ -188,6 +190,7 @@ _PAIR_SCORE_SQL = """
 _SEARCH_SQL = """
     SELECT u.id            AS user_id,
            u.name          AS name,
+           u.pronouns      AS pronouns,
            m.status        AS status,
            m.requested_by  AS requested_by
     FROM "user" u
@@ -203,8 +206,9 @@ _SEARCH_SQL = """
 """
 
 _REQUESTS_SQL = """
-    SELECT other.id   AS user_id,
-           other.name AS name
+    SELECT other.id       AS user_id,
+           other.name     AS name,
+           other.pronouns AS pronouns
     FROM matches m
     JOIN "user" other
       ON other.id = CASE WHEN m.user_lo = :user_id THEN m.user_hi ELSE m.user_lo END
@@ -247,9 +251,12 @@ def recommend_people(user_id, limit=4, gender_bonus=0):
         {"user_id": user_id, "limit": limit, "gender_bonus": gender_bonus},
     ).mappings().all()
 
+    # These rows carry the written-out pronouns, not the stored slug: the
+    # templates then only ask whether there is something to show.
     return [{
         "user_id": row["user_id"],
         "name": row["name"],
+        "pronouns": pronoun_label(row["pronouns"]),
         "score": float(row["shared_score"]),
     } for row in rows]
 
@@ -264,6 +271,7 @@ def active_matches(user_id):
     return [{
         "user_id": row["user_id"],
         "name": row["name"],
+        "pronouns": pronoun_label(row["pronouns"]),
         "email": row["email"],
         "score": float(row["score"]),
     } for row in rows]
@@ -340,6 +348,7 @@ def search_people(user_id, term, limit=SEARCH_LIMIT):
     return [{
         "user_id": row["user_id"],
         "name": row["name"],
+        "pronouns": pronoun_label(row["pronouns"]),
         "state": match_state(user_id, row["status"], row["requested_by"]),
     } for row in rows]
 
@@ -351,7 +360,8 @@ def search_people(user_id, term, limit=SEARCH_LIMIT):
 
 def friend_names(user_id):
     """Your friends, best score first. Caller trims for display."""
-    return [{"user_id": f["user_id"], "name": f["name"]}
+    return [{"user_id": f["user_id"], "name": f["name"],
+             "pronouns": f["pronouns"]}
             for f in active_matches(user_id)]
 
 
@@ -359,7 +369,8 @@ def _requests(user_id, direction):
     rows = db.session.execute(
         db.text(_REQUESTS_SQL.format(direction=direction)), {"user_id": user_id}
     ).mappings().all()
-    return [{"user_id": r["user_id"], "name": r["name"]} for r in rows]
+    return [{"user_id": r["user_id"], "name": r["name"],
+             "pronouns": pronoun_label(r["pronouns"])} for r in rows]
 
 
 def incoming_requests(user_id):

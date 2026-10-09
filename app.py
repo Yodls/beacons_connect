@@ -40,11 +40,13 @@ from models import (
     GameQueue,
     Match,
     Message,
+    PRONOUNS,
     Question,
     User,
     UserAnswer,
     db,
     pair,
+    pronoun_label,
 )
 
 load_dotenv()
@@ -562,11 +564,17 @@ def chat(kind, target_id):
 
         return redirect(url_for("chat", kind=kind, target_id=target_id))
 
+    # Only a one-to-one chat has a single person to name. resolve_room above
+    # already fetched this user for that kind, so the identity map answers
+    # this without a second query.
+    other = db.session.get(User, target_id) if kind == "match" else None
+
     return render_template(
         "chat.html",
         kind=kind,
         target_id=target_id,
         title=title,
+        pronouns=pronoun_label(other.pronouns) if other else None,
         subtitle=CHAT_SUBTITLE[kind],
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
@@ -1135,7 +1143,8 @@ def dock_row(person):
     assemble a path, and so the choice of action stays in one place.
     """
     state = person["state"]
-    row = {"user_id": person["user_id"], "name": person["name"], "state": state}
+    row = {"user_id": person["user_id"], "name": person["name"],
+           "pronouns": person["pronouns"], "state": state}
 
     if state == "matched":
         row["link"] = url_for("chat", kind="match", target_id=person["user_id"])
@@ -1230,6 +1239,13 @@ def register():
         password = request.form["password"]
 
         gender = request.form.get("gender", "")
+        # Not required, unlike gender. One of the four options is "prefer not
+        # to say", so insisting on a choice only insists on clicking the
+        # opt-out -- and anything unrecognised means the same thing. It can be
+        # changed later on the questionnaire page.
+        pronouns = request.form.get("pronouns", "")
+        if pronouns not in PRONOUNS:
+            pronouns = "unspecified"
 
         if not name:
             flash("Please enter your name.")
@@ -1249,6 +1265,7 @@ def register():
             user = User(
                 name=name,
                 gender=gender,
+                pronouns=pronouns,
                 email=email,
                 password_hash=generate_password_hash(password),
             )
@@ -1258,7 +1275,10 @@ def register():
             session["pending_user_id"] = user.id
             return redirect(url_for("verify"))
 
-    return render_template("register.html", genders=GENDERS)
+    # Named pronoun_options, not pronouns: the local above holds the submitted
+    # value, and shadowing it here would send the wrong thing to the form.
+    return render_template("register.html", genders=GENDERS,
+                           pronoun_options=PRONOUNS)
 
 
 @app.route("/verify", methods=["GET", "POST"])
@@ -1388,6 +1408,12 @@ def onboarding():
                             option_id=option_id,
                         )
                     )
+            # Only written when the field actually came back, and only then if
+            # it is one we offer. A submit that leaves it out must not reset
+            # someone's pronouns to "unspecified" as a side effect.
+            choice = request.form.get("pronouns")
+            if choice in PRONOUNS:
+                current_user.pronouns = choice
             db.session.commit()
             return redirect(url_for("index"))
 
@@ -1396,6 +1422,8 @@ def onboarding():
         questions=questions,
         selected=selected,
         optional=OPTIONAL_QUESTIONS,
+        pronoun_options=PRONOUNS,
+        pronouns_now=current_user.pronouns,
     )
 
 
