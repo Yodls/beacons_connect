@@ -83,13 +83,27 @@
       /* ---------- controls ---------- */
       button, input, select, textarea { font: inherit; color: inherit; }
       button { cursor: pointer; }
+      /* The colour is stated here rather than inherited, and it has to be:
+         the rule above drops the browser's own control colour, so on a
+         coloured panel -- the green queue box, the orange challenge box, the
+         blue finder -- a field would take that panel's white text, land on its
+         own white background, and vanish. Dropdowns were the visible symptom,
+         because the option list inherits from the select and only showed up
+         under the hover highlight.
+
+         Buttons are left inheriting on purpose: those panels set their button
+         colour themselves. */
       input, select, textarea {
         width: 100%;
         padding: .6rem .75rem;
+        color: var(--ink);
         background: var(--surface);
         border: 1px solid var(--line-2);
         border-radius: var(--r-sm);
       }
+      /* Belt and braces for the popup itself, where a browser renders it
+         independently rather than inheriting from the select. */
+      select option { color: var(--ink); background: var(--surface); }
       input:focus, select:focus, textarea:focus {
         border-color: var(--blue); outline: none;
         box-shadow: 0 0 0 3px rgba(0, 90, 139, .13);
