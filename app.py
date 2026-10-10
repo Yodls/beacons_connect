@@ -954,39 +954,52 @@ def live_game_with(other_id):
 
 
 def pane_game(other_id):
-    """What the chat's game pane should show.
+    """What the chat's game pane should show: the most recent game, or nothing.
 
-    An invite is not here: it arrives as a message with its own buttons, so
-    the panel only appears once there is a board to show. Otherwise the most
-    recent finished game this player has not dismissed and that is still
-    inside CLOSE_AFTER, so a result stays put long enough to be read and then
-    puts itself away without a client timer.
+    The *most recent*, and never anything older. This used to ask for "the
+    newest finished game I have not dismissed", which meant closing the
+    current result simply uncovered the one before it -- every result you had
+    never dismissed was queued up behind it. Looking only at the latest game
+    makes that impossible rather than tidying up after it.
+
+    An invite is not shown here: it arrives as a message with its own buttons.
+    It is also skipped when picking the latest game, so sending one does not
+    blank a result the other player is still looking at.
 
     Also where an abandoned game gets settled, because this is the one place
     both the page render and the poller pass through.
     """
-    live = live_game_with(other_id)
-    if live is not None:
-        settle_abandoned(live)
-        if live.status == "active":
-            return live
-        # It was just forfeited; fall through and show the result.
-
-    return db.session.scalar(
+    # The most recent game that is not a pending invite. Invites are skipped
+    # rather than shown-then-rejected, because an invite becoming the newest
+    # game would otherwise hide the result somebody is still reading.
+    #
+    # Safe to skip them: only one game per pair can be invited or active at a
+    # time, so an invite and a live board cannot coexist and this can never
+    # step over a game in play.
+    game = db.session.scalar(
         db.select(Game)
-        .where(
-            shared_with(other_id),
-            Game.status.in_(OVER_GAME),
-            Game.updated_at > datetime.utcnow() - CLOSE_AFTER,
-            db.or_(
-                db.and_(Game.player_a == current_user.id,
-                        Game.closed_a.is_(False)),
-                db.and_(Game.player_b == current_user.id,
-                        Game.closed_b.is_(False)),
-            ),
-        )
+        .where(shared_with(other_id), Game.status != "invited")
         .order_by(Game.updated_at.desc(), Game.id.desc())
     )
+    if game is None:
+        return None
+
+    # Safe to ask of the latest game: a live one is always the most recent,
+    # because only one game per pair can be in play and starting it bumps
+    # updated_at past every finished game.
+    settle_abandoned(game)
+
+    if game.status == "active":
+        return game
+    if game.status not in OVER_GAME:
+        return None                      # nothing a panel can render
+    if game.updated_at <= datetime.utcnow() - CLOSE_AFTER:
+        return None                      # the result has had its ten minutes
+
+    seat = game.seat_of(current_user.id)
+    if seat is None or game.closed_for(seat):
+        return None
+    return game
 
 
 # How long a finished game's result stays in the chat before the panel puts
