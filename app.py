@@ -1,5 +1,6 @@
 import os
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
@@ -343,8 +344,15 @@ CHAT_TAG = {
 }
 
 def activity_catalogue(in_person_only=False):
-    """Every activity with its locations, ready for a form or for validation."""
-    query = db.select(Activity).order_by(Activity.sort_order)
+    """Every activity with its locations, ready for a form or for validation.
+
+    selectinload matters here: the locations relationship is lazy, so without
+    it this was one query per activity -- 17 of them on every page that built
+    a catalogue, measured.
+    """
+    query = (db.select(Activity)
+             .options(db.selectinload(Activity.locations))
+             .order_by(Activity.sort_order))
     if in_person_only:
         query = query.where(Activity.in_person.is_(True))
     return [
@@ -473,10 +481,13 @@ def chat_rows(kind, parent, after=0):
     ).all()
 
     posts = {}
+    going = {}
+    attending = set()
     post_ids = [m.post_id for m, _ in rows if m.post_id]
     if post_ids:
         posts = {p.id: p for p in db.session.scalars(
             db.select(GamePost).where(GamePost.id.in_(post_ids)))}
+        going, attending = rsvps_for(post_ids)
 
     # One query for every game mentioned, rather than one per message.
     events = {}
@@ -497,7 +508,8 @@ def chat_rows(kind, parent, after=0):
         }
         post = posts.get(m.post_id)
         if post is not None:
-            entry["post"] = post_payload(post)
+            entry["post"] = post_payload(
+                post, going.get(post.id, []), post.id in attending)
 
         if m.event:
             game = events.get(m.game_id)
@@ -525,13 +537,37 @@ def chat_rows(kind, parent, after=0):
     return out
 
 
-def post_payload(post):
-    going = db.session.scalars(
-        db.select(User.name)
-        .join(GamePostRsvp, GamePostRsvp.user_id == User.id)
-        .where(GamePostRsvp.post_id == post.id)
+def rsvps_for(post_ids):
+    """Who is going to each of several posts, and which of them I am in.
+
+    Two queries for the whole page rather than two per post. post_payload
+    takes the result so a single post still works without a batch.
+    """
+    if not post_ids:
+        return {}, set()
+
+    names = {}
+    for post_id, name in db.session.execute(
+        db.select(GamePostRsvp.post_id, User.name)
+        .join(User, User.id == GamePostRsvp.user_id)
+        .where(GamePostRsvp.post_id.in_(post_ids))
         .order_by(User.name)
-    ).all()
+    ):
+        names.setdefault(post_id, []).append(name)
+
+    mine = set(db.session.scalars(
+        db.select(GamePostRsvp.post_id)
+        .where(GamePostRsvp.post_id.in_(post_ids),
+               GamePostRsvp.user_id == current_user.id)
+    ))
+    return names, mine
+
+
+def post_payload(post, going=None, im_going=None):
+    if going is None:
+        going, mine = rsvps_for([post.id])
+        going = going.get(post.id, [])
+        im_going = post.id in mine
     return {
         "id": post.id,
         "game": post.game,
@@ -545,8 +581,7 @@ def post_payload(post):
         "going": going,
         "count": len(going),
         "full": len(going) >= post.max_players,
-        "im_going": db.session.get(GamePostRsvp, (post.id, current_user.id))
-        is not None,
+        "im_going": bool(im_going),
         "mine": post.author_id == current_user.id,
     }
 
@@ -715,8 +750,94 @@ def chat(kind, target_id):
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
-        catalogue=activity_catalogue(),
+        # Only the community room renders the meetup form, so only it needs
+        # the catalogue. Building it unconditionally cost every other chat a
+        # pile of queries for a form that was never on the page.
+        catalogue=activity_catalogue() if kind == COMMUNITY else [],
     )
+
+
+# How long one waiting request holds before answering empty-handed, and how
+# often it looks while it waits. The client re-issues immediately either way,
+# so the ceiling only exists to keep proxies and browsers comfortable.
+LIVE_WAIT = 25.0
+LIVE_TICK = 0.2
+
+
+def live_pane(target_id, game):
+    """The game half of a live answer, or None for a chat that cannot have one."""
+    busy = live_game_with(target_id) is not None
+    if game is None:
+        return {"token": "none", "html": "", "live": busy}
+
+    seat = game.seat_of(current_user.id)
+    return {
+        "token": game_token(game),
+        "live": busy,
+        "html": render_template("_gamepane.html", game=game, seat=seat,
+                                payload=game_payload(game, seat),
+                                other_id=target_id),
+    }
+
+
+@app.route("/chats/<kind>/<int:target_id>/live")
+@login_required
+def chat_live(kind, target_id):
+    """Hold the request until something changes, then answer at once.
+
+    The delay in a chat was never the server -- a poll answered in about 25ms
+    and the client then sat on its hands for up to four seconds. Waiting here
+    instead makes delivery one round trip, and costs less: a cheap indexed
+    probe every fifth of a second rather than a full request several times a
+    second.
+
+    The session is released between probes, and that is the part that matters.
+    A Session holds its connection until commit, rollback or close, and the
+    pool is five plus ten overflow -- so fifteen of these waiting with a
+    session open would starve every other request on the site.
+    """
+    parent, _ = chat_target(kind, target_id)
+    if parent is None:
+        return jsonify({"error": "unavailable"}), 403
+
+    after = request.args.get("after", type=int, default=0)
+    token = request.args.get("token", "")
+
+    # Built from primitives, because the ORM object behind `parent` is
+    # released along with the session between probes.
+    if kind == COMMUNITY:
+        where = Message.room == COMMUNITY
+    else:
+        where = MESSAGE_PARENTS[kind] == parent.id
+
+    deadline = time.monotonic() + LIVE_WAIT
+    while True:
+        newest = db.session.scalar(
+            db.select(db.func.max(Message.id)).where(where)
+        ) or 0
+        # pane_game rather than a hand-rolled probe: it owns the rules about
+        # which game the panel shows, and it is where an abandoned game gets
+        # settled. Reproducing that here would let the two drift.
+        game = pane_game(target_id) if kind == "match" else None
+        fresh = game_token(game)
+
+        if newest > after or fresh != token:
+            parent, _ = chat_target(kind, target_id)
+            rows = chat_rows(kind, parent, after=after)
+            return jsonify({
+                "after": max([r["id"] for r in rows], default=after),
+                "messages": rows,
+                "game": live_pane(target_id, game) if kind == "match" else None,
+            })
+
+        if time.monotonic() >= deadline:
+            return jsonify({"after": after, "messages": [], "game": None,
+                            "quiet": True})
+
+        # Hand the connection back before sleeping. Without this the pool is
+        # gone after fifteen simultaneous waits.
+        db.session.remove()
+        time.sleep(LIVE_TICK)
 
 
 @app.route("/chats/match/<int:other_id>/game")

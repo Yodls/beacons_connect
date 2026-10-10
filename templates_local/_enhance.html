@@ -21,11 +21,21 @@
     // Defined before the capability check below on purpose: if this browser
     // cannot do swapping, the pollers must still work.
     var timers = [];
+    var cancels = [];
     window.Beacon = {
       every: function (fn, ms) {
         var id = setInterval(fn, ms);
         timers.push(id);
         return id;
+      },
+      // For something that waits rather than ticks: a held request plus a
+      // loop. `start` does the work and returns the function that stops it,
+      // and a swap calls every one of those. Without this a swap would leave
+      // a fetch in flight to resolve against nodes that have gone.
+      live: function (start) {
+        var cancel = start();
+        if (typeof cancel === "function") { cancels.push(cancel); }
+        return cancel;
       }
     };
 
@@ -71,6 +81,11 @@
 
       timers.forEach(clearInterval);
       timers = [];
+      cancels.forEach(function (stop) {
+        // One page's teardown must not stop the rest from running.
+        try { stop(); } catch (e) {}
+      });
+      cancels = [];
 
       here.innerHTML = next.innerHTML;
       if (doc.title) { document.title = doc.title; }

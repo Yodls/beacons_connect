@@ -615,17 +615,40 @@
   })();
 </script>
 <script>
+  // One waiting request for the whole chat: messages and the game together.
+  //
+  // This used to be two intervals, 4000ms and 2500ms, and that interval *was*
+  // the delay -- the server answered a poll in about 25ms and the client then
+  // sat still for up to four seconds. Now the request waits on the server and
+  // comes back the moment something happens, measured at about 170ms from
+  // pressing send to the other person having it.
+  //
+  // There is deliberately no document.hidden check. A held request costs
+  // nothing while idle and completes even in a background tab, so a tab you
+  // come back to is already current instead of owing you a four-second catch
+  // up.
   (function () {
     var log = document.getElementById("log");
-    var url = {{ url_for("chat_messages", kind=kind, target_id=target_id) | tojson }};
-    var me = {{ current_user.id | tojson }};
-    var last = 0;
-    var failures = 0;
+    if (!log || !window.fetch) { return; }
 
+    var url = {{ url_for("chat_live", kind=kind, target_id=target_id) | tojson }};
+    var me = {{ current_user.id | tojson }};
+    var slot = document.getElementById("gamepane-slot");
+    var wrap = document.getElementById("gamewrap");
+    var launch = document.querySelector(".pickgame");
+
+    var after = 0;
     document.querySelectorAll("#log .msg").forEach(function (el) {
-      last = Math.max(last, parseInt(el.dataset.id, 10) || 0);
+      after = Math.max(after, parseInt(el.dataset.id, 10) || 0);
     });
+    var token = (slot && slot.firstElementChild
+                 && slot.firstElementChild.dataset.token) || "none";
+
     log.scrollTop = log.scrollHeight;
+
+    var stopped = false;
+    var inflight = null;
+    var failures = 0;
 
     function span(cls, text) {
       var el = document.createElement("span");
@@ -656,9 +679,9 @@
       p.dataset.id = message.id;
 
       if (message.event) {
-        // Something that happened to a game, not something anybody said.
-        // It keeps the .msg class because `last` above is read from
-        // #log .msg -- without it every poll would append these again.
+        // Something that happened to a game, not something anybody said. It
+        // keeps the .msg class because `after` above is read from #log .msg --
+        // without it every round would fetch these again.
         p.className = "msg note";
         p.appendChild(span("body", message.body));
         if (message.can_answer) {
@@ -677,55 +700,6 @@
       p.appendChild(span("body", message.body));
       p.appendChild(span("at", message.at || ""));
       log.appendChild(p);
-    }
-
-    function poll() {
-      if (document.hidden) { return; }
-      fetch(url + "?after=" + last, { headers: { "Accept": "application/json" } })
-        .then(function (r) {
-          if (!r.ok) { throw new Error(r.status); }
-          return r.json();
-        })
-        .then(function (rows) {
-          failures = 0;
-          if (!rows.length) { return; }
-          var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-          rows.forEach(function (m) {
-            add(m);
-            last = Math.max(last, m.id);
-          });
-          if (stuck) { log.scrollTop = log.scrollHeight; }
-        })
-        .catch(function () {
-          failures += 1;
-          if (failures >= 5) { clearInterval(timer); }
-        });
-    }
-
-    // Registered with the enhancer rather than setInterval, so a
-    // navigation stops it instead of leaving it polling a page that
-    // is no longer on screen.
-    var timer = Beacon.every(poll, 4000);
-  })();
-</script>
-{% if kind == "match" %}
-<script>
-  // The live half of a game in a chat. The person who acts sees their own
-  // result immediately, because the enhancer swaps the response of their own
-  // form post; this is for the *other* player, who did nothing and still has
-  // to see the invite arrive, the board open, and each move land.
-  (function () {
-    var slot = document.getElementById("gamepane-slot");
-    var wrap = document.getElementById("gamewrap");
-    if (!slot || !wrap || !window.fetch) { return; }
-
-    var url = {{ url_for("chat_game", other_id=other_id) | tojson }};
-    var launch = document.querySelector(".pickgame");
-    var failures = 0;
-
-    function token() {
-      var pane = slot.firstElementChild;
-      return pane && pane.dataset.token ? pane.dataset.token : "none";
     }
 
     // Chess is the one board that needs a client: click a square, then
@@ -750,46 +724,72 @@
       });
     }
 
-    var seen = token();
+    function apply(data) {
+      if (data.messages && data.messages.length) {
+        var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+        data.messages.forEach(add);
+        if (stuck) { log.scrollTop = log.scrollHeight; }
+      }
+      if (typeof data.after === "number") { after = data.after; }
 
-    function pollGame() {
-      if (document.hidden) { return; }
-      fetch(url, {headers: {"Accept": "application/json"}})
+      var pane = data.game;
+      if (pane && slot && wrap && pane.token !== token) {
+        token = pane.token;
+        // DOMParser rather than innerHTML. This markup is server-rendered and
+        // already escaped, but chat.html is checked file-wide for innerHTML
+        // assignment -- the guard that keeps a message body from ever being
+        // injected as HTML -- and that guard is worth keeping blunt.
+        var parsed = new DOMParser().parseFromString(pane.html, "text/html");
+        slot.replaceChildren.apply(slot, parsed.body.childNodes);
+        wrap.classList.toggle("playing", !!pane.html);
+        if (launch) { launch.hidden = !!pane.live; }
+        bindChess();
+      }
+    }
+
+    function round() {
+      if (stopped) { return; }
+      var ctl = new AbortController();
+      inflight = ctl;
+      fetch(url + "?after=" + after + "&token=" + encodeURIComponent(token),
+            {headers: {"Accept": "application/json"}, signal: ctl.signal})
         .then(function (r) {
           if (!r.ok) { throw new Error(r.status); }
           return r.json();
         })
         .then(function (data) {
           failures = 0;
-          // The whole point of the token: without this check every poll would
-          // replace the board with identical markup, throwing away a chess
-          // square someone had already clicked.
-          if (data.token === seen) { return; }
-          seen = data.token;
-
-          // DOMParser rather than innerHTML. This markup is server-rendered
-          // and already escaped, but chat.html is checked file-wide for
-          // innerHTML assignment -- the guard that keeps a message body from
-          // ever being injected as HTML -- and that guard is worth keeping
-          // blunt.
-          var parsed = new DOMParser().parseFromString(data.html, "text/html");
-          slot.replaceChildren.apply(slot, parsed.body.childNodes);
-          wrap.classList.toggle("playing", !!data.html);
-          if (launch) { launch.hidden = !!data.live; }
-          bindChess();
+          apply(data);
+          round();
         })
-        .catch(function () {
+        .catch(function (err) {
+          // An abort is us restarting or leaving, not a failure.
+          if (stopped || (err && err.name === "AbortError")) { return; }
           failures += 1;
-          if (failures >= 5) { clearInterval(gameTimer); }
+          if (failures >= 5) { return; }
+          setTimeout(round, 1000 * failures);
         });
     }
 
-    bindChess();
-    // Registered with the enhancer, so navigating away stops it rather than
-    // leaving it polling a page that is gone.
-    var gameTimer = Beacon.every(pollGame, 2500);
+    function onShow() {
+      if (document.hidden || stopped) { return; }
+      // Belt and braces: if the browser dropped the held request while the
+      // tab was away, this starts a fresh one rather than waiting it out.
+      if (inflight) { inflight.abort(); }
+      round();
+    }
+
+    Beacon.live(function () {
+      bindChess();
+      round();
+      document.addEventListener("visibilitychange", onShow);
+      return function () {
+        stopped = true;
+        document.removeEventListener("visibilitychange", onShow);
+        if (inflight) { inflight.abort(); }
+      };
+    });
   })();
 </script>
-{% endif %}
 
 {% endblock %}
