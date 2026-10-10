@@ -116,6 +116,16 @@
 
       var method = (form.getAttribute("method") || "get").toLowerCase();
       var data = new FormData(form);
+      // A submit button's own name and value are not part of FormData unless
+      // the button is passed as the submitter -- that is specified behaviour,
+      // not a quirk. Appended by hand rather than with the two-argument
+      // FormData constructor, which older engines ignore in silence: the
+      // field would simply go missing, which is the hardest kind of bug to
+      // see. The chat's game menu is one submit button per game, so without
+      // this it posts no `kind` at all.
+      if (e.submitter && e.submitter.name) {
+        data.append(e.submitter.name, e.submitter.value);
+      }
       // Searching, accepting, adding: these are the panel acting on itself,
       // and it has to still be there afterwards.
       var ownForm = !!form.closest(".dock");

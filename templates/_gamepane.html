@@ -1,0 +1,45 @@
+{#
+  The game between two people, as it appears inside their chat.
+
+  Included by chat.html on first load, and returned on its own by
+  /chats/match/<id>/game for the poller to swap in, so the board markup has
+  one source and a live update cannot drift from a fresh page load.
+
+  data-token is how the poller decides whether to swap. It only re-swaps when
+  the token changes, because chess is a two-click interaction and replacing
+  identical markup would throw away a half-made move.
+#}
+<div class="gamepane" data-token="{{ game.id }}:{{ game.version }}:{{ game.status }}">
+  <h2>{{ payload.label }} with {{ payload.opponent }}</h2>
+
+  {# Invites live in the log now, with their own buttons. #}
+  {% if game.status == "declined" %}
+    <p class="why">{{ payload.opponent }} turned this invite down.</p>
+  {% else %}
+    {% if game.outcome == "abandoned" %}
+      <p class="why">
+        {% if payload.you_won %}
+          {{ payload.opponent }} ran out of time &mdash; you win {{ payload.label }}.
+        {% else %}
+          You ran out of time, so {{ payload.opponent }} won {{ payload.label }}.
+        {% endif %}
+      </p>
+    {% endif %}
+    <div id="board-area">
+      {% include "_board.html" %}
+    </div>
+  {% endif %}
+
+  <div class="actions">
+    {% if game.status == "active" %}
+      <form method="post"
+            action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
+        <button type="submit">Resign</button>
+      </form>
+    {% elif game.status in ("finished", "declined") %}
+      <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
+        <button type="submit">Close</button>
+      </form>
+    {% endif %}
+  </div>
+</div>

@@ -108,7 +108,7 @@
             {% endif %}
           </div>
           <div class="actions">
-            <form method="get" action="{{ url_for('game_view', game_id=row.game.id) }}">
+            <form method="get" action="{{ url_for('chat', kind='match', target_id=row.opponent_id) }}">
               <button type="submit">Open</button>
             </form>
           </div>

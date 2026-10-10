@@ -2,6 +2,47 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block appstyle %}
+      /* A game moment in the log, not speech. */
+      .msg.note { max-width: 100%; text-align: center; color: #555; }
+      .msg.note .body { font-size: 0.85rem; }
+      .msg.note form { display: inline; }
+
+      /* The composer and the game menu share a row. */
+      .sendrow { display: flex; align-items: flex-end; gap: 0.5rem; }
+      .sendrow .composer { flex: 1 1 auto; min-width: 0; }
+      .pickgame { position: relative; flex: none; }
+      .pickgame > summary { cursor: pointer; padding: 0.5rem; }
+      .pickgame-menu {
+        position: absolute; z-index: 30; bottom: 100%; left: 0;
+        display: flex; flex-direction: column; gap: 0.25rem;
+        width: max-content; padding: 0.5rem;
+        background: #fff; border: 1px solid #ccc;
+      }
+      .pickgame-menu button { margin: 0; }
+
+      /* A game beside the conversation. The plain set stays deliberately
+         plain, so this is layout only. */
+      .gamewrap.playing { display: grid; gap: 1rem; align-items: start; }
+      @media (min-width: 900px) {
+        .gamewrap.playing { grid-template-columns: minmax(0, 1fr) 18rem; }
+      }
+      .talkcol { min-width: 0; }
+      .gamewrap.playing #log { height: 18rem; }
+      @media (max-width: 899px) {
+        .gamewrap.playing #log { height: 12rem; }
+      }
+      #board-area { overflow-x: auto; }
+      .board { display: grid; gap: 2px; }
+      .board form { margin: 0; display: contents; }
+      .board.ttt { grid-template-columns: repeat(3, 3rem); }
+      .board.c4 { grid-template-columns: repeat(7, 2.2rem); }
+      .board.bs { grid-template-columns: repeat(10, 1.5rem); }
+      .board.chess { grid-template-columns: repeat(8, 2rem); }
+      .cell { width: 100%; padding: 0; }
+      .board.ttt .cell { height: 3rem; }
+      .board.c4 .cell { height: 2.2rem; }
+      .board.bs .cell { height: 1.5rem; font-size: 0.7rem; }
+      .board.chess .cell { height: 2rem; font-size: 1.2rem; }
       #log { border: 1px solid #ddd; padding: 0.75rem; height: 24rem;
              overflow-y: auto; background: #fff; }
       .msg { margin: 0 0 0.6rem; }
@@ -101,18 +142,6 @@
     </div>
   {% endif %}
 
-  {% if kind == "match" %}
-    <form class="launch" method="post" action="{{ url_for('game_new') }}">
-      <input type="hidden" name="opponent_id" value="{{ target_id }}" />
-      <select name="kind" required>
-        {% for key, label in game_kinds %}
-          <option value="{{ key }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Start a game</button>
-    </form>
-  {% endif %}
-
   {% if kind == "community" %}
     <form class="newpost" method="post" action="{{ url_for('post_new') }}">
       <b>Looking for a game?</b>
@@ -147,8 +176,31 @@
     </form>
   {% endif %}
 
+  {# Always present on a one-on-one chat, even with no game: it is what the
+     poller fills when an invite arrives. #}
+  <div class="gamewrap {% if game %}playing{% endif %}" id="gamewrap">
+    {% if kind == "match" %}
+      <div id="gamepane-slot">{% if game %}{% include "_gamepane.html" %}{% endif %}</div>
+    {% endif %}
+
+    <div class="talkcol">
   <div id="log">
     {% for message in messages %}
+      {% if message.event %}
+        {# A game moment, not speech. Keeps .msg because the poller reads the
+           last id from #log .msg. #}
+        <p class="msg note" data-id="{{ message.id }}">
+          <span class="body">{{ message.body }}</span>
+          {% if message.can_answer %}
+            <form method="post" action="{{ message.accept_url }}">
+              <button type="submit">Accept</button>
+            </form>
+            <form method="post" action="{{ message.decline_url }}">
+              <button type="submit">Decline</button>
+            </form>
+          {% endif %}
+        </p>
+      {% else %}
       <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
@@ -184,16 +236,36 @@
           </span>
         {% endif %}
       </p>
+      {% endif %}
     {% else %}
       <p class="why" id="empty">No messages yet. Say hello.</p>
     {% endfor %}
   </div>
+
+    </div>
+  </div>
+
+  <div class="sendrow">
+    {# Beside the composer, not inside it: nested forms are invalid HTML and
+       the composer's attribute order is pinned. One submit button per game. #}
+    {% if kind == "match" %}
+      <details class="pickgame" {% if not can_start %}hidden{% endif %}>
+        <summary>Play</summary>
+        <form class="pickgame-menu" method="post" action="{{ url_for('game_new') }}">
+          <input type="hidden" name="opponent_id" value="{{ target_id }}" />
+          {% for key, label in game_kinds %}
+            <button type="submit" name="kind" value="{{ key }}">{{ label }}</button>
+          {% endfor %}
+        </form>
+      </details>
+    {% endif %}
 
   <form class="composer" method="post">
     <input name="body" maxlength="{{ 2000 }}" autocomplete="off" autofocus
            placeholder="Write a message" required />
     <button type="submit">Send</button>
   </form>
+  </div>
 {% endblock %}
 
 {% block script %}
@@ -262,13 +334,21 @@
     });
     log.scrollTop = log.scrollHeight;
 
+    // A one-button form, built the same way as everything else here.
+    function answer(action, label) {
+      var f = document.createElement("form");
+      f.method = "post";
+      f.action = action;
+      var b = document.createElement("button");
+      b.type = "submit";
+      b.textContent = label;
+      f.appendChild(b);
+      return f;
+    }
+
     function add(message) {
       var empty = document.getElementById("empty");
       if (empty) { empty.remove(); }
-
-      var who = document.createElement("span");
-      who.className = "who";
-      who.textContent = message.name;
 
       var body = document.createElement("span");
       body.className = "body";
@@ -276,8 +356,27 @@
       body.textContent = message.body;
 
       var p = document.createElement("p");
-      p.className = "msg" + (message.user_id === me ? " mine" : "");
       p.dataset.id = message.id;
+
+      if (message.event) {
+        // Something that happened to a game. It keeps the .msg class because
+        // `last` is read from #log .msg -- without it every poll would append
+        // these again.
+        p.className = "msg note";
+        p.appendChild(body);
+        if (message.can_answer) {
+          p.appendChild(answer(message.accept_url, "Accept"));
+          p.appendChild(answer(message.decline_url, "Decline"));
+        }
+        log.appendChild(p);
+        return;
+      }
+
+      var who = document.createElement("span");
+      who.className = "who";
+      who.textContent = message.name;
+
+      p.className = "msg" + (message.user_id === me ? " mine" : "");
       p.appendChild(who);
       p.appendChild(body);
       log.appendChild(p);
@@ -312,4 +411,88 @@
     var timer = Beacon.every(poll, 4000);
   })();
 </script>
+{% if kind == "match" %}
+<script>
+  // The live half of a game in a chat. The person who acts sees their own
+  // result immediately, because the enhancer swaps the response of their own
+  // form post; this is for the *other* player, who did nothing and still has
+  // to see the invite arrive, the board open, and each move land.
+  (function () {
+    var slot = document.getElementById("gamepane-slot");
+    var wrap = document.getElementById("gamewrap");
+    if (!slot || !wrap || !window.fetch) { return; }
+
+    var url = {{ url_for("chat_game", other_id=other_id) | tojson }};
+    var launch = document.querySelector(".launch");
+    var failures = 0;
+
+    function token() {
+      var pane = slot.firstElementChild;
+      return pane && pane.dataset.token ? pane.dataset.token : "none";
+    }
+
+    // Chess is the one board that needs a client: click a square, then
+    // another. Re-bound after every swap, because a swap replaces the board
+    // and takes these listeners with it.
+    function bindChess() {
+      var form = document.getElementById("chessform");
+      var field = document.getElementById("chessmove");
+      if (!form || !field || field.disabled) { return; }
+
+      var from = null;
+      form.querySelectorAll(".cell[data-sq]").forEach(function (cell) {
+        cell.addEventListener("click", function () {
+          if (from === null) {
+            from = cell.dataset.sq;
+            cell.classList.add("pick");
+            return;
+          }
+          field.value = from + cell.dataset.sq;
+          form.submit();
+        });
+      });
+    }
+
+    var seen = token();
+
+    function pollGame() {
+      if (document.hidden) { return; }
+      fetch(url, {headers: {"Accept": "application/json"}})
+        .then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        })
+        .then(function (data) {
+          failures = 0;
+          // The whole point of the token: without this check every poll would
+          // replace the board with identical markup, throwing away a chess
+          // square someone had already clicked.
+          if (data.token === seen) { return; }
+          seen = data.token;
+
+          // DOMParser rather than innerHTML. This markup is server-rendered
+          // and already escaped, but chat.html is checked file-wide for
+          // innerHTML assignment -- the guard that keeps a message body from
+          // ever being injected as HTML -- and that guard is worth keeping
+          // blunt.
+          var parsed = new DOMParser().parseFromString(data.html, "text/html");
+          slot.replaceChildren.apply(slot, parsed.body.childNodes);
+          wrap.classList.toggle("playing", !!data.html);
+          if (launch) { launch.hidden = !!data.live; }
+          bindChess();
+        })
+        .catch(function () {
+          failures += 1;
+          if (failures >= 5) { clearInterval(gameTimer); }
+        });
+    }
+
+    bindChess();
+    // Registered with the enhancer, so navigating away stops it rather than
+    // leaving it polling a page that is gone.
+    var gameTimer = Beacon.every(pollGame, 2500);
+  })();
+</script>
+{% endif %}
+
 {% endblock %}

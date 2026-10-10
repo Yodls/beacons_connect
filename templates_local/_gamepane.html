@@ -1,0 +1,55 @@
+{#
+  The game between two people, as it appears inside their chat.
+
+  Rendered two ways from this one file: included by chat.html on first load,
+  and returned on its own by /chats/match/<id>/game for the poller to swap in.
+  That is the point of it being a partial -- the board markup has one source,
+  so a live update cannot drift from a fresh page load.
+
+  data-token is how the poller decides whether to swap at all. It only re-swaps
+  when the token changes, because chess is a two-click interaction and
+  replacing identical markup would throw away a half-made move.
+#}
+{%- import "_ui.html" as ui -%}
+<div class="gamepane" data-token="{{ game.id }}:{{ game.version }}:{{ game.status }}">
+  <div class="gamehead">
+    {{ ui.avatar(payload.label, game.id, square=true) }}
+    <div class="grow">
+      <h3>{{ payload.label }}</h3>
+      <span class="vs">against {{ payload.opponent }}</span>
+    </div>
+    {% if game.status == "active" %}
+      <form method="post"
+            action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
+        <button type="submit" class="ghost">Resign</button>
+      </form>
+    {% elif game.status in ("finished", "declined") %}
+      {# Only offered once the game is over; the route refuses it otherwise. #}
+      <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
+        <button type="submit" class="ghost">Close</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {# An invite is not shown here any more: it arrives as a message in the log
+     with its own Accept and Decline, so the panel only appears once there is
+     a board. pane_game() enforces that. #}
+  {% if game.status == "declined" %}
+    <div class="empty">{{ payload.opponent }} turned this invite down.</div>
+  {% else %}
+    {% if game.outcome == "abandoned" %}
+      <div class="empty">
+        {% if payload.you_won %}
+          {{ payload.opponent }} ran out of time &mdash; you win {{ payload.label }}.
+        {% else %}
+          You ran out of time, so {{ payload.opponent }} won {{ payload.label }}.
+        {% endif %}
+      </div>
+    {% endif %}
+    <div class="boardwrap">
+      <div id="board-area">
+        {% include "_board.html" %}
+      </div>
+    </div>
+  {% endif %}
+</div>

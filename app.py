@@ -43,6 +43,7 @@ from models import (
     GamePost,
     GamePostRsvp,
     GameQueue,
+    GAME_EVENTS,
     Match,
     MESSAGE_PARENTS,
     Message,
@@ -441,6 +442,28 @@ def message_filter(kind, parent):
     return MESSAGE_PARENTS[kind] == parent.id
 
 
+def event_wording(message, game, actor_name, other_name):
+    """How a game event reads to the person looking at it.
+
+    The stored body is neutral prose, because a Message row is written once
+    and read by two people who need different sentences: the sender wants
+    "You invited Ben", the recipient "Ann invited you". This is the only
+    place current_user is known, so this is where that choice belongs.
+    """
+    label = rules.LABELS.get(game.kind, game.kind) if game else "a game"
+    mine = message.user_id == current_user.id
+    me, them = ("You", other_name) if mine else (actor_name, "you")
+
+    if message.event == "invited":
+        return f"{me} invited {them} to {label}."
+    if message.event == "accepted":
+        return f"{me} accepted the {label} invite."
+    if message.event == "declined":
+        return f"{me} declined the {label} invite."
+    # A result reads the same to both: the stored prose already names people.
+    return message.body
+
+
 def chat_rows(kind, parent, after=0):
     rows = db.session.execute(
         db.select(Message, User.name)
@@ -455,6 +478,13 @@ def chat_rows(kind, parent, after=0):
         posts = {p.id: p for p in db.session.scalars(
             db.select(GamePost).where(GamePost.id.in_(post_ids)))}
 
+    # One query for every game mentioned, rather than one per message.
+    events = {}
+    game_ids = [m.game_id for m, _ in rows if m.game_id]
+    if game_ids:
+        events = {g.id: g for g in db.session.scalars(
+            db.select(Game).where(Game.id.in_(game_ids)))}
+
     out = []
     for m, name in rows:
         entry = {
@@ -468,6 +498,29 @@ def chat_rows(kind, parent, after=0):
         post = posts.get(m.post_id)
         if post is not None:
             entry["post"] = post_payload(post)
+
+        if m.event:
+            game = events.get(m.game_id)
+            other = db.session.get(
+                User,
+                game.user_in_seat(1 - game.seat_of(current_user.id))
+            ) if game and game.seat_of(current_user.id) is not None else None
+            entry["event"] = m.event
+            entry["game_id"] = m.game_id
+            entry["body"] = event_wording(
+                m, game, name, other.name if other else "them")
+            # Only the invitee, and only while it is still unanswered, gets
+            # buttons. The poller reads this rather than deciding for itself.
+            entry["can_answer"] = bool(
+                game is not None
+                and game.status == "invited"
+                and m.event == "invited"
+                and game.player_b == current_user.id
+            )
+            entry["accept_url"] = url_for("game_action", game_id=m.game_id,
+                                          action="accept")
+            entry["decline_url"] = url_for("game_action", game_id=m.game_id,
+                                           action="decline")
         out.append(entry)
     return out
 
@@ -627,6 +680,11 @@ def chat(kind, target_id):
     # Only a group chat has a code, a member list and an owner. The invite
     # picker offers your friends, since inviting a stranger by name is what
     # the code is for.
+    # The game pane. Only a one-on-one chat has one: there is no "the game
+    # between us" in a room with twelve people in it.
+    game = pane_game(target_id) if kind == "match" else None
+    game_seat = game.seat_of(current_user.id) if game is not None else None
+
     group = parent if kind == "group" else None
     invitable = []
     if group is not None:
@@ -645,11 +703,55 @@ def chat(kind, target_id):
         is_owner=group is not None and group.owner_id == current_user.id,
         invitable=invitable,
         subtitle=CHAT_SUBTITLE[kind],
+        game=game,
+        seat=game_seat,
+        payload=game_payload(game, game_seat) if game is not None else None,
+        game_token=game_token(game),
+        # Asked of live_game_with rather than the pane: an invite is a message
+        # now, so the pane does not see it, and offering to start a second
+        # game during one would be wrong.
+        can_start=(kind == "match" and live_game_with(target_id) is None),
+        other_id=target_id,
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
         catalogue=activity_catalogue(),
     )
+
+
+@app.route("/chats/match/<int:other_id>/game")
+@login_required
+def chat_game(other_id):
+    """The game pane, for the poller.
+
+    Returns the rendered pane rather than a state object, so _board.html stays
+    the single source of the board markup -- rebuilding four games' boards in
+    JavaScript would be the alternative.
+
+    The token is what the client compares: it only re-swaps when that changes,
+    which is what stops a poll wiping a half-made chess move.
+    """
+    parent, _ = chat_target("match", other_id)
+    if parent is None:
+        return jsonify({"error": "unavailable"}), 403
+
+    game = pane_game(other_id)
+    # Whether a game is in play at all, which is not the same question as
+    # whether the panel has something to show: an invite is in play but lives
+    # in the log. This is what decides if the launcher stays hidden.
+    busy = live_game_with(other_id) is not None
+
+    if game is None:
+        return jsonify({"token": "none", "html": "", "live": busy})
+
+    seat = game.seat_of(current_user.id)
+    return jsonify({
+        "token": game_token(game),
+        "live": busy,
+        "html": render_template("_gamepane.html", game=game, seat=seat,
+                                payload=game_payload(game, seat),
+                                other_id=other_id),
+    })
 
 
 @app.route("/chats/<kind>/<int:target_id>/messages")
@@ -703,6 +805,165 @@ def game_payload(game, seat):
     }
 
 
+# A game in play. One at a time per pair, so "the game with them" is never
+# ambiguous and the chat pane never has to choose.
+LIVE_GAME = ("invited", "active")
+OVER_GAME = ("finished", "declined")
+
+
+def shared_with(other_id):
+    """Clause matching games between me and someone, either orientation.
+
+    player_a is the inviter rather than the lower id, so this cannot use
+    pair() the way matches do.
+    """
+    return db.or_(
+        db.and_(Game.player_a == current_user.id, Game.player_b == other_id),
+        db.and_(Game.player_a == other_id, Game.player_b == current_user.id),
+    )
+
+
+def live_game_with(other_id):
+    """The game in play with someone, or None."""
+    return db.session.scalar(
+        db.select(Game)
+        .where(shared_with(other_id), Game.status.in_(LIVE_GAME))
+        .order_by(Game.updated_at.desc(), Game.id.desc())
+    )
+
+
+def pane_game(other_id):
+    """What the chat's game pane should show.
+
+    An invite is not here: it arrives as a message with its own buttons, so
+    the panel only appears once there is a board to show. Otherwise the most
+    recent finished game this player has not dismissed and that is still
+    inside CLOSE_AFTER, so a result stays put long enough to be read and then
+    puts itself away without a client timer.
+
+    Also where an abandoned game gets settled, because this is the one place
+    both the page render and the poller pass through.
+    """
+    live = live_game_with(other_id)
+    if live is not None:
+        settle_abandoned(live)
+        if live.status == "active":
+            return live
+        # It was just forfeited; fall through and show the result.
+
+    return db.session.scalar(
+        db.select(Game)
+        .where(
+            shared_with(other_id),
+            Game.status.in_(OVER_GAME),
+            Game.updated_at > datetime.utcnow() - CLOSE_AFTER,
+            db.or_(
+                db.and_(Game.player_a == current_user.id,
+                        Game.closed_a.is_(False)),
+                db.and_(Game.player_b == current_user.id,
+                        Game.closed_b.is_(False)),
+            ),
+        )
+        .order_by(Game.updated_at.desc(), Game.id.desc())
+    )
+
+
+# How long a finished game's result stays in the chat before the panel puts
+# itself away, and how long a player has to act before the game is forfeited.
+# The same ten minutes, so a whole game lifecycle can be watched in one go.
+CLOSE_AFTER = timedelta(minutes=10)
+ABANDON_AFTER = timedelta(minutes=10)
+
+
+def owes_action(game):
+    """Which seat the game is waiting on, or None if nobody can be blamed.
+
+    Normally whoever's turn it is. Battleship's placement phase is the
+    exception: both players act at once there, so turn_seat returns None and
+    the ready flags are what identify a laggard. With neither side ready there
+    is no single person at fault, and nothing should be forfeited.
+    """
+    if game.status != "active":
+        return None
+
+    if game.turn_id is not None:
+        return game.seat_of(game.turn_id)
+
+    state = game.state or {}
+    ready = state.get("ready")
+    if isinstance(ready, list) and len(ready) == 2 and ready.count(False) == 1:
+        return ready.index(False)
+    return None
+
+
+def game_event(game, event, actor_id, body):
+    """Record a moment in the game as a message in the players' chat.
+
+    A real Message row, hanging off the match like any other, so it arrives
+    through the message poller the two players already have running. The
+    stored body is neutral prose -- chat_rows rewords it per viewer, which is
+    the only place current_user is known.
+    """
+    lo, hi = pair(game.player_a, game.player_b)
+    match = db.session.scalar(
+        db.select(Match).filter_by(user_lo=lo, user_hi=hi)
+    )
+    if match is None:
+        return
+    db.session.add(Message(user_id=actor_id, match_id=match.id,
+                           game_id=game.id, event=event, body=body))
+
+
+def settle_abandoned(game):
+    """Forfeit a game nobody has moved in. Returns True if it just happened.
+
+    A write during a GET, which is deliberate: there is no scheduler, so the
+    only moment this can be noticed is when somebody looks. Guarded on status
+    and on there being exactly one player at fault, and it re-checks the
+    status after the clock test, so two players polling at the same instant
+    cannot both finish the game or write two messages.
+    """
+    if game is None or game.status != "active":
+        return False
+    if datetime.utcnow() - game.updated_at < ABANDON_AFTER:
+        return False
+
+    seat = owes_action(game)
+    if seat is None:
+        return False
+
+    winner_id = game.user_in_seat(1 - seat)
+    loser = db.session.get(User, game.user_in_seat(seat))
+    winner = db.session.get(User, winner_id)
+    label = rules.LABELS.get(game.kind, game.kind)
+
+    finish_game(game, "abandoned", winner_id)
+    game.updated_at = datetime.utcnow()
+    game_event(game, "abandoned", winner_id,
+               f"{loser.name if loser else 'They'} did not come back, so "
+               f"{winner.name if winner else 'the other player'} won {label}.")
+    db.session.commit()
+    return True
+
+
+def game_token(game):
+    """What the poller compares to decide whether to swap the pane.
+
+    Anything that changes what the pane should look like has to move this, and
+    nothing else may: re-swapping identical markup would wipe a half-made
+    chess move, which is a two-click interaction.
+    """
+    if game is None:
+        return "none"
+    return f"{game.id}:{game.version}:{game.status}"
+
+
+def game_chat(game, seat):
+    """Back to the conversation this game belongs to."""
+    return redirect(url_for("chat", kind="match",
+                            target_id=game.user_in_seat(1 - seat)))
+
+
 def finish_game(game, outcome, winner_id=None):
     game.status = "finished"
     game.outcome = outcome
@@ -728,6 +989,9 @@ def game_lobby():
             "game": game,
             "label": rules.LABELS.get(game.kind, game.kind),
             "opponent": other.name if other else "Opponent",
+            # The chat is where the board lives, so the lobby links there
+            # directly rather than bouncing through game_view's redirect.
+            "opponent_id": game.user_in_seat(1 - seat),
             "waiting_on_you": (
                 (game.status == "invited" and game.player_b == current_user.id)
                 or (game.status == "active"
@@ -762,6 +1026,13 @@ def game_new():
         flash("You can only start a game with one of your friends.")
         return redirect(url_for("game_lobby"))
 
+    # One at a time, so the chat pane always has a single game to show.
+    busy = live_game_with(opponent_id)
+    if busy is not None:
+        flash(f"You already have {rules.LABELS[busy.kind]} going with them. "
+              "Finish that one first.")
+        return redirect(url_for("chat", kind="match", target_id=opponent_id))
+
     game = Game(
         kind=kind,
         status="invited",
@@ -772,32 +1043,35 @@ def game_new():
         version=0,
     )
     db.session.add(game)
+    db.session.flush()
+
+    other = db.session.get(User, opponent_id)
+    game_event(game, "invited", current_user.id,
+               f"{current_user.name} invited {other.name if other else 'them'} "
+               f"to {rules.LABELS[kind]}.")
     db.session.commit()
 
-    flash(f"Invite sent for {rules.LABELS[kind]}.")
-    return redirect(url_for("game_view", game_id=game.id))
+    # No flash: the chat now carries this, and a flash would sit on screen
+    # until the next full page swap -- the panel poller only replaces the
+    # panel, so it has no way to clear one.
+    # Back to the chat, not off to a separate board: the enhancer swaps this
+    # response in place, so the inviter sees their own invite appear without
+    # leaving the conversation.
+    return redirect(url_for("chat", kind="match", target_id=opponent_id))
 
 
 @app.route("/games/<int:game_id>")
 @login_required
 def game_view(game_id):
+    """Kept so old links and the lobby still work; the chat is where a game
+    lives now, so this just points there."""
     game, seat = game_for(game_id)
 
     if game is None:
         flash("That game is not available to you.")
         return redirect(url_for("game_lobby"))
 
-    other_id = game.user_in_seat(1 - seat)
-    parent, _ = chat_target("match", other_id)
-
-    return render_template(
-        "game.html",
-        game=game,
-        seat=seat,
-        payload=game_payload(game, seat),
-        other_id=other_id,
-        messages=chat_rows("match", parent) if parent else None,
-    )
+    return game_chat(game, seat)
 
 
 @app.route("/games/<int:game_id>/state")
@@ -841,17 +1115,25 @@ def game_move(game_id):
             game.updated_at = datetime.utcnow()
 
             outcome = rules.result(game.kind, state)
+            label = rules.LABELS.get(game.kind, game.kind)
             if outcome is None:
                 nxt = rules.turn_seat(game.kind, state)
                 game.turn_id = None if nxt is None else game.user_in_seat(nxt)
             elif outcome[0] == "win":
-                finish_game(game, "win", game.user_in_seat(outcome[1]))
+                winner_id = game.user_in_seat(outcome[1])
+                winner = db.session.get(User, winner_id)
+                finish_game(game, "win", winner_id)
+                game_event(game, "ended", current_user.id,
+                           f"{winner.name if winner else 'Someone'} "
+                           f"won {label}.")
             else:
                 finish_game(game, "draw")
+                game_event(game, "ended", current_user.id,
+                           f"{label} ended in a draw.")
 
             db.session.commit()
 
-    return redirect(url_for("game_view", game_id=game_id))
+    return game_chat(game, seat)
 
 
 @app.route("/games/<int:game_id>/<any(accept, decline, resign):action>",
@@ -874,25 +1156,58 @@ def game_action(game_id, action):
             nxt = rules.turn_seat(game.kind, game.state)
             game.turn_id = None if nxt is None else game.user_in_seat(nxt)
             game.updated_at = datetime.utcnow()
+            label = rules.LABELS.get(game.kind, game.kind)
+            game_event(game, "accepted", current_user.id,
+                       f"{current_user.name} accepted the {label} invite.")
             db.session.commit()
-            flash("Game on.")
         else:
             game.status = "declined"
             game.turn_id = None
             game.updated_at = datetime.utcnow()
+            label = rules.LABELS.get(game.kind, game.kind)
+            game_event(game, "declined", current_user.id,
+                       f"{current_user.name} declined the {label} invite.")
             db.session.commit()
-            flash("Invite declined.")
 
     elif action == "resign":
         if game.status != "active":
             flash("That game isn't in play.")
         else:
-            finish_game(game, "resigned", game.user_in_seat(1 - seat))
+            winner_id = game.user_in_seat(1 - seat)
+            winner = db.session.get(User, winner_id)
+            label = rules.LABELS.get(game.kind, game.kind)
+            finish_game(game, "resigned", winner_id)
             game.updated_at = datetime.utcnow()
+            game_event(game, "ended", current_user.id,
+                       f"{current_user.name} resigned, so "
+                       f"{winner.name if winner else 'the other player'} "
+                       f"won {label}.")
             db.session.commit()
-            flash("You resigned.")
 
-    return redirect(url_for("game_view", game_id=game_id))
+    return game_chat(game, seat)
+
+
+@app.route("/games/<int:game_id>/close", methods=["POST"])
+@login_required
+def game_close(game_id):
+    """Put the chat back to full width once a game is over.
+
+    Per seat: dismissing your own pane must not take the result off the other
+    player's screen before they have looked at it.
+    """
+    game, seat = game_for(game_id)
+
+    if game is None:
+        flash("That game is not available to you.")
+        return redirect(url_for("game_lobby"))
+
+    if game.status in LIVE_GAME:
+        flash("That game is still in play.")
+    else:
+        game.close_for(seat)
+        db.session.commit()
+
+    return game_chat(game, seat)
 
 
 POST_NOTE_MAX = 300

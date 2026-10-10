@@ -282,6 +282,11 @@ class Match(db.Model):
     )
 
 
+# The moments in a game worth recording in the conversation. A message with
+# one of these set is a notice about a game rather than something somebody
+# said, and renders that way.
+GAME_EVENTS = ("invited", "accepted", "declined", "ended", "abandoned")
+
 # The columns a message may hang off, in the order they appear inside the live
 # CHECK constraint. Keep that order: the rendered constraint text is what
 # db/schema_diff.py compares between databases, so reordering here would make a
@@ -309,17 +314,31 @@ class Message(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey("chats.id", ondelete="CASCADE"))
     # A message may carry a "looking for a game" post, rendered as a card.
     post_id = db.Column(db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"))
+    # ...or record something that happened to a game. Both of these say what a
+    # message is *about*, not which chat it hangs off, so neither belongs in
+    # ck_message_one_parent below.
+    game_id = db.Column(db.Integer, db.ForeignKey("games.id", ondelete="CASCADE"))
+    event = db.Column(db.String(12))
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
         # A message hangs off exactly one chat, never both and never neither.
         db.CheckConstraint(ONE_PARENT, name="ck_message_one_parent"),
+        db.CheckConstraint(
+            "event IS NULL OR event IN ("
+            + ", ".join(f"'{e}'" for e in GAME_EVENTS) + ")",
+            name="ck_message_event",
+        ),
+        # An event message is always about a game, and vice versa.
+        db.CheckConstraint("(event IS NULL) = (game_id IS NULL)",
+                           name="ck_message_event_has_game"),
         db.Index("ix_messages_match", "match_id", "id"),
         db.Index("ix_messages_club", "club_id", "id"),
         db.Index("ix_messages_room", "room", "id"),
         db.Index("ix_messages_pairing", "pairing_id", "id"),
         db.Index("ix_messages_chat", "chat_id", "id"),
+        db.Index("ix_messages_game", "game_id"),
     )
 
 
@@ -478,6 +497,13 @@ class Game(db.Model):
     version = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Whether each seat has dismissed the finished result from their chat.
+    # Per seat, so putting your own chat back to full width does not take the
+    # result away from the other player before they have seen it.
+    closed_a = db.Column(db.Boolean, nullable=False, default=False,
+                         server_default="false")
+    closed_b = db.Column(db.Boolean, nullable=False, default=False,
+                         server_default="false")
 
     __table_args__ = (
         db.CheckConstraint("player_a <> player_b", name="ck_game_two_players"),
@@ -491,7 +517,8 @@ class Game(db.Model):
             name="ck_game_kind",
         ),
         db.CheckConstraint(
-            "outcome IS NULL OR outcome IN ('win', 'draw', 'resigned')",
+            "outcome IS NULL OR outcome IN "
+            "('win', 'draw', 'resigned', 'abandoned')",
             name="ck_game_outcome",
         ),
         db.Index("ix_games_player_a", "player_a"),
@@ -507,6 +534,15 @@ class Game(db.Model):
 
     def user_in_seat(self, seat):
         return self.player_a if seat == 0 else self.player_b
+
+    def closed_for(self, seat):
+        return self.closed_b if seat else self.closed_a
+
+    def close_for(self, seat):
+        if seat:
+            self.closed_b = True
+        else:
+            self.closed_a = True
 
 
 def pair(a, b):
