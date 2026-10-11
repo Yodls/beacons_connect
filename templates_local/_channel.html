@@ -1,0 +1,133 @@
+{#
+  The one live channel. Every page holds exactly one of these.
+
+  It always watches notifications, and watches a chat as well when the page has
+  registered one through Beacon.watch. That is why the chat no longer holds a
+  request of its own: one tab, one held thread, one place on the server where
+  the database connection is handed back between probes.
+
+  Inside #live on purpose, so a navigation cancels it and the next page arms a
+  fresh one. Nothing here outlives the page that started it.
+#}
+<script>
+  (function () {
+    "use strict";
+
+    var url = {{ url_for('live') | tojson }};
+    var token = {{ (notice_token or "") | tojson }};
+    var seen = {{ (notice_seen or 0) | int }};
+    var at = location.pathname + location.search;
+
+    var stopped = false;
+    var inflight = null;
+    var failures = 0;
+    var first = null;
+
+    function toastHost() { return document.getElementById("toasts"); }
+
+    function toast(text) {
+      var host = toastHost();
+      if (!host) { return; }
+      var box = document.createElement("div");
+      box.className = "toast";
+      // textContent, never innerHTML: a notice body carries somebody's name,
+      // which is somebody's input.
+      box.textContent = text;
+      host.appendChild(box);
+      // Long enough to read, short enough not to sit in the way. The bell has
+      // it either way, so losing a toast costs nothing.
+      setTimeout(function () { box.classList.add("going"); }, 5000);
+      setTimeout(function () {
+        if (box.parentNode) { box.parentNode.removeChild(box); }
+      }, 5600);
+    }
+
+    function applyNotices(data) {
+      if (!data) { return; }
+      token = data.token;
+      seen = data.seen;
+
+      var count = document.getElementById("bell-count");
+      if (count) {
+        count.textContent = String(data.count);
+        count.hidden = !data.count;
+      }
+
+      // Only the list is replaced, so an open bell stays open.
+      var list = document.getElementById("bell-list");
+      if (list && data.html) {
+        var parsed = new DOMParser().parseFromString(data.html, "text/html");
+        var fresh = parsed.getElementById("bell-list");
+        if (fresh) { list.replaceWith(fresh); }
+      }
+
+      (data.toasts || []).forEach(function (t) { toast(t.body); });
+    }
+
+    function query() {
+      var q = "?notices=" + encodeURIComponent(token) +
+              "&seen=" + seen +
+              "&at=" + encodeURIComponent(at);
+      // Read every round rather than captured once: the page script that
+      // registers this runs after the channel is armed.
+      var what = Beacon.watching;
+      if (what && what.here) {
+        var state = (what.state ? what.state() : null) || {};
+        q += "&here=" + encodeURIComponent(what.here) +
+             "&after=" + (state.after || 0) +
+             "&token=" + encodeURIComponent(state.token || "");
+      }
+      return q;
+    }
+
+    function round() {
+      if (stopped) { return; }
+      var ctl = new AbortController();
+      inflight = ctl;
+
+      fetch(url + query(),
+            {headers: {"Accept": "application/json"}, signal: ctl.signal})
+        .then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        })
+        .then(function (data) {
+          failures = 0;
+          applyNotices(data.notices);
+          var what = Beacon.watching;
+          if (what && what.apply) { what.apply(data); }
+          round();
+        })
+        .catch(function (err) {
+          // An abort is us leaving or restarting, not a failure.
+          if (stopped || (err && err.name === "AbortError")) { return; }
+          failures += 1;
+          if (failures >= 5) { return; }
+          setTimeout(round, 1000 * failures);
+        });
+    }
+
+    function onShow() {
+      if (document.hidden || stopped) { return; }
+      // If the browser dropped the held request while the tab was away, start
+      // a fresh one rather than waiting the old one out.
+      if (inflight) { inflight.abort(); }
+      round();
+    }
+
+    Beacon.live(function () {
+      // Deferred by one tick. The page's own script block renders after the
+      // shell, so without this the first request would go out before the chat
+      // had said what it wants watched.
+      first = setTimeout(round, 0);
+      document.addEventListener("visibilitychange", onShow);
+
+      return function () {
+        stopped = true;
+        clearTimeout(first);
+        document.removeEventListener("visibilitychange", onShow);
+        if (inflight) { inflight.abort(); }
+      };
+    });
+  })();
+</script>

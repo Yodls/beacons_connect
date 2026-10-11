@@ -548,3 +548,89 @@ class Game(db.Model):
 def pair(a, b):
     """Matches are symmetric but stored once; always normalise through this."""
     return (a, b) if a < b else (b, a)
+
+
+# Everything a notice can be about. A tuple, and the CHECK below is built from
+# it, so adding a kind is one entry here plus one writer in notices.py.
+NOTICE_KINDS = (
+    "friend_request",    # somebody asked to be your friend
+    "friend_accepted",   # the request you sent was accepted
+    "chat_invite",       # you were invited to a chat somebody made
+    "game_invite",       # you were challenged to a game
+    "game_answer",       # the challenge you sent was accepted or declined
+    "paired",            # you and somebody else picked the same game
+    "message",           # new messages in a chat you were not reading
+)
+
+
+class Notice(db.Model):
+    """One thing worth telling one person about.
+
+    `body` and `url` are deliberately denormalised -- the opposite of
+    Message.event, which stores a code and lets event_wording() phrase it per
+    viewer. That exists because both players read the same message and it has
+    to say "you resigned" to one and "Ann resigned" to the other. A notice has
+    exactly one recipient, so there is no per-viewer wording to do, and holding
+    the finished sentence means the bell is one query with no joins however
+    many rows it shows -- and that a notice still reads correctly after the
+    thing it describes has been renamed or deleted.
+
+    game_id and chat_id are here because the existing accept/decline routes are
+    keyed by them, which is what makes a notice actionable in place. A friend
+    request needs no column of its own: /matches/<other_id>/<action> is keyed
+    by the other person, which is actor_id.
+    """
+
+    __tablename__ = "notices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Who is being told.
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    # Who caused it. Null for anything the app itself decided.
+    actor_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    kind = db.Column(db.String(24), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    url = db.Column(db.Text, nullable=False)
+    # How many things this one row stands for. Only the message kind ever goes
+    # above 1: the writer bumps this rather than adding a second row, so a
+    # chatty conversation is one line in the bell and not thirty.
+    count = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    game_id = db.Column(db.Integer, db.ForeignKey("games.id", ondelete="CASCADE"))
+    chat_id = db.Column(db.Integer, db.ForeignKey("chats.id", ondelete="CASCADE"))
+    # When this row last changed, as a number rather than a clock. Separate
+    # from the id because a coalesced row is *updated*: the id of "3 new
+    # messages from Ann" is the id the first message made, so "newer than what
+    # that tab has seen" cannot be answered with ids alone -- and a message
+    # that neither toasts nor moves the badge arrives with no signal at all.
+    # Drawn from its own sequence, rewritten on every change, and the id is
+    # left alone so a bell already on screen keeps working buttons.
+    bump = db.Column(db.BigInteger, nullable=False,
+                     server_default=db.text("nextval('notices_bump_seq')"))
+    read_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "kind IN (" + ", ".join(f"'{k}'" for k in NOTICE_KINDS) + ")",
+            name="ck_notice_kind",
+        ),
+        # Nobody is told about their own doing. This is the one rule the whole
+        # feature would be most annoying to get wrong, and a rule in the
+        # schema cannot be forgotten by a caller: a writer that gets this
+        # wrong fails loudly on insert instead of quietly spamming somebody
+        # with their own activity.
+        db.CheckConstraint("actor_id IS NULL OR actor_id <> user_id",
+                           name="ck_notice_not_self"),
+        db.CheckConstraint("count >= 1", name="ck_notice_count"),
+        # The badge and the unread filter.
+        db.Index("ix_notices_unread", "user_id", "read_at"),
+        # The newest-first list.
+        db.Index("ix_notices_recent", "user_id", "id"),
+        # Finding the open message notice for one conversation, to bump it.
+        db.Index("ix_notices_scope", "user_id", "kind", "url"),
+    )
+
+    def seen(self):
+        return self.read_at is not None

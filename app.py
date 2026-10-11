@@ -29,6 +29,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import games as rules
 import matching
+import notices
 from sqlalchemy.exc import IntegrityError
 
 from models import (
@@ -213,6 +214,10 @@ def inject_dock():
 
     The third is the pending chat invites. It is a constant cost whatever the
     numbers involved, which is what the query-count test actually pins.
+
+    Six now, not three: the bell adds the unread summary, the rows it draws and
+    the high-water mark the channel starts from. All three are flat in the
+    number of notices, which is the property that test actually protects.
     """
     if not current_user.is_authenticated:
         return {}
@@ -240,9 +245,18 @@ def inject_dock():
         .order_by(ChatInvite.created_at.desc())
     ).all()
 
+    # The bell. Three queries, and flat in the number of notices: a notice
+    # carries its own finished wording, so no row it draws costs a join.
+    bell_token, bell_unread = notices.state(current_user.id)
     term = request.args.get(DOCK_PARAM, "").strip()
     return {
         "pending_count": len(waiting),
+        "notice_rows": notices.recent(current_user.id),
+        "notice_count": bell_unread,
+        # Handed to the live channel so its first wait is a real wait, and so a
+        # notice already on the page is never toasted a second time.
+        "notice_token": bell_token,
+        "notice_seen": notices.watermark(current_user.id),
         "chat_invites": [{"chat_id": chat.id, "name": chat.name, "from": who}
                          for chat, who in invites[:DOCK_REQUESTS]],
         "invite_count": len(invites),
@@ -683,6 +697,54 @@ def matches():
     )
 
 
+def chat_audience(kind, parent, target_id):
+    """Everybody a new message should be announced to, bar whoever sent it.
+
+    The campus-wide room answers with nobody, deliberately: one post there
+    would notify every student on the site at once.
+    """
+    if kind == COMMUNITY:
+        return []
+    if kind == "match":
+        return [target_id]
+    if kind == "pair":
+        return [parent.user_hi if parent.user_lo == current_user.id
+                else parent.user_lo]
+    if kind == "group":
+        return list(db.session.scalars(
+            db.select(ChatMember.user_id)
+            .where(ChatMember.chat_id == parent.id,
+                   ChatMember.user_id != current_user.id)))
+    if kind == "club":
+        return list(db.session.scalars(
+            db.select(ClubMember.user_id)
+            .where(ClubMember.club_id == parent.id,
+                   ClubMember.user_id != current_user.id)))
+    return []
+
+
+def notify_message(kind, parent, target_id, title=None):
+    """Tell the rest of a conversation that something was said in it.
+
+    Note which target_id each notice gets. A one-to-one chat is addressed by
+    the *other* person, so the link in Ben's notice has to name Ann, not Ben --
+    the sender, not the recipient. Every other kind is addressed by the chat
+    itself and is the same url for everyone in it.
+
+    `title` is what chat_target already worked out, passed on so a notice about
+    a group or a club can name it. A one-to-one chat's title is the other
+    person's name, which the sentence already carries, so it is left out there.
+    """
+    where = None if kind == "match" else title
+    for user_id in chat_audience(kind, parent, target_id):
+        notices.message(
+            user_id, current_user, kind,
+            current_user.id if kind == "match" else target_id,
+            chat_id=parent.id if kind == "group" else None,
+            where=where,
+        )
+
+
 @app.route("/chats/<kind>/<int:target_id>", methods=["GET", "POST"])
 @login_required
 def chat(kind, target_id):
@@ -703,9 +765,17 @@ def chat(kind, target_id):
             message = Message(user_id=current_user.id, body=body)
             attach_parent(message, kind, parent)
             db.session.add(message)
+            notify_message(kind, parent, target_id, title)
             db.session.commit()
 
         return redirect(url_for("chat", kind=kind, target_id=target_id))
+
+    # Reading a conversation retires its "new messages" notice, which is the
+    # whole of "do not tell somebody about what they are already looking at".
+    # The live channel does the same for whichever chat a tab has open, so this
+    # covers arriving and that covers staying.
+    if notices.clear_chat(current_user.id, kind, target_id):
+        db.session.commit()
 
     # Only a one-to-one chat has a single person to name. resolve_room above
     # already fetched this user for that kind, so the identity map answers
@@ -780,9 +850,43 @@ def live_pane(target_id, game):
     }
 
 
-@app.route("/chats/<kind>/<int:target_id>/live")
-@login_required
-def chat_live(kind, target_id):
+def notice_slice(user_id, seen, skip_url=None):
+    """The notices half of a live answer: the badge, the panel and the toasts.
+
+    Only built when something has actually changed, so the cost here is paid
+    per event rather than per probe.
+
+    `skip_url` is the conversation this tab has open. It is left out of the
+    count and the toasts, so delivering a message to a chat on screen does not
+    also badge it -- by exclusion, not by marking it read, because a held
+    request outlives the tab that made it and a ghost must not be able to read
+    a conversation on somebody's behalf. The tab's *next* request does the
+    marking, at its start, and a ghost has no next request.
+
+    The rows carry little forms that come back to the page they were used on,
+    and the page is whatever the tab is showing -- not this request, which is
+    /live. Hence `at`: the channel says where it is, and a value that is not
+    plainly a local path is thrown away rather than trusted.
+    """
+    # The token covers everything, the count does not: see notices.token.
+    token, _ = notices.state(user_id)
+    unread = notices.unread_count(user_id, skip_url)
+    at = request.args.get("at", "/")
+    if not at.startswith("/") or at.startswith("//"):
+        at = "/"
+    return {
+        "token": token,
+        "count": unread,
+        "seen": notices.watermark(user_id),
+        "html": render_template("_noticelist.html",
+                                notice_rows=notices.recent(user_id),
+                                notice_back=at),
+        "toasts": [{"id": n.id, "body": n.body}
+                   for n in notices.since(user_id, seen, skip_url)],
+    }
+
+
+def live_reply(kind, target_id):
     """Hold the request until something changes, then answer at once.
 
     The delay in a chat was never the server -- a poll answered in about 25ms
@@ -791,53 +895,169 @@ def chat_live(kind, target_id):
     probe every fifth of a second rather than a full request several times a
     second.
 
+    One channel per tab, not one per thing being watched. Notices are always
+    watched; a chat is watched as well when the tab has one open. That keeps
+    one held thread per tab however much is going on in it, and -- far more
+    importantly -- keeps a single copy of the rule below.
+
     The session is released between probes, and that is the part that matters.
     A Session holds its connection until commit, rollback or close, and the
     pool is five plus ten overflow -- so fifteen of these waiting with a
     session open would starve every other request on the site.
     """
-    parent, _ = chat_target(kind, target_id)
-    if parent is None:
-        return jsonify({"error": "unavailable"}), 403
+    me = current_user.id
+    seen = request.args.get("seen", type=int, default=0)
+    bell = request.args.get("notices", "")
+
+    watching = kind is not None
+    parent = None
+    if watching:
+        parent, _ = chat_target(kind, target_id)
+        if parent is None:
+            return jsonify({"error": "unavailable"}), 403
 
     after = request.args.get("after", type=int, default=0)
     token = request.args.get("token", "")
 
     # Built from primitives, because the ORM object behind `parent` is
     # released along with the session between probes.
-    if kind == COMMUNITY:
-        where = Message.room == COMMUNITY
-    else:
-        where = MESSAGE_PARENTS[kind] == parent.id
+    where = None
+    if watching:
+        if kind == COMMUNITY:
+            where = Message.room == COMMUNITY
+        else:
+            where = MESSAGE_PARENTS[kind] == parent.id
+
+        # Whatever is on screen is already read. Once, here, at the start of
+        # the request -- the one moment the tab that asked for it demonstrably
+        # still existed. Anything that arrives later is kept out of the badge
+        # by exclusion instead, so an abandoned request cannot swallow it.
+        if notices.clear_chat(me, kind, target_id):
+            db.session.commit()
 
     deadline = time.monotonic() + LIVE_WAIT
     while True:
-        newest = db.session.scalar(
-            db.select(db.func.max(Message.id)).where(where)
-        ) or 0
-        # pane_game rather than a hand-rolled probe: it owns the rules about
-        # which game the panel shows, and it is where an abandoned game gets
-        # settled. Reproducing that here would let the two drift.
-        game = pane_game(target_id) if kind == "match" else None
-        fresh = game_token(game)
+        # One indexed aggregate. A plain max(id) would miss a notice that was
+        # coalesced into an existing row, or one that was marked read.
+        bell_now = notices.token(me)
 
-        if newest > after or fresh != token:
-            parent, _ = chat_target(kind, target_id)
-            rows = chat_rows(kind, parent, after=after)
+        newest = after
+        game = None
+        fresh = token
+        if watching:
+            newest = db.session.scalar(
+                db.select(db.func.max(Message.id)).where(where)
+            ) or 0
+            # pane_game rather than a hand-rolled probe: it owns the rules
+            # about which game the panel shows, and it is where an abandoned
+            # game gets settled. Reproducing that here would let the two drift.
+            game = pane_game(target_id) if kind == "match" else None
+            fresh = game_token(game)
+
+        if newest > after or fresh != token or bell_now != bell:
+            rows = []
+            if watching:
+                parent, _ = chat_target(kind, target_id)
+                rows = chat_rows(kind, parent, after=after)
             return jsonify({
                 "after": max([r["id"] for r in rows], default=after),
                 "messages": rows,
-                "game": live_pane(target_id, game) if kind == "match" else None,
+                "game": (live_pane(target_id, game)
+                         if watching and kind == "match" else None),
+                "notices": notice_slice(
+                    me, seen,
+                    skip_url=notices.chat_url(kind, target_id) if watching
+                    else None),
             })
 
         if time.monotonic() >= deadline:
             return jsonify({"after": after, "messages": [], "game": None,
-                            "quiet": True})
+                            "notices": None, "quiet": True})
 
         # Hand the connection back before sleeping. Without this the pool is
         # gone after fifteen simultaneous waits.
         db.session.remove()
         time.sleep(LIVE_TICK)
+
+
+@app.route("/live")
+@login_required
+def live():
+    """The app-wide channel. `here=match:12` adds a chat to what it watches."""
+    here = request.args.get("here", "")
+    if not here:
+        return live_reply(None, None)
+
+    kind, _, raw = here.partition(":")
+    if kind == COMMUNITY:
+        return live_reply(kind, 0)
+    if kind not in MESSAGE_PARENTS or not raw.isdigit():
+        return jsonify({"error": "unavailable"}), 403
+    return live_reply(kind, int(raw))
+
+
+@app.route("/chats/<kind>/<int:target_id>/live")
+@login_required
+def chat_live(kind, target_id):
+    """The old per-chat address, kept so a page served before a deploy works."""
+    if kind != COMMUNITY and kind not in MESSAGE_PARENTS:
+        return jsonify({"error": "unavailable"}), 403
+    return live_reply(kind, target_id)
+
+
+def bell_back():
+    """Back to the page the bell was opened on, if it is plainly a local path."""
+    target = request.form.get("back", "")
+    if target.startswith("/") and not target.startswith("//"):
+        return redirect(target)
+    return redirect(url_for("index"))
+
+
+@app.route("/notices/<int:notice_id>/open", methods=["POST"])
+@login_required
+def notice_open(notice_id):
+    """Open what a notice is about, and mark it read on the way.
+
+    A POST rather than a link so reading something is never a side effect of a
+    GET. The enhancer swaps the redirect in place, so it still behaves like
+    following a link.
+    """
+    notice = notices.mark_read(current_user.id, notice_id)
+    if notice is None:
+        flash("That notification is no longer there.")
+        return bell_back()
+
+    where = notice.url
+    db.session.commit()
+    if where.startswith("/") and not where.startswith("//"):
+        return redirect(where)
+    return redirect(url_for("index"))
+
+
+@app.route("/notices/<int:notice_id>/read", methods=["POST"])
+@login_required
+def notice_read(notice_id):
+    """Mark one notice read without going anywhere."""
+    notices.mark_read(current_user.id, notice_id)
+    db.session.commit()
+    return bell_back()
+
+
+@app.route("/notices/read", methods=["POST"])
+@login_required
+def notices_read_all():
+    notices.mark_all_read(current_user.id)
+    db.session.commit()
+    return bell_back()
+
+
+@app.route("/notices/clear", methods=["POST"])
+@login_required
+def notices_clear():
+    """Throw away what has been read. Unread notices are left alone."""
+    notices.clear_read(current_user.id)
+    db.session.commit()
+    return bell_back()
 
 
 @app.route("/chats/match/<int:other_id>/game")
@@ -1183,6 +1403,7 @@ def game_new():
     game_event(game, "invited", current_user.id,
                f"{current_user.name} invited {other.name if other else 'them'} "
                f"to {rules.LABELS[kind]}.")
+    notices.game_invite(opponent_id, current_user, game, rules.LABELS[kind])
     db.session.commit()
 
     # No flash: the chat now carries this, and a flash would sit on screen
@@ -1281,6 +1502,11 @@ def game_action(game_id, action):
         return redirect(url_for("game_lobby"))
 
     if action in ("accept", "decline"):
+        # Answered either way, so the notice that offered the game stops
+        # offering it -- including when the answer came from the chat instead.
+        notices.close(current_user.id, request.form.get("notice"))
+        db.session.commit()
+
         if game.status != "invited":
             flash("That invite has already been answered.")
         elif game.player_b != current_user.id:
@@ -1293,6 +1519,8 @@ def game_action(game_id, action):
             label = rules.LABELS.get(game.kind, game.kind)
             game_event(game, "accepted", current_user.id,
                        f"{current_user.name} accepted the {label} invite.")
+            notices.game_answer(game.player_a, current_user, game, label,
+                                "accept")
             db.session.commit()
         else:
             game.status = "declined"
@@ -1301,6 +1529,8 @@ def game_action(game_id, action):
             label = rules.LABELS.get(game.kind, game.kind)
             game_event(game, "declined", current_user.id,
                        f"{current_user.name} declined the {label} invite.")
+            notices.game_answer(game.player_a, current_user, game, label,
+                                "decline")
             db.session.commit()
 
     elif action == "resign":
@@ -1423,6 +1653,11 @@ def find_queue():
             lo, hi = pair(current_user.id, partner.user_id)
             pairing = GamePairing(user_lo=lo, user_hi=hi, game=game)
             db.session.add(pairing)
+            db.session.flush()
+            # Only the person who was already waiting gets told. Whoever
+            # arrived second is being redirected into the chat a line below, so
+            # a notice would be about the page they are looking at.
+            notices.paired(partner.user_id, current_user, pairing.id, game)
             db.session.commit()
             flash(f"Paired for {game}. Say hello.")
             return redirect(url_for("chat", kind="pair", target_id=pairing.id))
@@ -1762,6 +1997,7 @@ def chat_invite(chat_id):
                 # request: people change their minds about a group.
                 invite.status = "invited"
                 invite.invited_by = current_user.id
+            notices.chat_invite(other.id, current_user, chat)
             db.session.commit()
             flash(f"Invited {other.name} to {chat.name}.")
 
@@ -1773,6 +2009,11 @@ def chat_invite(chat_id):
 def chat_invite_respond(chat_id, action):
     invite = db.session.get(ChatInvite, (chat_id, current_user.id))
     chat = db.session.get(Chat, chat_id)
+
+    # Up here rather than per branch: however this request turns out, the
+    # notice that asked the question is no longer asking it.
+    notices.close(current_user.id, request.form.get("notice"))
+    db.session.commit()
 
     if invite is None or invite.status != "invited" or chat is None:
         flash("That invite is no longer waiting.")
@@ -1977,6 +2218,14 @@ def match_ask(other_id):
     outcome = matching.request_match(current_user.id, other_id)
     flash(ASK_MESSAGES[outcome].format(name=other.name if other else "that student"))
 
+    # "matched" means they had already asked, so this ask answered theirs.
+    if outcome == "asked":
+        notices.friend_request(other_id, current_user)
+        db.session.commit()
+    elif outcome == "matched":
+        notices.friend_accepted(other_id, current_user)
+        db.session.commit()
+
     # Checked first: an action taken in the dock returns to the page it was
     # taken on. Everything below keeps the destination it always had.
     if (back := dock_back()) is not None:
@@ -2001,8 +2250,15 @@ def match_respond(other_id, action):
             "decline": f"Turned down {name}'s friend request.",
             "cancel": f"Took back your friend request to {name}.",
         }[action])
+        if action == "accept":
+            notices.friend_accepted(other_id, current_user)
     else:
         flash("That friend request is no longer waiting on you.")
+
+    # Answered, so the notice that asked has nothing left to ask. Harmless when
+    # the answer came from the matches page and there is no notice id to close.
+    notices.close(current_user.id, request.form.get("notice"))
+    db.session.commit()
 
     if (back := dock_back()) is not None:
         return back

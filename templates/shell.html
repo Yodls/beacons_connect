@@ -11,6 +11,8 @@
     </main>
 
     <div class="side">
+      {% include "_notices.html" %}
+
       <details class="menu">
         <summary>&#9776;</summary>
         <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
@@ -41,4 +43,7 @@
   {# Included, not a block: a block can be emptied by one page and vanish,
      which is what sidebuttons does on /matches. #}
   {% include "_dock.html" %}
+
+  {# The one live channel, armed on every page that renders the shell. #}
+  {% include "_channel.html" %}
 {% endblock %}

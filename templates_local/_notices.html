@@ -1,0 +1,40 @@
+{#
+  The bell, in the top bar to the left of the profile menu.
+
+  A <details>, like the profile menu and the friends panel, so it opens and
+  shuts with no JavaScript at all. The live channel only ever replaces the
+  <ul> inside it, so it stays open while notices arrive underneath.
+#}
+{% import "_ui.html" as ui %}
+{# Flask puts a bare "?" on full_path when there is no query string. Strip
+   that one trailing character and nothing else -- stripping every "?" turned
+   /clubs?fq=Ann into /clubsfq=Ann, which it then tried to go back to. #}
+{%- set notice_back = request.full_path[:-1]
+      if request.full_path.endswith("?") else request.full_path -%}
+<details class="bell" id="bell">
+  <summary aria-label="Notifications{% if notice_count %}, {{ notice_count }} unread{% endif %}">
+    {{ ui.icon("bell") }}
+    {# Always rendered, hidden when zero, so the channel has something to put a
+       number into without having to build an element from nothing. #}
+    <span class="bell-count" id="bell-count"
+          {% if not notice_count %}hidden{% endif %}>{{ notice_count }}</span>
+  </summary>
+
+  <div class="bell-panel">
+    <div class="bell-head">
+      <b>Notifications</b>
+      <span class="bell-tools">
+        <form method="post" action="{{ url_for('notices_read_all') }}">
+          <input type="hidden" name="back" value="{{ notice_back }}" />
+          <button type="submit">Mark all read</button>
+        </form>
+        <form method="post" action="{{ url_for('notices_clear') }}">
+          <input type="hidden" name="back" value="{{ notice_back }}" />
+          <button type="submit">Clear read</button>
+        </form>
+      </span>
+    </div>
+
+    {% include "_noticelist.html" %}
+  </div>
+</details>

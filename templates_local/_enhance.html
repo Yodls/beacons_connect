@@ -36,7 +36,21 @@
         var cancel = start();
         if (typeof cancel === "function") { cancels.push(cancel); }
         return cancel;
-      }
+      },
+      // What this page wants watched *as well as* notifications, which are
+      // watched everywhere. One channel per tab holds one of these at a time:
+      // a chat registers itself here rather than opening a second held
+      // request, so however much a page has going on it is still one waiting
+      // thread -- and one copy of the rule on the server that hands the
+      // database connection back between probes.
+      //
+      // {here, state, apply}: `here` names the chat, `state` returns what the
+      // page has already seen, and `apply` is handed the whole answer.
+      watch: function (what) {
+        Beacon.watching = what;
+        return function () { Beacon.watching = null; };
+      },
+      watching: null
     };
 
     if (!window.fetch || !window.history.pushState || !window.DOMParser) { return; }
@@ -86,6 +100,10 @@
         try { stop(); } catch (e) {}
       });
       cancels = [];
+      // The page that registered it is about to stop existing. Cleared here
+      // rather than in the page's own teardown so a page that forgets cannot
+      // leave the channel watching a chat nobody is looking at.
+      Beacon.watching = null;
 
       here.innerHTML = next.innerHTML;
       if (doc.title) { document.title = doc.title; }

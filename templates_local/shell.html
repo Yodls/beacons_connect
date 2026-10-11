@@ -42,6 +42,12 @@
         <button type="submit">Go</button>
       </form>
 
+      {# The bell, to the left of the profile menu. Before the friends panel
+         in document order, which keeps it out of the slice the dock audits
+         take -- but *inside* the slice /people's privacy audit takes, so
+         nothing it draws may mention a score or a shared interest. #}
+      {% include "_notices.html" %}
+
       {# Where sign out lives, on every page. #}
       <details class="who">
         <summary aria-label="Your account">
@@ -68,4 +74,8 @@
   {# Includes the friends panel as one of its slots. Included, not a block: a
      block can be emptied by one page and vanish. #}
   {% include "_tabbar.html" %}
+
+  {# The one live channel, armed on every page that renders the shell. Last, so
+     the bell and the panel it updates already exist. #}
+  {% include "_channel.html" %}
 {% endblock %}

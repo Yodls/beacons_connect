@@ -206,6 +206,128 @@
       }
       .who-panel a { display: block; padding: .3rem 0; font-size: .86rem; }
 
+      /* ---------- the bell ---------- */
+      .bell { position: relative; flex: none; }
+      .bell > summary {
+        list-style: none; cursor: pointer; position: relative;
+        display: grid; place-items: center;
+        width: 36px; height: 36px; border-radius: var(--r-sm);
+        color: var(--muted);
+      }
+      .bell > summary::-webkit-details-marker { display: none; }
+      .bell > summary:hover { background: var(--surface-2); color: var(--ink); }
+      .bell[open] > summary { background: var(--surface-2); color: var(--ink); }
+      .bell-count {
+        position: absolute; top: 1px; right: 1px;
+        min-width: 16px; padding: 0 3px;
+        background: var(--danger); color: #fff;
+        border: 2px solid var(--surface); border-radius: var(--pill);
+        font: 700 10px/14px system-ui, sans-serif; text-align: center;
+      }
+      .bell-count[hidden] { display: none; }
+      .bell-panel {
+        position: absolute; right: 0; top: calc(100% + 8px); z-index: 30;
+        width: 21rem; max-width: calc(100vw - 2rem);
+        background: var(--surface);
+        border: 1px solid var(--line); border-radius: var(--r);
+        box-shadow: var(--shadow-2); overflow: hidden;
+      }
+      .bell-head {
+        display: flex; align-items: baseline; gap: .5rem;
+        padding: .7rem .9rem; border-bottom: 1px solid var(--line);
+      }
+      .bell-head b { font-size: .9rem; }
+      .bell-tools { margin-left: auto; display: flex; gap: .6rem; }
+      .bell-tools form { margin: 0; }
+      /* Qualified with `button` and spelled out for :hover, because base
+         styles every submit button as a solid blue block and these are all
+         submit buttons. Same trick as button.ghost above: tie on specificity,
+         win on order. A bare .bell-tools button lost on hover, which is how
+         blue text ended up on a blue fill. */
+      .bell-tools button[type="submit"] {
+        padding: 0; background: none; border: 0; border-radius: 0;
+        width: auto; cursor: pointer;
+        color: var(--blue); font: inherit; font-size: .74rem; font-weight: 600;
+      }
+      .bell-tools button[type="submit"]:hover {
+        background: none; color: var(--blue-deep); text-decoration: underline;
+      }
+      .bell-list { margin: 0; padding: 0; list-style: none;
+                   max-height: 24rem; overflow-y: auto; }
+      .bell-empty { padding: 1.1rem .9rem; color: var(--muted);
+                    font-size: .82rem; }
+      .bell-item {
+        display: grid; grid-template-columns: 1fr auto; align-items: center;
+        gap: .3rem .5rem; padding: .1rem .55rem .1rem .9rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .bell-item:last-child { border-bottom: 0; }
+      .bell-item.unseen { background: var(--friend-bg); }
+      .bell-item form { margin: 0; }
+      button.bell-open {
+        display: block; width: 100%; padding: .55rem 0;
+        background: none; border: 0; border-radius: 0; cursor: pointer;
+        color: inherit; font: inherit; font-weight: 400; text-align: left;
+      }
+      button.bell-open:hover {
+        background: none; color: var(--blue-deep);
+      }
+      button.bell-open:hover .bell-body { text-decoration: underline; }
+      .bell-body { display: block; font-size: .84rem; line-height: 1.35; }
+      .bell-when { display: block; margin-top: .1rem;
+                   color: var(--muted); font-size: .7rem; }
+      .bell-answer { grid-column: 1 / -1; display: flex; gap: .4rem;
+                     padding: 0 0 .5rem; }
+      .bell-answer button[type="submit"] {
+        width: auto; padding: .22rem .7rem; border-radius: var(--pill);
+        cursor: pointer; font: inherit; font-size: .74rem; font-weight: 600;
+      }
+      button.bell-yes, button.bell-yes:hover {
+        border: 1px solid var(--blue); color: #fff;
+      }
+      button.bell-yes { background: var(--blue); }
+      button.bell-yes:hover { background: var(--blue-deep); }
+      button.bell-no {
+        background: var(--surface); border: 1px solid var(--line-2);
+        color: var(--ink);
+      }
+      button.bell-no:hover {
+        background: var(--surface-2); border-color: var(--line-2);
+        color: var(--ink);
+      }
+      button.bell-seen {
+        display: grid; place-items: center;
+        width: 26px; height: 26px; padding: 0;
+        background: none; border: 0; border-radius: var(--pill);
+        cursor: pointer; color: var(--muted);
+      }
+      button.bell-seen:hover { background: var(--surface); color: var(--blue); }
+      .bell-seen .icon { width: 15px; height: 15px; }
+
+      /* ---------- toasts ----------
+         The host sits outside #live, so a navigation mid-toast does not take
+         it with it. Fixed, above everything, and never in the way of a tap:
+         pointer-events are off on the host and only back on for a toast. */
+      #toasts {
+        position: fixed; z-index: 80; left: 50%; transform: translateX(-50%);
+        bottom: calc(var(--tabbar-h) + 14px);
+        display: grid; gap: .4rem; width: max-content; max-width: calc(100vw - 2rem);
+        pointer-events: none;
+      }
+      .toast {
+        pointer-events: auto;
+        padding: .6rem .9rem;
+        background: var(--navy); color: #fff;
+        border-radius: var(--pill); box-shadow: var(--shadow-3);
+        font-size: .83rem; line-height: 1.3;
+        animation: toast-in .18s ease-out;
+      }
+      .toast.going { opacity: 0; transition: opacity .6s ease; }
+      @keyframes toast-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: none; }
+      }
+
       /* ---------- page ---------- */
       .page { max-width: 1100px; margin: auto; padding: 18px 16px 0; }
       .lede { margin-top: .3rem; color: var(--muted); font-size: .93rem; }
@@ -583,6 +705,11 @@
        still resolves in freshly swapped markup; it contains no <style>, so it
        cannot disturb the head-CSS invariant either. #}
     {% include "_icons.html" %}
+    {# Where toasts land. Outside #live so a navigation while one is on screen
+       does not take it away, and carrying no <style> of its own -- like the
+       sprite above -- so the head stylesheet stays byte-identical. #}
+    <div id="toasts" aria-live="polite" aria-atomic="false"></div>
+
     {# Everything a navigation replaces lives in here. The enhancer sits
        outside it so a swap cannot destroy it. #}
     <div id="live">
