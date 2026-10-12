@@ -77,6 +77,9 @@
              "&after=" + (state.after || 0) +
              "&token=" + encodeURIComponent(state.token || "");
       }
+      // The lobby's waiting state. It is also what keeps the student in the
+      // queue: the server touches their row when it sees this.
+      if (what && what.seeking) { q += "&seeking=1"; }
       return q;
     }
 

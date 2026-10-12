@@ -42,6 +42,7 @@ from models import (
     ClubMember,
     Game,
     GamePairing,
+    GameSeek,
     GamePost,
     GamePostRsvp,
     GameQueue,
@@ -503,6 +504,22 @@ def event_wording(message, game, actor_name, other_name):
     return message.body
 
 
+def chat_other_id(kind, parent):
+    """The one other person in this conversation, or None.
+
+    A one-to-one chat and a pair chat each have exactly one, which is what
+    lets a game pane appear in either. chat_target already works this out for
+    a pairing and throws it away, so this is the same answer kept.
+    """
+    if kind == "match":
+        return (parent.user_hi if parent.user_lo == current_user.id
+                else parent.user_lo)
+    if kind == "pair":
+        return (parent.user_hi if parent.user_lo == current_user.id
+                else parent.user_lo)
+    return None
+
+
 def chat_rows(kind, parent, after=0):
     rows = db.session.execute(
         db.select(Message, User.name)
@@ -643,9 +660,13 @@ def chat_list():
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
         other = db.session.get(User, other_id)
+        # An in-person pairing's game is an activity name; an online one's is a
+        # game kind, which would otherwise read "tictactoe with Ana".
+        label = (rules.LABELS.get(pairing.game, pairing.game)
+                 if pairing.mode == "online" else pairing.game)
         entries.append(chat_entry(
             "pair", pairing.id,
-            f"{pairing.game} with {other.name if other else 'Partner'}",
+            f"{label} with {other.name if other else 'Partner'}",
         ))
 
     for club in joined_clubs(current_user.id):
@@ -804,7 +825,10 @@ def chat(kind, target_id):
     # the code is for.
     # The game pane. Only a one-on-one chat has one: there is no "the game
     # between us" in a room with twelve people in it.
-    game = pane_game(target_id) if kind == "match" else None
+    # A pair chat has an opponent too, so it gets a board. pane_game is keyed
+    # on the two players, so it needed no change for this.
+    opponent_id = chat_other_id(kind, parent)
+    game = pane_game(opponent_id) if opponent_id else None
     game_seat = game.seat_of(current_user.id) if game is not None else None
 
     group = parent if kind == "group" else None
@@ -832,6 +856,9 @@ def chat(kind, target_id):
         # Asked of live_game_with rather than the pane: an invite is a message
         # now, so the pane does not see it, and offering to start a second
         # game during one would be wrong.
+        opponent_id=opponent_id,
+        # Still friends-only: game_new requires a friendship, so a pair chat
+        # has no rematch button. Queue again from the lobby instead.
         can_start=(kind == "match" and live_game_with(target_id) is None),
         other_id=target_id,
         messages=chat_rows(kind, parent),
@@ -904,6 +931,31 @@ def notice_slice(user_id, seen, skip_url=None):
     }
 
 
+def seek_answer(user_id):
+    """Whether a waiting player has been matched, and where their board is.
+
+    Only asked for on the answering branch, which the notice written by
+    start_random_game has already woken: there is nothing extra to probe for.
+    """
+    if seek_row(user_id) is not None:
+        return {"waiting": True, "url": None}
+
+    # No longer queued, so either they were matched or they cancelled. A live
+    # game is the difference.
+    game = db.session.scalar(
+        db.select(Game)
+        .where(db.or_(Game.player_a == user_id, Game.player_b == user_id),
+               Game.status == "active")
+        .order_by(Game.updated_at.desc(), Game.id.desc())
+    )
+    if game is None:
+        return {"waiting": False, "url": None}
+
+    kind, target_id = game_home(game, game.seat_of(user_id))
+    return {"waiting": False,
+            "url": url_for("chat", kind=kind, target_id=target_id)}
+
+
 def live_reply(kind, target_id):
     """Hold the request until something changes, then answer at once.
 
@@ -926,6 +978,9 @@ def live_reply(kind, target_id):
     me = current_user.id
     seen = request.args.get("seen", type=int, default=0)
     bell = request.args.get("notices", "")
+    # The lobby's waiting state asks for this. It doubles as the heartbeat that
+    # keeps the student in the queue.
+    seeking = request.args.get("seeking") == "1"
 
     watching = kind is not None
     parent = None
@@ -940,6 +995,9 @@ def live_reply(kind, target_id):
     # Built from primitives, because the ORM object behind `parent` is
     # released along with the session between probes.
     where = None
+    # Resolved once, here: the ORM object behind `parent` is released between
+    # probes, so the loop below needs the id rather than the row.
+    watch_other = chat_other_id(kind, parent) if watching else None
     if watching:
         if kind == COMMUNITY:
             where = Message.room == COMMUNITY
@@ -951,6 +1009,16 @@ def live_reply(kind, target_id):
         # still existed. Anything that arrives later is kept out of the badge
         # by exclusion instead, so an abandoned request cannot swallow it.
         if notices.clear_chat(me, kind, target_id):
+            db.session.commit()
+
+    if seeking:
+        # Touched once, at the start of the request, the one moment the tab
+        # that asked for it demonstrably still existed. A held request outlives
+        # its tab, so a ghost refreshes this once and then ages out of the
+        # queue rather than keeping a vanished player pairable for ever.
+        mine = seek_row(me)
+        if mine is not None:
+            mine.seen_at = datetime.utcnow()
             db.session.commit()
 
     deadline = time.monotonic() + LIVE_WAIT
@@ -969,7 +1037,7 @@ def live_reply(kind, target_id):
             # pane_game rather than a hand-rolled probe: it owns the rules
             # about which game the panel shows, and it is where an abandoned
             # game gets settled. Reproducing that here would let the two drift.
-            game = pane_game(target_id) if kind == "match" else None
+            game = pane_game(watch_other) if watch_other else None
             fresh = game_token(game)
 
         if newest > after or fresh != token or bell_now != bell:
@@ -980,12 +1048,13 @@ def live_reply(kind, target_id):
             return jsonify({
                 "after": max([r["id"] for r in rows], default=after),
                 "messages": rows,
-                "game": (live_pane(target_id, game)
-                         if watching and kind == "match" else None),
+                "game": (live_pane(watch_other, game)
+                         if watch_other else None),
                 "notices": notice_slice(
                     me, seen,
                     skip_url=notices.chat_url(kind, target_id) if watching
                     else None),
+                "seek": seek_answer(me) if seeking else None,
             })
 
         if time.monotonic() >= deadline:
@@ -1330,10 +1399,57 @@ def game_token(game):
     return f"{game.id}:{game.version}:{game.status}"
 
 
+# How long a waiting player stays pairable without their tab saying hello.
+# The waiting page holds a live request that touches seen_at, so an open tab
+# stays in the queue and a closed one falls out of it.
+SEEK_TTL = timedelta(minutes=2)
+
+
+def game_home(game, seat):
+    """The conversation a game belongs to, as (kind, target_id).
+
+    Friends play in the chat they already share -- the game pane is keyed on
+    the two players, so putting it anywhere else would show the same game in
+    two conversations. Two strangers paired by matchmaking have no such chat,
+    so they get a pair conversation, the same kind the in-person queue makes.
+
+    Falls back to the match chat, which is where every game lived before
+    matchmaking existed, so an old game with a since-unfriended player behaves
+    exactly as it did.
+    """
+    other_id = game.user_in_seat(1 - seat)
+
+    # Active, not merely existing: matching.find_match would also answer for a
+    # pending or declined request, and neither of those opens a chat. This is
+    # the same test chat_target("match") makes.
+    lo, hi = pair(current_user.id, other_id)
+    friends = db.session.scalar(
+        db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active"))
+    if friends is not None:
+        return "match", other_id
+
+    pairing = db.session.scalar(
+        db.select(GamePairing)
+        .where(GamePairing.mode == "online",
+               GamePairing.status == "open",
+               db.or_(
+                   db.and_(GamePairing.user_lo == current_user.id,
+                           GamePairing.user_hi == other_id),
+                   db.and_(GamePairing.user_lo == other_id,
+                           GamePairing.user_hi == current_user.id),
+               ))
+        .order_by(GamePairing.created_at.desc())
+    )
+    if pairing is not None:
+        return "pair", pairing.id
+
+    return "match", other_id
+
+
 def game_chat(game, seat):
     """Back to the conversation this game belongs to."""
-    return redirect(url_for("chat", kind="match",
-                            target_id=game.user_in_seat(1 - seat)))
+    kind, target_id = game_home(game, seat)
+    return redirect(url_for("chat", kind=kind, target_id=target_id))
 
 
 def finish_game(game, outcome, winner_id=None):
@@ -1357,12 +1473,17 @@ def game_lobby():
     for game in mine:
         seat = game.seat_of(current_user.id)
         other = db.session.get(User, game.user_in_seat(1 - seat))
+        home_kind, home_id = game_home(game, seat)
         rows.append({
             "game": game,
             "label": rules.LABELS.get(game.kind, game.kind),
             "opponent": other.name if other else "Opponent",
             # The chat is where the board lives, so the lobby links there
             # directly rather than bouncing through game_view's redirect.
+            # Asked of game_home rather than assumed to be a friend chat: a
+            # game against a stranger lives in a pair conversation.
+            "home_kind": home_kind,
+            "home_id": home_id,
             "opponent_id": game.user_in_seat(1 - seat),
             "waiting_on_you": (
                 (game.status == "invited" and game.player_b == current_user.id)
@@ -1371,12 +1492,158 @@ def game_lobby():
             ),
         })
 
+    waiting = seek_row()
     return render_template(
         "games.html",
         rows=rows,
+        seeking=waiting,
+        seeking_label=(rules.LABELS.get(waiting.kind, waiting.kind)
+                       if waiting else None),
         opponents=matching.active_matches(current_user.id),
         kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
     )
+
+
+def seek_row(user_id=None):
+    """This student's place in the online queue, if they are in it."""
+    return db.session.get(GameSeek, user_id or current_user.id)
+
+
+def claim_partner(kind):
+    """Take somebody out of the queue for `kind`, or return None.
+
+    The claim is a delete whose rowcount decides it, exactly as find_queue
+    does: if two players reach for the same partner at once, only one delete
+    affects a row, and the loser falls through to waiting instead of both
+    walking off with the same person.
+
+    Stale rows are dropped as they are passed over -- a tab that has gone
+    stops refreshing seen_at, and pairing somebody into a game they will never
+    open is worse than making the next player wait a little longer.
+    """
+    fresh_since = datetime.utcnow() - SEEK_TTL
+
+    for candidate in db.session.scalars(
+        db.select(GameSeek)
+        .where(GameSeek.kind == kind, GameSeek.user_id != current_user.id)
+        .order_by(GameSeek.created_at)
+    ):
+        if candidate.seen_at < fresh_since:
+            db.session.delete(candidate)
+            continue
+
+        # One game at a time per pair, which is the rule game_new enforces
+        # with "Finish that one first". Matchmaking has to respect it or the
+        # chat pane would have two games to choose between.
+        if live_game_with(candidate.user_id) is not None:
+            continue
+
+        taken = db.session.execute(
+            db.delete(GameSeek).where(GameSeek.user_id == candidate.user_id)
+        ).rowcount
+        if taken == 1:
+            return candidate.user_id
+
+    return None
+
+
+def start_random_game(kind, partner_id):
+    """Pair two players, and put the board where they can both reach it.
+
+    Active rather than invited: both of them asked for a game, so there is
+    nothing left to accept.
+    """
+    partner = db.session.get(User, partner_id)
+
+    # Strangers have no conversation, so give them one -- the same kind the
+    # in-person queue makes. Friends already have theirs, and the pane is keyed
+    # on the two players, so a second chat would show the game twice.
+    lo, hi = pair(current_user.id, partner_id)
+    friends = db.session.scalar(
+        db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active"))
+
+    pairing = None
+    if friends is None:
+        pairing = GamePairing(user_lo=lo, user_hi=hi, game=kind, mode="online")
+        db.session.add(pairing)
+        db.session.flush()
+
+    game = Game(
+        kind=kind,
+        status="active",
+        player_a=partner_id,          # the one who was already waiting
+        player_b=current_user.id,
+        state=rules.new_state(kind),
+        version=0,
+    )
+    nxt = rules.turn_seat(kind, game.state)
+    game.turn_id = None if nxt is None else game.user_in_seat(nxt)
+    db.session.add(game)
+    db.session.flush()
+
+    label = rules.LABELS.get(kind, kind)
+    parent = pairing if pairing is not None else friends
+    where = ("pair", pairing.id) if pairing is not None else ("match", partner_id)
+
+    # A plain message rather than a game_event: GAME_EVENTS is a CHECK
+    # constraint, and widening it for one opening line would be a migration
+    # for a sentence.
+    opening = Message(user_id=current_user.id,
+                      body=f"Matched for {label}. Good luck.")
+    attach_parent(opening, where[0], parent)
+    db.session.add(opening)
+
+    # Only the one who was already waiting is told; whoever arrived second is
+    # being sent straight to the board. A match chat is addressed by the *other*
+    # person, so their link names whoever just joined rather than themselves.
+    their_url = notices.chat_url(
+        "match", current_user.id) if where[0] == "match" else notices.chat_url(
+        "pair", pairing.id)
+    notices.paired(partner_id, current_user, their_url, label)
+    db.session.commit()
+    return game, where, partner
+
+
+@app.route("/games/seek", methods=["POST"])
+@login_required
+def game_seek():
+    """Join the queue for a game, and pair at once if somebody is waiting."""
+    kind = request.form.get("kind", "")
+
+    if kind not in rules.PLAYABLE:
+        flash("Pick a game to play.")
+        return redirect(url_for("game_lobby"))
+
+    partner_id = claim_partner(kind)
+
+    if partner_id is not None:
+        db.session.execute(
+            db.delete(GameSeek).where(GameSeek.user_id == current_user.id))
+        game, where, partner = start_random_game(kind, partner_id)
+        flash(f"Matched with {partner.name if partner else 'another student'}. "
+              "Your move is in the chat.")
+        return redirect(url_for("chat", kind=where[0], target_id=where[1]))
+
+    # Nobody about: wait. Re-picking a different game replaces the slot rather
+    # than adding a second, because the table holds one row per student.
+    mine = seek_row()
+    if mine is None:
+        db.session.add(GameSeek(user_id=current_user.id, kind=kind))
+    else:
+        mine.kind = kind
+        mine.created_at = datetime.utcnow()
+        mine.seen_at = datetime.utcnow()
+    db.session.commit()
+    return redirect(url_for("game_lobby"))
+
+
+@app.route("/games/seek/cancel", methods=["POST"])
+@login_required
+def game_seek_cancel():
+    db.session.execute(
+        db.delete(GameSeek).where(GameSeek.user_id == current_user.id))
+    db.session.commit()
+    return redirect(url_for("game_lobby"))
 
 
 @app.route("/games/new", methods=["POST"])
@@ -1611,7 +1878,10 @@ def find_game():
         db.select(GamePairing)
         .where(db.or_(GamePairing.user_lo == current_user.id,
                       GamePairing.user_hi == current_user.id),
-               GamePairing.status == "open")
+               GamePairing.status == "open",
+               # /find is the in-person page. An online pairing is a board in
+               # a chat, not somebody to go and meet.
+               GamePairing.mode == "inperson")
         .order_by(GamePairing.created_at.desc())
     ):
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
@@ -1679,7 +1949,8 @@ def find_queue():
             # Only the person who was already waiting gets told. Whoever
             # arrived second is being redirected into the chat a line below, so
             # a notice would be about the page they are looking at.
-            notices.paired(partner.user_id, current_user, pairing.id, game)
+            notices.paired(partner.user_id, current_user,
+                           notices.chat_url("pair", pairing.id), game)
             db.session.commit()
             flash(f"Paired for {game}. Say hello.")
             return redirect(url_for("chat", kind="pair", target_id=pairing.id))

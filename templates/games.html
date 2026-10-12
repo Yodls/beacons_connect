@@ -11,6 +11,34 @@
   <p>Turn-based games against your friends.</p>
 
   <h2>Start a game</h2>
+
+  {% if seeking %}
+    <div class="card" id="seekbox">
+      <h3>Finding a player&hellip;</h3>
+      <p>Looking for somebody who wants {{ seeking_label }}. You can leave this
+        page open.</p>
+      <div class="seek-slow" id="seek-slow" hidden>
+        <p><b>Still looking.</b> Nobody is waiting for {{ seeking_label }} yet.</p>
+        <button type="button" id="seek-keep">Keep waiting</button>
+      </div>
+      <form method="post" action="{{ url_for('game_seek_cancel') }}">
+        <button type="submit">Cancel</button>
+      </form>
+    </div>
+  {% else %}
+    <div class="card">
+      <h3>Play a random player</h3>
+      <form class="start" method="post" action="{{ url_for('game_seek') }}">
+        <select name="kind" required>
+          {% for key, label in kinds %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Find a player</button>
+      </form>
+    </div>
+  {% endif %}
+
   {% if opponents %}
     <div class="card">
       <form class="start" method="post" action="{{ url_for('game_new') }}">
@@ -29,8 +57,8 @@
     </div>
   {% else %}
     <p class="why">
-      You need a friend to play against.
-      <a href="{{ url_for('matches') }}">See your friends</a>.
+      No friends yet &mdash; play a random player above, or
+      <a href="{{ url_for('matches') }}">find some friends</a>.
     </p>
   {% endif %}
 
@@ -54,7 +82,8 @@
         {% endif %}
       </p>
       <div class="actions">
-        <form method="get" action="{{ url_for('chat', kind='match', target_id=row.opponent_id) }}">
+        {# home_kind, not "match": a paired game lives in a pair chat. #}
+        <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
           <button type="submit">Open</button>
         </form>
       </div>
@@ -62,4 +91,59 @@
   {% else %}
     <p class="why">No games yet. Send an invite above.</p>
   {% endfor %}
+{% endblock %}
+
+{% block script %}
+{% if seeking %}
+<script>
+  // Two jobs while a student waits for a partner.
+  //
+  // There is no polling here. The one live channel is already holding a
+  // request, and pairing writes a notice, so that request comes back the
+  // moment it happens -- this just registers an interest in the answer.
+  (function () {
+    if (!document.getElementById("seekbox")) { return; }
+
+    // After a minute, offer a way out without taking one. The row is left
+    // alone: "keep waiting" is the default, not an action.
+    var WAIT = 60000;
+
+    function nag() {
+      // Looked up when it fires, not captured: a navigation may have replaced
+      // the page while this timer was pending.
+      var slow = document.getElementById("seek-slow");
+      if (slow) { slow.hidden = false; }
+    }
+
+    var timer = setTimeout(nag, WAIT);
+
+    var keep = document.getElementById("seek-keep");
+    if (keep) {
+      keep.addEventListener("click", function () {
+        var slow = document.getElementById("seek-slow");
+        if (slow) { slow.hidden = true; }
+        clearTimeout(timer);
+        timer = setTimeout(nag, WAIT);
+      });
+    }
+
+    Beacon.watch({
+      seeking: true,
+      apply: function (data) {
+        var seek = data && data.seek;
+        if (!seek || !seek.url) { return; }
+        // Recorded on the box before leaving, the way the game pane records
+        // its token: it makes the decision observable, which matters because
+        // the browser harness cannot perform a navigation.
+        var box = document.getElementById("seekbox");
+        if (box) { box.dataset.found = seek.url; }
+        // A full load rather than a swap: the board is a different page with
+        // its own stylesheet and its own live registration, and this happens
+        // once.
+        window.location.assign(seek.url);
+      }
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

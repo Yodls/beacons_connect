@@ -116,17 +116,22 @@ def game_answer(recipient_id, actor, game, label, action):
     )
 
 
-def paired(recipient_id, actor, pairing_id, label):
+def paired(recipient_id, actor, url, label):
     """Both halves of a pairing get one of these.
 
     The point of this one is the person who was *already waiting*. find_queue
     pairs instantly and flashes whoever arrived second, so until now the one
     who had been sitting on /find was told nothing at all.
+
+    `url` rather than a pairing id, because online matchmaking reuses this and
+    its games do not always land in a pair chat: paired with somebody who is
+    already a friend, the game opens in the conversation they already share.
+    Callers build it with chat_url().
     """
     return notify(
         recipient_id, "paired",
         f"{actor.name} is up for {label} too. You have been paired.",
-        chat_url("pair", pairing_id),
+        url,
         actor_id=actor.id,
     )
 

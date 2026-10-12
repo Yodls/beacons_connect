@@ -190,7 +190,11 @@
   {# Always present on a one-on-one chat, even with no game: it is what the
      poller fills when an invite arrives. #}
   <div class="gamewrap {% if game %}playing{% endif %}" id="gamewrap">
-    {% if kind == "match" %}
+    {# Any chat with exactly one other person can hold a board -- a friend
+       chat, or the pair conversation two strangers get when matchmaking puts
+       them together. pane_game is keyed on the two players, so it needed no
+       change for this. #}
+    {% if opponent_id %}
       <div id="gamepane-slot">{% if game %}{% include "_gamepane.html" %}{% endif %}</div>
     {% endif %}
 

@@ -460,8 +460,48 @@ class GameQueue(db.Model):
     __table_args__ = (db.Index("ix_queue_game", "game", "created_at"),)
 
 
+class GameSeek(db.Model):
+    """One waiting slot per student, for online matchmaking.
+
+    Deliberately not a second use of GameQueue, which serves the in-person
+    page. That one is keyed by user_id alone, so sharing it would mean joining
+    an online queue kicked you out of the Basketball one -- and its `game`
+    column holds activity names, which /find reads and would render as
+    "Waiting for tictactoe".
+    """
+
+    __tablename__ = "game_seek"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    kind = db.Column(db.Text, nullable=False)
+    # Queue order, so the longest wait is served first.
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # The heartbeat. The waiting page holds a live request, and that request
+    # touches this at its start -- the one moment the tab that asked for it
+    # demonstrably still existed. A tab that has gone stops touching it and
+    # ages out, so nobody is paired into a game the other player never opens.
+    seen_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        # The same four kinds ck_game_kind allows: a queue for a game that
+        # cannot be played would pair people into nothing.
+        db.CheckConstraint(
+            "kind IN ('tictactoe', 'connect4', 'battleship', 'chess')",
+            name="ck_seek_kind",
+        ),
+        db.Index("ix_seek_kind", "kind", "created_at"),
+    )
+
+
 class GamePairing(db.Model):
-    """Two students the queue put together for one in-person game."""
+    """Two students the queue put together for one game.
+
+    Originally in-person only; `mode` tells the two apart now that online
+    matchmaking uses the same conversation to give two strangers somewhere to
+    play. Without it /find would list online pairings on the in-person page.
+    """
 
     __tablename__ = "game_pairings"
 
@@ -473,6 +513,11 @@ class GamePairing(db.Model):
         db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
     game = db.Column(db.Text, nullable=False)
+    # An in-person pairing's `game` is an activity name ("Basketball"); an
+    # online one's is a game kind ("tictactoe"), which rules.LABELS turns into
+    # something readable.
+    mode = db.Column(db.Text, nullable=False, default="inperson",
+                     server_default="inperson")
     status = db.Column(db.Text, nullable=False, default="open")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -482,6 +527,7 @@ class GamePairing(db.Model):
         # paired again for a different game.
         db.CheckConstraint("user_lo < user_hi", name="ck_pairing_order"),
         db.CheckConstraint("status IN ('open', 'closed')", name="ck_pairing_status"),
+        db.CheckConstraint("mode IN ('inperson', 'online')", name="ck_pairing_mode"),
         db.Index("ix_pairings_lo", "user_lo"),
         db.Index("ix_pairings_hi", "user_hi"),
     )
