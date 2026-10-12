@@ -37,6 +37,43 @@
         border-radius: 50%; background: #ffd27a;
       }
 
+      /* Leaving a meetup carries the palette's warning colour, and asks
+         first. Qualified with the element and with :hover spelled out,
+         because base.html paints every submit button solid blue -- the same
+         reason button.ghost is written that way. */
+      .confirm { margin: 0; }
+      .confirm > summary {
+        display: inline-block; list-style: none; cursor: pointer;
+        padding: .4rem .8rem; border-radius: var(--r-sm);
+        background: var(--danger-bg); color: var(--danger);
+        border: 1px solid var(--danger);
+        font-size: .82rem; font-weight: 600;
+      }
+      .confirm > summary::-webkit-details-marker { display: none; }
+      .confirm > summary:hover,
+      .confirm[open] > summary { background: #fbdcd8; }
+      .confirm-body {
+        display: block; margin-top: .45rem; padding: .55rem .7rem;
+        background: var(--surface); border: 1px solid var(--danger);
+        border-radius: var(--r-sm);
+      }
+      .confirm-ask {
+        display: block; margin-bottom: .45rem;
+        font-size: .84rem; line-height: 1.35; color: var(--ink);
+      }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .confirm-row form { margin: 0; }
+      button.leave-yes, button.leave-yes:hover {
+        border: 1px solid var(--danger); color: #fff;
+      }
+      button.leave-yes { background: var(--danger); }
+      button.leave-yes:hover { background: #8a2119; }
+      button.confirm-no {
+        background: var(--surface); color: var(--ink);
+        border: 1px solid var(--line-2);
+      }
+      button.confirm-no:hover { background: var(--surface-2); }
+
       .newpost { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
       .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
       .newpost select { margin: 0; flex: 1 1 10rem; width: auto; }
@@ -194,13 +231,30 @@
             &middot; {{ post.going | join(", ") }}{% endif %}
           </span>
           <div class="actions">
-            <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-              <input type="hidden" name="back" value="find" />
-              <button type="submit"
-                      {% if post.full and not post.im_going %}disabled{% endif %}>
-                {{ "Leave" if post.im_going else "I'm in" }}
-              </button>
-            </form>
+            {% if post.im_going %}
+              {# Asked before you give up your place, the same as in the chat.
+                 A <details>, so it needs no JavaScript. #}
+              <details class="confirm">
+                <summary class="leave">Leave Meetup</summary>
+                <div class="confirm-body">
+                  <span class="confirm-ask">Are you sure you want to leave this
+                    meetup?</span>
+                  <span class="confirm-row">
+                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                      <input type="hidden" name="back" value="find" />
+                      <button type="submit" class="leave-yes">Yes, leave</button>
+                    </form>
+                    <button type="button" class="confirm-no">Keep my spot</button>
+                  </span>
+                </div>
+              </details>
+            {% else %}
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                <input type="hidden" name="back" value="find" />
+                <button type="submit"
+                        {% if post.full %}disabled{% endif %}>I'm in</button>
+              </form>
+            {% endif %}
             {% if post.mine %}
               <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
                 <input type="hidden" name="back" value="find" />

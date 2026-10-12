@@ -179,6 +179,17 @@
         .catch(function () { form.submit(); });
     });
 
+    // Backing out of a confirmation. Delegated here rather than copied into
+    // every page that draws one, and harmless without JavaScript: a <details>
+    // already closes when its own summary is clicked again.
+    document.addEventListener("click", function (e) {
+      var no = e.target && e.target.closest
+        ? e.target.closest(".confirm-no") : null;
+      if (!no) { return; }
+      var box = no.closest("details");
+      if (box) { box.removeAttribute("open"); }
+    });
+
     document.addEventListener("click", function (e) {
       if (e.defaultPrevented || e.button !== 0) { return; }
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) { return; }

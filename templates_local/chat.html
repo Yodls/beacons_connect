@@ -100,9 +100,66 @@
         display: block; margin-top: .25rem;
         font-size: .85rem; color: var(--ink);
       }
-      .post-actions { display: flex; gap: .4rem; margin-top: .5rem; }
+      /* The action row. Divided off and pushed to the end, so it reads as
+         the card's own controls rather than text that happens to have
+         buttons under it. Wraps rather than colliding on a narrow screen. */
+      .post-actions {
+        display: flex; flex-wrap: wrap; justify-content: flex-end;
+        align-items: center; gap: .4rem;
+        margin-top: .55rem; padding-top: .5rem;
+        border-top: 1px solid #f0d9a8;
+      }
       .post-actions form { margin: 0; }
-      .post-actions button { margin: 0; padding: .3rem .75rem; font-size: .78rem; }
+      .post-actions .meta { margin-right: auto; }
+
+      /* Qualified with the element and with :hover spelled out, because
+         base.html paints every submit button solid blue and a bare class
+         loses to it. Same trick as button.ghost there. */
+      .post-actions button[type="submit"],
+      .post-actions .confirm > summary {
+        margin: 0; padding: .3rem .75rem; font-size: .78rem; font-weight: 600;
+        border-radius: var(--r-sm); width: auto;
+      }
+
+      /* Leaving is the one action here you cannot undo in a click, so it
+         carries the palette's warning colour rather than looking like the
+         neutral button beside it. Outlined, not solid: it is a way out, not
+         the thing the card is for. */
+      .post-actions .confirm > summary {
+        display: inline-block; list-style: none; cursor: pointer;
+        background: var(--danger-bg); color: var(--danger);
+        border: 1px solid var(--danger);
+      }
+      .post-actions .confirm > summary::-webkit-details-marker { display: none; }
+      .post-actions .confirm > summary:hover { background: #fbdcd8; }
+      .post-actions .confirm[open] > summary { background: #fbdcd8; }
+
+      .confirm { margin: 0; }
+      .confirm-body {
+        display: block; width: 100%; margin-top: .45rem;
+        padding: .55rem .7rem;
+        background: var(--surface); border: 1px solid var(--danger);
+        border-radius: var(--r-sm);
+      }
+      .confirm-ask {
+        display: block; margin-bottom: .45rem;
+        font-size: .8rem; line-height: 1.35; color: var(--ink);
+      }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .confirm-row form { margin: 0; }
+      .confirm-row button {
+        margin: 0; padding: .3rem .75rem; font-size: .78rem; font-weight: 600;
+        border-radius: var(--r-sm); width: auto; cursor: pointer;
+      }
+      button.leave-yes, button.leave-yes:hover {
+        background: var(--danger); color: #fff; border: 1px solid var(--danger);
+      }
+      button.leave-yes:hover { background: #8a2119; }
+      button.confirm-no {
+        background: var(--surface); color: var(--ink);
+        border: 1px solid var(--line-2);
+      }
+      button.confirm-no:hover { background: var(--surface-2); }
 
       /* ---------- a game, alongside the conversation ---------- */
       /* Without a game this is a plain block and the conversation has the
@@ -492,8 +549,12 @@
       {% if message.event %}
         {# A game moment, not speech. It keeps the .msg class because the
            poller reads the last id from #log .msg -- without it, every poll
-           would fetch these again and append them a second time. #}
-        <p class="msg note" data-id="{{ message.id }}">
+           would fetch these again and append them a second time.
+
+           A <div> and not a <p>: these carry Accept and Decline forms, and
+           HTML closes a <p> at a <form> start tag, which left the buttons
+           outside the message as loose children of #log. #}
+        <div class="msg note" data-id="{{ message.id }}">
           <span class="body">{{ message.body }}</span>
           {% if message.can_answer %}
             <span class="note-act">
@@ -505,13 +566,13 @@
               </form>
             </span>
           {% endif %}
-        </p>
+        </div>
       {% else %}
-      <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
+      <div class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
         {% if message.post %}
-          <span class="post">
+          <div class="post">
             <b>{{ message.post.game }}</b>
             <span class="meta">{{ message.post.mode_label }}
               {%- if message.post.location %} &middot; {{ message.post.location }}{% endif -%}
@@ -522,27 +583,49 @@
               {{ message.post.count }} of {{ message.post.max_players }} going{% if message.post.going %}:
               {{ message.post.going | join(", ") }}{% endif %}
             </span>
-            <span class="post-actions">
+            {# One action row at the foot of the card, divided off from the
+               details above it, so these never read as chat-window controls.
+               Both labels name the meetup: "Leave" alone was taken for
+               leaving the conversation, and "Close" for shutting the window.
+               "Cancel meetup" is the word /find already uses for this. #}
+            <div class="post-actions">
               {% if message.post.status != "open" %}
                 <span class="meta">Closed</span>
               {% else %}
-                <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
-                  <button type="submit"
-                          {% if message.post.full and not message.post.im_going %}disabled{% endif %}>
-                    {{ "Leave" if message.post.im_going else "I'm in" }}
-                  </button>
-                </form>
+                {% if message.post.im_going %}
+                  {# Asked before you give up your place. A <details>, like the
+                     bell and the game picker, so it needs no JavaScript --
+                     clicking the summary again puts it away. #}
+                  <details class="confirm">
+                    <summary class="leave">Leave Meetup</summary>
+                    <div class="confirm-body">
+                      <span class="confirm-ask">Are you sure you want to leave
+                        this meetup?</span>
+                      <span class="confirm-row">
+                        <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                          <button type="submit" class="leave-yes">Yes, leave</button>
+                        </form>
+                        <button type="button" class="confirm-no">Keep my spot</button>
+                      </span>
+                    </div>
+                  </details>
+                {% else %}
+                  <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                    <button type="submit"
+                            {% if message.post.full %}disabled{% endif %}>I'm in</button>
+                  </form>
+                {% endif %}
                 {% if message.post.mine %}
                   <form method="post" action="{{ url_for('post_close', post_id=message.post.id) }}">
-                    <button type="submit">Close</button>
+                    <button type="submit" class="ghost">Cancel meetup</button>
                   </form>
                 {% endif %}
               {% endif %}
-            </span>
-          </span>
+            </div>
+          </div>
         {% endif %}
         <span class="at">{{ message.at }}</span>
-      </p>
+      </div>
       {% endif %}
     {% else %}
       <p class="why" id="empty">No messages yet. Say hello.</p>

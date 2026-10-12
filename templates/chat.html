@@ -64,9 +64,25 @@
               border: 1px solid #ccc; background: #fafafa; }
       .post .meta { display: block; color: #555; font-size: 0.8rem; }
       .post .note { display: block; font-size: 0.85rem; margin-top: 0.2rem; }
-      .post-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+      /* One action row at the foot of the card, divided off from the detail
+         above it so the buttons read as the card's own. */
+      .post-actions {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+        margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid #ccc;
+      }
       .post-actions form { margin: 0; }
       .post-actions button { margin: 0; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+      .confirm-row button { margin: 0; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+      /* Leaving a meetup asks first. A <details>, so it needs no JavaScript. */
+      .confirm { margin: 0; }
+      .confirm > summary { cursor: pointer; font-weight: bold; }
+      .confirm-body {
+        display: block; margin-top: 0.4rem; padding: 0.4rem 0.5rem;
+        border: 1px solid #a3281f;
+      }
+      .confirm-ask { display: block; margin-bottom: 0.4rem; font-size: 0.9rem; }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+      .confirm-row form { display: inline; margin: 0; }
 {% endblock %}
 
 {% block main %}
@@ -203,8 +219,12 @@
     {% for message in messages %}
       {% if message.event %}
         {# A game moment, not speech. Keeps .msg because the poller reads the
-           last id from #log .msg. #}
-        <p class="msg note" data-id="{{ message.id }}">
+           last id from #log .msg.
+
+           A <div> and not a <p>: these carry Accept and Decline forms, and
+           HTML closes a <p> at a <form> start tag, which left the buttons
+           outside the message as loose children of #log. #}
+        <div class="msg note" data-id="{{ message.id }}">
           <span class="body">{{ message.body }}</span>
           {% if message.can_answer %}
             <form method="post" action="{{ message.accept_url }}">
@@ -214,13 +234,13 @@
               <button type="submit">Decline</button>
             </form>
           {% endif %}
-        </p>
+        </div>
       {% else %}
-      <p class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
+      <div class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
         {% if message.post %}
-          <span class="post">
+          <div class="post">
             <b>{{ message.post.game }}</b>
             <span class="meta">{{ message.post.mode_label }}
               {%- if message.post.location %} &middot; {{ message.post.location }}{% endif -%}
@@ -231,26 +251,44 @@
               {{ message.post.count }} of {{ message.post.max_players }} going{% if message.post.going %}:
               {{ message.post.going | join(", ") }}{% endif %}
             </span>
-            <span class="post-actions">
+            {# One action row at the foot of the card. Both labels name the
+               meetup: "Leave" alone was read as leaving the conversation and
+               "Close" as shutting the window. #}
+            <div class="post-actions">
               {% if message.post.status != "open" %}
                 <span class="meta">Closed</span>
               {% else %}
-                <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
-                  <button type="submit"
-                          {% if message.post.full and not message.post.im_going %}disabled{% endif %}>
-                    {{ "Leave" if message.post.im_going else "I'm in" }}
-                  </button>
-                </form>
+                {% if message.post.im_going %}
+                  {# A <details>, so the confirmation needs no JavaScript. #}
+                  <details class="confirm">
+                    <summary class="leave">Leave Meetup</summary>
+                    <div class="confirm-body">
+                      <span class="confirm-ask">Are you sure you want to leave
+                        this meetup?</span>
+                      <span class="confirm-row">
+                        <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                          <button type="submit" class="leave-yes">Yes, leave</button>
+                        </form>
+                        <button type="button" class="confirm-no">Keep my spot</button>
+                      </span>
+                    </div>
+                  </details>
+                {% else %}
+                  <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
+                    <button type="submit"
+                            {% if message.post.full %}disabled{% endif %}>I'm in</button>
+                  </form>
+                {% endif %}
                 {% if message.post.mine %}
                   <form method="post" action="{{ url_for('post_close', post_id=message.post.id) }}">
-                    <button type="submit">Close</button>
+                    <button type="submit">Cancel meetup</button>
                   </form>
                 {% endif %}
               {% endif %}
-            </span>
-          </span>
+            </div>
+          </div>
         {% endif %}
-      </p>
+      </div>
       {% endif %}
     {% else %}
       <p class="why" id="empty">No messages yet. Say hello.</p>
@@ -416,7 +454,9 @@
       var empty = document.getElementById("empty");
       if (empty) { empty.remove(); }
 
-      var p = document.createElement("p");
+      // A div, matching what the server renders: an event notice carries
+      // Accept and Decline forms, and a <p> cannot legally hold them.
+      var p = document.createElement("div");
       p.dataset.id = message.id;
 
       if (message.event) {
