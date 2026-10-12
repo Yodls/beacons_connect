@@ -406,6 +406,16 @@ class Activity(db.Model):
     name = db.Column(db.Text, unique=True, nullable=False)
     online = db.Column(db.Boolean, nullable=False, default=False)
     in_person = db.Column(db.Boolean, nullable=False, default=False)
+    # Whether the activity pickers offer this one. The catalogue is long, and a
+    # form asking students to organise something in person has no business
+    # listing Tic-Tac-Toe -- so the pickers show a focused handful and let
+    # anything else be written in.
+    #
+    # A presentation shortlist and nothing more: post_new and find_queue still
+    # accept any catalogue activity that passes their own checks, so narrowing
+    # the list cannot invalidate a post somebody already made.
+    preset = db.Column(db.Boolean, nullable=False, default=False,
+                       server_default=db.text("false"))
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     locations = db.relationship(
         "ActivityLocation",

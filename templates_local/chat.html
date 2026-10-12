@@ -438,6 +438,10 @@
                   data-online="{{ 1 if a.online else 0 }}"
                   data-inperson="{{ 1 if a.in_person else 0 }}">{{ a.name }}</option>
         {% endfor %}
+        {# The write-in. data-inperson so the mode narrowing above settles on
+           "In person" by itself: an activity you typed, at a place you typed,
+           is not something anybody plays online. #}
+        <option value="other" data-online="0" data-inperson="1">Other&hellip;</option>
       </select>
       <select name="mode" class="mode">
         {% for key, label in post_modes.items() %}
@@ -456,6 +460,13 @@
           {% endif %}
         {% endfor %}
       </select>
+      {# Shown only for a write-in. Rendered plainly rather than hidden, so the
+         form still works with no JavaScript -- the server ignores these unless
+         the chosen activity is Other. #}
+      <input name="custom_game" class="custom" maxlength="60"
+             placeholder="What are you playing?" aria-label="Activity" />
+      <input name="custom_location" class="custom" maxlength="120"
+             placeholder="Where?" aria-label="Meetup location" />
       <input name="max_players" type="number" min="2" max="50" value="2" />
       <input name="when_text" maxlength="120" placeholder="When (optional)" />
       <input name="note" maxlength="300" placeholder="Note (optional)" />
@@ -578,6 +589,17 @@
         var online = opt.dataset.online === "1";
         var inperson = opt.dataset.inperson === "1";
 
+        // Matches app.OTHER. A test asserts the two still agree, because
+        // nothing else would notice if one of them changed.
+        var writing = name === "other";
+        form.querySelectorAll(".custom").forEach(function (el) {
+          el.hidden = !writing;
+          // Disabled, not just hidden: a disabled field is neither submitted
+          // nor validated by the browser, so an empty write-in box cannot
+          // block a perfectly good preset post.
+          el.disabled = !writing;
+        });
+
         if (mode) {
           Array.prototype.forEach.call(mode.options, function (o) {
             var ok = o.value === "online" ? online : inperson;
@@ -592,7 +614,12 @@
           }
         }
 
-        if (loc) {
+        // Nothing to choose from: the activity is not in the catalogue, so it
+        // has no known spots. The student types the place instead.
+        if (mode) { mode.hidden = writing; }
+        if (loc) { loc.disabled = writing; }
+
+        if (loc && !writing) {
           var wanted = !mode || mode.value === "inperson";
           loc.closest("form").querySelectorAll(".loc optgroup").forEach(function (g) {
             g.hidden = !(wanted && g.dataset.act === name);
@@ -605,6 +632,8 @@
           });
           if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
           loc.hidden = !wanted;
+        } else if (loc) {
+          loc.hidden = true;
         }
       }
 

@@ -339,6 +339,15 @@ COMMUNITY = "community"
 COMMUNITY_TITLE = "Community Chat"
 POST_MODES = {"online": "Online", "inperson": "In person"}
 
+# The one value the activity select may carry that is not a catalogue activity.
+# A sentinel rather than "anything we do not recognise" on purpose: writing an
+# activity in is an explicit choice with its own two fields, so a stray or
+# mistyped `game` is still refused rather than quietly becoming a meetup for
+# whatever the sender felt like typing.
+OTHER = "other"
+CUSTOM_GAME_MAX = 60
+CUSTOM_LOCATION_MAX = 120
+
 # There are four kinds of chat. Naming them here rather than in the templates
 # keeps the two places that label a chat from drifting apart, and stops a new
 # kind rendering as whichever one the else-branch happened to name.
@@ -357,8 +366,13 @@ CHAT_TAG = {
     "group": "Group",
 }
 
-def activity_catalogue(in_person_only=False):
+def activity_catalogue(in_person_only=False, presets_only=False):
     """Every activity with its locations, ready for a form or for validation.
+
+    `presets_only` is what the pickers ask for: the focused handful rather than
+    the whole catalogue. Validation deliberately does not pass it -- a post
+    somebody made last week names an activity that may not be offered today,
+    and it has to go on being valid.
 
     selectinload matters here: the locations relationship is lazy, so without
     it this was one query per activity -- 17 of them on every page that built
@@ -369,11 +383,14 @@ def activity_catalogue(in_person_only=False):
              .order_by(Activity.sort_order))
     if in_person_only:
         query = query.where(Activity.in_person.is_(True))
+    if presets_only:
+        query = query.where(Activity.preset.is_(True))
     return [
         {
             "name": a.name,
             "online": a.online,
             "in_person": a.in_person,
+            "preset": a.preset,
             "locations": [loc.name for loc in a.locations],
         }
         for a in db.session.scalars(query)
@@ -823,7 +840,8 @@ def chat(kind, target_id):
         # Only the community room renders the meetup form, so only it needs
         # the catalogue. Building it unconditionally cost every other chat a
         # pile of queries for a form that was never on the page.
-        catalogue=activity_catalogue() if kind == COMMUNITY else [],
+        catalogue=(activity_catalogue(presets_only=True)
+                   if kind == COMMUNITY else []),
     )
 
 
@@ -1614,8 +1632,12 @@ def find_game():
 
     return render_template(
         "find.html",
-        games=[a["name"] for a in activity_catalogue(in_person_only=True)],
-        catalogue=activity_catalogue(),
+        # Both lists are the focused set. "Get paired" gets no write-in:
+        # pairing matches two people on a string, so one typing "basketball"
+        # and another "Basketball" would wait forever without ever meeting.
+        games=[a["name"] for a in activity_catalogue(in_person_only=True,
+                                                     presets_only=True)],
+        catalogue=activity_catalogue(presets_only=True),
         waiting=waiting,
         counts=counts,
         posts=[post_payload(p) for p in posts],
@@ -1709,22 +1731,39 @@ def post_new():
     when_text = request.form.get("when_text", "").strip()
     players = request.form.get("max_players", type=int) or 2
 
-    activity = find_activity(game)
+    # A write-in: the activity and the place both come from the student, so
+    # neither can be checked against the catalogue. It is in person by
+    # definition -- they are telling us where to turn up -- which is why the
+    # mode is taken rather than trusted, and the location select ignored.
+    wrote_in = game == OTHER
+    if wrote_in:
+        game = request.form.get("custom_game", "").strip()
+        location = request.form.get("custom_location", "").strip()
+        mode = "inperson"
+
+    activity = None if wrote_in else find_activity(game)
     allowed = [] if activity is None else [loc.name for loc in activity.locations]
 
     if not game:
-        flash("Say which activity you're looking for.")
-    elif activity is None:
+        flash("Say which activity you're looking for."
+              if not wrote_in else "Type what you want to play.")
+    elif wrote_in and len(game) > CUSTOM_GAME_MAX:
+        flash(f"Keep the activity under {CUSTOM_GAME_MAX} characters.")
+    elif wrote_in and not location:
+        flash("Say where you'll be meeting up.")
+    elif wrote_in and len(location) > CUSTOM_LOCATION_MAX:
+        flash(f"Keep the location under {CUSTOM_LOCATION_MAX} characters.")
+    elif not wrote_in and activity is None:
         flash("Pick an activity from the list.")
     elif mode not in POST_MODES:
         flash("Pick online or in person.")
-    elif mode == "online" and not activity.online:
+    elif not wrote_in and mode == "online" and not activity.online:
         flash(f"{activity.name} can't be played online.")
-    elif mode == "inperson" and not activity.in_person:
+    elif not wrote_in and mode == "inperson" and not activity.in_person:
         flash(f"{activity.name} is online only.")
-    elif mode == "inperson" and not location:
+    elif not wrote_in and mode == "inperson" and not location:
         flash("Pick where you'll be playing.")
-    elif mode == "inperson" and location not in allowed:
+    elif not wrote_in and mode == "inperson" and location not in allowed:
         flash(f"You can't play {activity.name} at that spot.")
     elif len(note) > POST_NOTE_MAX:
         flash(f"Keep the note under {POST_NOTE_MAX} characters.")

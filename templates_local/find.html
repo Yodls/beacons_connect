@@ -142,6 +142,10 @@
                       data-inperson="1">{{ a.name }}</option>
             {% endif %}
           {% endfor %}
+          {# The write-in. See the chat form for why it carries no
+             location of its own until it is chosen. #}
+          <option value="other" data-online="0"
+                  data-inperson="1">Other&hellip;</option>
         </select>
         <select name="location" class="loc" required>
           <option value="">Where</option>
@@ -155,6 +159,12 @@
             {% endif %}
           {% endfor %}
         </select>
+        {# Shown only for a write-in, and rendered plainly so the form still
+           works with no JavaScript. #}
+        <input name="custom_game" class="custom" maxlength="60"
+               placeholder="What are you playing?" aria-label="Activity" />
+        <input name="custom_location" class="custom" maxlength="120"
+               placeholder="Where?" aria-label="Meetup location" />
         <input name="max_players" type="number" min="2" max="50" value="4" />
         <input name="when_text" maxlength="120" placeholder="When" />
         <input name="note" maxlength="300" placeholder="Note (optional)" />
@@ -219,6 +229,20 @@
 
       function sync() {
         var name = act.value;
+
+        // Matches app.OTHER; a test asserts the two still agree.
+        var writing = name === "other";
+        form.querySelectorAll(".custom").forEach(function (el) {
+          el.hidden = !writing;
+          el.disabled = !writing;
+        });
+        // This form marks the location select `required`, so hiding it is not
+        // enough -- a required control that cannot be filled would refuse to
+        // submit. Disabled is neither submitted nor validated.
+        loc.hidden = writing;
+        loc.disabled = writing;
+        if (writing) { return; }
+
         form.querySelectorAll(".loc optgroup").forEach(function (g) {
           g.hidden = g.dataset.act !== name;
         });
