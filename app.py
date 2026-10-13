@@ -1018,6 +1018,9 @@ def live_reply(kind, target_id):
     # The lobby's waiting state asks for this. It doubles as the heartbeat that
     # keeps the student in the queue.
     seeking = request.args.get("seeking") == "1"
+    # Whether the page asking is actually on screen. Only presence cares: a
+    # backgrounded tab should still collect notices.
+    hidden = request.args.get("hidden") == "1"
 
     watching = kind is not None
     parent = None
@@ -1048,9 +1051,11 @@ def live_reply(kind, target_id):
         touched = notices.clear_chat(me, kind, target_id)
 
         # And for the same reason, this is where a board records that somebody
-        # is sitting at it.
+        # is sitting at it. A hidden tab still polls -- notices and the bell
+        # should keep arriving for a window behind another one -- but it says
+        # so, and a board nobody is looking at is not a player who is there.
         if watch_other is not None:
-            if mark_present(pane_game(watch_other), me):
+            if mark_present(pane_game(watch_other), me, here=not hidden):
                 touched = True
 
         if touched:
@@ -1126,6 +1131,36 @@ def live():
     if kind not in MESSAGE_PARENTS or not raw.isdigit():
         return jsonify({"error": "unavailable"}), 403
     return live_reply(kind, int(raw))
+
+
+@app.route("/live/away", methods=["POST"])
+@login_required
+def live_away():
+    """A tab saying it is leaving a board. The mirror of /live.
+
+    Absence used to be inferred from silence, and silence takes PRESENT_WITHIN
+    to notice -- or never arrives at all, because a tab behind another window
+    keeps polling. Closing a tab, walking to another page and locking a phone
+    are all knowable the instant they happen, so the page says so instead,
+    with sendBeacon.
+
+    It takes the same `here=match:12` the channel already has, so the page
+    needs to know nothing about which game is on it. And it speaks only for
+    whoever sent it: taking a game id and clearing "the other seat" would let
+    anybody push their opponent out of their chair, and being away is what
+    makes somebody claimable against.
+    """
+    here = request.values.get("here", "")
+    kind, _, raw = here.partition(":")
+    if kind not in MESSAGE_PARENTS or not raw.isdigit():
+        return "", 204          # nothing to let go of; a beacon cannot retry
+
+    parent, _ = chat_target(kind, int(raw))
+    other = chat_other_id(kind, parent) if parent is not None else None
+    if other is not None and mark_present(pane_game(other), current_user.id,
+                                          here=False):
+        db.session.commit()
+    return "", 204
 
 
 @app.route("/chats/<kind>/<int:target_id>/live")
@@ -1391,26 +1426,43 @@ PRESENT_WITHIN = timedelta(seconds=50)
 CLAIM_AFTER = timedelta(minutes=5)
 
 
-def mark_present(game, user_id):
-    """Record that this player is at this board, now.
+def mark_present(game, user_id, here=True):
+    """Record whether this player has this board on screen, now.
 
     Called once at the start of a request, never from the probe loop: a held
     request outlives the tab that made it, so the only honest moment to say
     "they are here" is when the request arrives. A ghost stamps once and then
     ages out, which is exactly what should happen.
+
+    `here=False` is a tab saying the board is no longer on screen -- hidden
+    behind another window, navigated away from, or being unloaded. It lowers
+    the flag and deliberately leaves the stamp alone: how long they have been
+    gone is measured from when they were last really there, not from when they
+    told us they were going.
     """
     if game is None or game.status != "active":
         return False
     seat = game.seat_of(user_id)
     if seat is None:
         return False
+
+    if not here:
+        if not game.here_for(seat):
+            return False
+        game.mark_here(seat, False)
+        return True
+
     was = game.seen_for(seat)
     now = datetime.utcnow()
     # Only when it would actually change the answer. Writing on every request
     # would be a write every twenty-five seconds per open board for no gain.
-    if was is not None and now - was < PRESENT_WITHIN / 2:
+    # The flag being down is such a change, though: somebody has just come
+    # back, and that must not wait for the stamp to age out first.
+    if (game.here_for(seat) and was is not None
+            and now - was < PRESENT_WITHIN / 2):
         return False
     game.mark_seen(seat, now)
+    game.mark_here(seat, True)
     return True
 
 
@@ -1421,6 +1473,14 @@ def away_for(game, seat):
     a page render, because a forfeit had to be noticed by somebody looking at
     it. Nothing is decided here any more -- the waiting player decides -- so
     this only has to answer a question.
+
+    The flag first and the clock second. Presence used to be inferred from
+    silence alone, and silence turned out to mean nothing: the live channel
+    polls just as happily from a tab nobody is looking at, so "is here" stuck
+    for anybody who walked away without closing it. A tab now says when the
+    board leaves the screen, and PRESENT_WITHIN is left as what it should
+    always have been -- the backstop for the cases that cannot say anything,
+    like a crash, a dead battery or lost wifi.
     """
     seen = game.seen_for(seat)
     if seen is None:
@@ -1428,6 +1488,8 @@ def away_for(game, seat):
         # board since this shipped, or they never had it open. Both are away.
         return datetime.utcnow() - game.updated_at
     gone = datetime.utcnow() - seen
+    if not game.here_for(seat):
+        return gone
     return gone if gone > PRESENT_WITHIN else None
 
 

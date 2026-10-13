@@ -569,6 +569,18 @@ class Game(db.Model):
     # true: nothing was recording it before.
     seen_a = db.Column(db.DateTime)
     seen_b = db.Column(db.DateTime)
+    # And whether the board is on their screen *now*, as their tab last said.
+    # Separate from the stamp above on purpose: this is what lets leaving be
+    # noticed at once instead of waited out, while seen_a/seen_b stay the
+    # honest last-seen that the "left 6 minutes ago" label and the claim clock
+    # are both measured from.
+    #
+    # False for every row that existed before this, which reads as away and is
+    # true -- nothing was telling us either way.
+    here_a = db.Column(db.Boolean, nullable=False, default=False,
+                       server_default="false")
+    here_b = db.Column(db.Boolean, nullable=False, default=False,
+                       server_default="false")
 
     __table_args__ = (
         db.CheckConstraint("player_a <> player_b", name="ck_game_two_players"),
@@ -617,6 +629,15 @@ class Game(db.Model):
             self.seen_b = when
         else:
             self.seen_a = when
+
+    def here_for(self, seat):
+        return self.here_b if seat else self.here_a
+
+    def mark_here(self, seat, flag):
+        if seat:
+            self.here_b = flag
+        else:
+            self.here_a = flag
 
 
 def pair(a, b):

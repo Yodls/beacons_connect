@@ -14,6 +14,7 @@
     "use strict";
 
     var url = {{ url_for('live') | tojson }};
+    var awayUrl = {{ url_for('live_away') | tojson }};
     var token = {{ (notice_token or "") | tojson }};
     var seen = {{ (notice_seen or 0) | int }};
     var at = location.pathname + location.search;
@@ -76,6 +77,12 @@
         q += "&here=" + encodeURIComponent(what.here) +
              "&after=" + (state.after || 0) +
              "&token=" + encodeURIComponent(state.token || "");
+        // Only presence cares about this: a tab behind another window should
+        // still collect notices, but it is not somebody sitting at a board.
+        // Saying so is the whole fix -- this loop re-issues on each response
+        // rather than on a timer, so a hidden tab is not throttled and used
+        // to go on reporting a player who had walked away.
+        if (document.hidden) { q += "&hidden=1"; }
       }
       // The lobby's waiting state. It is also what keeps the student in the
       // queue: the server touches their row when it sees this.
@@ -110,10 +117,36 @@
         });
     }
 
-    function onShow() {
-      if (document.hidden || stopped) { return; }
+    // "I am leaving this board", while there is still a page to say it from.
+    // A held request outlives its tab, so the server cannot tell a closed tab
+    // from a quiet one; left to itself it has to wait the absence window out.
+    // This is what makes leaving immediate instead of eventual.
+    //
+    // sendBeacon because it survives the unload the fetch below would not; the
+    // fallback is for browsers without it, and for the jsdom harness.
+    function sayGone() {
+      var what = Beacon.watching;
+      if (!what || !what.here) { return; }
+      var where = awayUrl + "?here=" + encodeURIComponent(what.here);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(where);
+        return;
+      }
+      fetch(where, {method: "POST", keepalive: true}).catch(function () {});
+    }
+
+    function onFlip() {
+      if (stopped) { return; }
+      if (document.hidden) {
+        // Not torn down: notices should keep arriving behind another window.
+        // The held request has already done its stamping, and the next one
+        // will carry hidden=1, so nothing here puts the board back on screen.
+        sayGone();
+        return;
+      }
       // If the browser dropped the held request while the tab was away, start
-      // a fresh one rather than waiting the old one out.
+      // a fresh one rather than waiting the old one out. It also re-stamps
+      // presence, which is what puts them back at the board.
       if (inflight) { inflight.abort(); }
       round();
     }
@@ -123,12 +156,23 @@
       // shell, so without this the first request would go out before the chat
       // had said what it wants watched.
       first = setTimeout(round, 0);
-      document.addEventListener("visibilitychange", onShow);
+      document.addEventListener("visibilitychange", onFlip);
+      // pagehide rather than beforeunload: beforeunload is unreliable on
+      // mobile, where backgrounding an app is how leaving usually happens.
+      //
+      // Deliberately not fired from the teardown below, which also runs on an
+      // in-page swap -- and a swap is how a move is submitted. Saying goodbye
+      // there would race the new page's hello and could leave somebody
+      // reading as gone immediately after their own move. Navigating away
+      // inside the app therefore falls back to the absence window, which is
+      // what it is for.
+      window.addEventListener("pagehide", sayGone);
 
       return function () {
         stopped = true;
         clearTimeout(first);
-        document.removeEventListener("visibilitychange", onShow);
+        document.removeEventListener("visibilitychange", onFlip);
+        window.removeEventListener("pagehide", sayGone);
         if (inflight) { inflight.abort(); }
       };
     });
