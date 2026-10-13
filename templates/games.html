@@ -62,20 +62,28 @@
     </p>
   {% endif %}
 
-  <h2>Your games</h2>
-  {% for row in rows %}
+  {# One card, drawn for both lists. `me` is passed in because a Jinja macro
+     does not see the template context, and current_user arrives through a
+     context processor. #}
+  {% macro gamecard(row, me) %}
     <div class="card">
       <h3>{{ row.label }} with {{ row.opponent }}</h3>
       <p class="why">
         {% if row.game.status == "invited" %}
           {% if row.waiting_on_you %}They invited you.{% else %}Waiting for them to accept.{% endif %}
         {% elif row.game.status == "active" %}
-          {% if row.waiting_on_you %}<span class="turn">Your turn.</span>{% else %}Their turn.{% endif %}
+          {% if row.waiting_on_you %}
+            <span class="turn">Your turn.</span>
+          {% elif row.opponent_away %}
+            {{ row.opponent }} left.
+          {% else %}
+            Their turn.
+          {% endif %}
         {% elif row.game.status == "declined" %}
           Invite declined.
         {% elif row.game.outcome == "draw" %}
           Finished &mdash; a draw.
-        {% elif row.game.winner_id == current_user.id %}
+        {% elif row.game.winner_id == me %}
           Finished &mdash; you won.
         {% else %}
           Finished &mdash; {{ row.opponent }} won.
@@ -84,13 +92,27 @@
       <div class="actions">
         {# home_kind, not "match": a paired game lives in a pair chat. #}
         <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
-          <button type="submit">Open</button>
+          <button type="submit">{{ "Continue" if row.resumable else "Open" }}</button>
         </form>
       </div>
     </div>
+  {% endmacro %}
+
+  <h2>Continue playing</h2>
+  {% for row in resumable %}
+    {{ gamecard(row, current_user.id) }}
   {% else %}
-    <p class="why">No games yet. Send an invite above.</p>
+    <p class="why">Nothing in progress. Start one above.</p>
   {% endfor %}
+
+  {# Apart from the list above, so a game that is over never looks like one
+     you can go back to. #}
+  {% if done %}
+    <h2>Finished</h2>
+    {% for row in done %}
+      {{ gamecard(row, current_user.id) }}
+    {% endfor %}
+  {% endif %}
 {% endblock %}
 
 {% block script %}

@@ -859,6 +859,12 @@ def chat(kind, target_id):
     game = pane_game(opponent_id) if opponent_id else None
     game_seat = game.seat_of(current_user.id) if game is not None else None
 
+    # Opening the board counts as being at it, the same as the live request
+    # that follows a moment later. Has to come after the game is resolved --
+    # it was above this and referred to a name that did not exist yet.
+    if game is not None and mark_present(game, current_user.id):
+        db.session.commit()
+
     group = parent if kind == "group" else None
     invitable = []
     if group is not None:
@@ -880,7 +886,7 @@ def chat(kind, target_id):
         game=game,
         seat=game_seat,
         payload=game_payload(game, game_seat) if game is not None else None,
-        game_token=game_token(game),
+        game_token=game_token(game, game_seat),
         # Asked of live_game_with rather than the pane: an invite is a message
         # now, so the pane does not see it, and offering to start a second
         # game during one would be wrong.
@@ -918,7 +924,7 @@ def live_pane(target_id, game):
 
     seat = game.seat_of(current_user.id)
     return {
-        "token": game_token(game),
+        "token": game_token(game, seat),
         "live": busy,
         "html": render_template("_gamepane.html", game=game, seat=seat,
                                 payload=game_payload(game, seat),
@@ -1039,7 +1045,15 @@ def live_reply(kind, target_id):
         # the request -- the one moment the tab that asked for it demonstrably
         # still existed. Anything that arrives later is kept out of the badge
         # by exclusion instead, so an abandoned request cannot swallow it.
-        if notices.clear_chat(me, kind, target_id):
+        touched = notices.clear_chat(me, kind, target_id)
+
+        # And for the same reason, this is where a board records that somebody
+        # is sitting at it.
+        if watch_other is not None:
+            if mark_present(pane_game(watch_other), me):
+                touched = True
+
+        if touched:
             db.session.commit()
 
     if seeking:
@@ -1069,7 +1083,7 @@ def live_reply(kind, target_id):
             # about which game the panel shows, and it is where an abandoned
             # game gets settled. Reproducing that here would let the two drift.
             game = pane_game(watch_other) if watch_other else None
-            fresh = game_token(game)
+            fresh = game_token(game, game.seat_of(me) if game else None)
 
         if newest > after or fresh != token or bell_now != bell:
             rows = []
@@ -1205,7 +1219,7 @@ def chat_game(other_id):
 
     seat = game.seat_of(current_user.id)
     return jsonify({
-        "token": game_token(game),
+        "token": game_token(game, seat),
         "live": busy,
         "html": render_template("_gamepane.html", game=game, seat=seat,
                                 payload=game_payload(game, seat),
@@ -1242,9 +1256,26 @@ def game_for(game_id):
     return game, seat
 
 
+def ago_label(gone):
+    """How long ago, in words a sentence can hold: "4 minutes", "2 hours"."""
+    if gone is None:
+        return None
+    minutes = int(gone.total_seconds() // 60)
+    if minutes < 1:
+        return "a moment"
+    if minutes < 60:
+        return f"{minutes} minute" + ("" if minutes == 1 else "s")
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} hour" + ("" if hours == 1 else "s")
+    days = hours // 24
+    return f"{days} day" + ("" if days == 1 else "s")
+
+
 def game_payload(game, seat):
     other_id = game.user_in_seat(1 - seat)
     other = db.session.get(User, other_id)
+    gone = away_for(game, 1 - seat) if game.status == "active" else None
     return {
         "version": game.version,
         "status": game.status,
@@ -1261,6 +1292,17 @@ def game_payload(game, seat):
         "outcome": game.outcome,
         "winner_id": game.winner_id,
         "you_won": game.winner_id == current_user.id,
+        # Rendered into data-token by the pane. Handed over rather than
+        # rebuilt in the template, so the two cannot drift apart.
+        "token": game_token(game, seat),
+        # A flag and a phrase, never the timedelta itself: this payload is
+        # handed to jsonify by /games/<id>/state, which cannot serialise one.
+        "opponent_away": gone is not None,
+        "away_label": ago_label(gone),
+        # "Left a moment ago" is false for somebody who has not arrived yet,
+        # which is every game until the other player first opens the board.
+        "opponent_arrived": game.seen_for(1 - seat) is not None,
+        "can_claim": claimable_by(game, seat),
     }
 
 
@@ -1322,11 +1364,6 @@ def pane_game(other_id):
     if game is None:
         return None
 
-    # Safe to ask of the latest game: a live one is always the most recent,
-    # because only one game per pair can be in play and starting it bumps
-    # updated_at past every finished game.
-    settle_abandoned(game)
-
     if game.status == "active":
         return game
     if game.status not in OVER_GAME:
@@ -1341,10 +1378,77 @@ def pane_game(other_id):
 
 
 # How long a finished game's result stays in the chat before the panel puts
-# itself away, and how long a player has to act before the game is forfeited.
-# The same ten minutes, so a whole game lifecycle can be watched in one go.
+# itself away.
 CLOSE_AFTER = timedelta(minutes=10)
-ABANDON_AFTER = timedelta(minutes=10)
+
+# How recently a player must have been at a board to count as still there.
+# The channel re-issues at least every LIVE_WAIT, so this allows two chances
+# to say hello before anybody is called absent.
+PRESENT_WITHIN = timedelta(seconds=50)
+
+# How long they have to be gone before the other player may take the win.
+# Nothing happens on its own when this passes: it only unlocks the offer.
+CLAIM_AFTER = timedelta(minutes=5)
+
+
+def mark_present(game, user_id):
+    """Record that this player is at this board, now.
+
+    Called once at the start of a request, never from the probe loop: a held
+    request outlives the tab that made it, so the only honest moment to say
+    "they are here" is when the request arrives. A ghost stamps once and then
+    ages out, which is exactly what should happen.
+    """
+    if game is None or game.status != "active":
+        return False
+    seat = game.seat_of(user_id)
+    if seat is None:
+        return False
+    was = game.seen_for(seat)
+    now = datetime.utcnow()
+    # Only when it would actually change the answer. Writing on every request
+    # would be a write every twenty-five seconds per open board for no gain.
+    if was is not None and now - was < PRESENT_WITHIN / 2:
+        return False
+    game.mark_seen(seat, now)
+    return True
+
+
+def away_for(game, seat):
+    """How long that seat has been away from this board, or None if present.
+
+    A read, deliberately. The thing this replaced wrote to the database during
+    a page render, because a forfeit had to be noticed by somebody looking at
+    it. Nothing is decided here any more -- the waiting player decides -- so
+    this only has to answer a question.
+    """
+    seen = game.seen_for(seat)
+    if seen is None:
+        # Nothing has ever been recorded: either they have not opened the
+        # board since this shipped, or they never had it open. Both are away.
+        return datetime.utcnow() - game.updated_at
+    gone = datetime.utcnow() - seen
+    return gone if gone > PRESENT_WITHIN else None
+
+
+def claimable_by(game, seat):
+    """Whether this seat may take the win because the other one left.
+
+    Three things have to hold at once, and the third is belt and braces: a
+    claim must not land in the gap between somebody making a move and their
+    presence being recorded.
+    """
+    if game is None or game.status != "active":
+        return False
+
+    owing = owes_action(game)
+    if owing is None or owing == seat:
+        return False          # nothing is owed, or it is owed by the claimer
+
+    gone = away_for(game, owing)
+    if gone is None or gone < CLAIM_AFTER:
+        return False
+    return datetime.utcnow() - game.updated_at >= CLAIM_AFTER
 
 
 def owes_action(game):
@@ -1386,26 +1490,16 @@ def game_event(game, event, actor_id, body):
                            game_id=game.id, event=event, body=body))
 
 
-def settle_abandoned(game):
-    """Forfeit a game nobody has moved in. Returns True if it just happened.
+def award_walkover(game, seat):
+    """End a game because the other player left, and say so in the chat.
 
-    A write during a GET, which is deliberate: there is no scheduler, so the
-    only moment this can be noticed is when somebody looks. Guarded on status
-    and on there being exactly one player at fault, and it re-checks the
-    status after the clock test, so two players polling at the same instant
-    cannot both finish the game or write two messages.
+    What the automatic forfeit used to do, minus the automatic: the outcome,
+    the constraint it satisfies and the message are all unchanged, so a game
+    that ends this way reads exactly as one that ended that way. The
+    difference is that somebody chose it.
     """
-    if game is None or game.status != "active":
-        return False
-    if datetime.utcnow() - game.updated_at < ABANDON_AFTER:
-        return False
-
-    seat = owes_action(game)
-    if seat is None:
-        return False
-
-    winner_id = game.user_in_seat(1 - seat)
-    loser = db.session.get(User, game.user_in_seat(seat))
+    winner_id = game.user_in_seat(seat)
+    loser = db.session.get(User, game.user_in_seat(1 - seat))
     winner = db.session.get(User, winner_id)
     label = rules.LABELS.get(game.kind, game.kind)
 
@@ -1418,16 +1512,26 @@ def settle_abandoned(game):
     return True
 
 
-def game_token(game):
+def game_token(game, seat=None):
     """What the poller compares to decide whether to swap the pane.
 
     Anything that changes what the pane should look like has to move this, and
     nothing else may: re-swapping identical markup would wipe a half-made
     chess move, which is a two-click interaction.
+
+    Hence the fourth part being a flag rather than a time. Whether the other
+    player is here changes the pane, so it belongs in here; *when* they were
+    last seen changes every twenty-five seconds, and putting that in would
+    make the waiting request return constantly instead of waiting.
     """
     if game is None:
         return "none"
-    return f"{game.id}:{game.version}:{game.status}"
+    base = f"{game.id}:{game.version}:{game.status}"
+    if seat is None or game.status != "active":
+        # Only a game in play has anybody to be present at it, so a finished
+        # result keeps the three-part token it always had.
+        return base
+    return base + (":1" if away_for(game, 1 - seat) is not None else ":0")
 
 
 # How long a waiting player stays pairable without their tab saying hello.
@@ -1521,12 +1625,20 @@ def game_lobby():
                 or (game.status == "active"
                     and rules.can_move(game.kind, game.state, seat))
             ),
+            # An unfinished game is one you can go back to; a finished one is
+            # a result. Listing them together made a game look resumable when
+            # it was over.
+            "resumable": game.status in LIVE_GAME,
+            "opponent_away": (away_for(game, 1 - seat)
+                              if game.status == "active" else None),
         })
 
     waiting = seek_row()
     return render_template(
         "games.html",
         rows=rows,
+        resumable=[r for r in rows if r["resumable"]],
+        done=[r for r in rows if not r["resumable"]],
         seeking=waiting,
         seeking_label=(rules.LABELS.get(waiting.kind, waiting.kind)
                        if waiting else None),
@@ -1863,6 +1975,32 @@ def game_action(game_id, action):
                        f"{winner.name if winner else 'the other player'} "
                        f"won {label}.")
             db.session.commit()
+
+    return game_chat(game, seat)
+
+
+@app.route("/games/<int:game_id>/claim", methods=["POST"])
+@login_required
+def game_claim(game_id):
+    """Take the win because the other player left.
+
+    Offered, never taken: nothing in the app ends a game on a timer any more,
+    so a game can be paused for as long as the two of them like. This is the
+    way out for somebody who would otherwise be waiting for a move that is
+    not coming.
+    """
+    game, seat = game_for(game_id)
+
+    if game is None:
+        flash("That game is not available to you.")
+        return redirect(url_for("game_lobby"))
+
+    if not claimable_by(game, seat):
+        # Re-checked here and not merely hidden in the template: the button is
+        # only shown when it applies, and the rule has to hold anyway.
+        flash("They are still in the game. Give them a moment.")
+    else:
+        award_walkover(game, seat)
 
     return game_chat(game, seat)
 

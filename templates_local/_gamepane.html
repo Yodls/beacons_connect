@@ -11,7 +11,10 @@
   replacing identical markup would throw away a half-made move.
 #}
 {%- import "_ui.html" as ui -%}
-<div class="gamepane" data-token="{{ game.id }}:{{ game.version }}:{{ game.status }}">
+{# The token is handed over rather than rebuilt here: it also carries
+   whether the other player is still at the board, and two copies of that
+   rule would drift apart. #}
+<div class="gamepane" data-token="{{ payload.token }}">
   <div class="gamehead">
     {{ ui.avatar(payload.label, game.id, square=true) }}
     <div class="grow">
@@ -31,6 +34,36 @@
     {% endif %}
   </div>
 
+  {# Whether the other player is actually at the board. Nothing ends on a
+     timer any more, so a game can be paused for as long as the two of them
+     like -- which only works if somebody waiting can tell the difference
+     between a long think and an empty chair. #}
+  {% if game.status == "active" %}
+    <div class="presence {% if payload.opponent_away %}gone{% endif %}">
+      {% if payload.opponent_away %}
+        <span class="dot" aria-hidden="true"></span>
+        <span>
+          {%- if payload.opponent_arrived -%}
+            {{ payload.opponent }} left {{ payload.away_label }} ago.
+          {%- else -%}
+            {{ payload.opponent }} hasn't opened this yet.
+          {%- endif -%}
+        </span>
+        {% if payload.can_claim %}
+          <form method="post"
+                action="{{ url_for('game_claim', game_id=game.id) }}">
+            <button type="submit" class="claim">Claim the win</button>
+          </form>
+        {% else %}
+          <span class="hint">The game keeps until they are back.</span>
+        {% endif %}
+      {% else %}
+        <span class="dot" aria-hidden="true"></span>
+        <span>{{ payload.opponent }} is here.</span>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {# An invite is not shown here any more: it arrives as a message in the log
      with its own Accept and Decline, so the panel only appears once there is
      a board. pane_game() enforces that. #}
@@ -40,9 +73,9 @@
     {% if game.outcome == "abandoned" %}
       <div class="empty">
         {% if payload.you_won %}
-          {{ payload.opponent }} ran out of time &mdash; you win {{ payload.label }}.
+          {{ payload.opponent }} didn't come back &mdash; you win {{ payload.label }}.
         {% else %}
-          You ran out of time, so {{ payload.opponent }} won {{ payload.label }}.
+          You left, so {{ payload.opponent }} took {{ payload.label }}.
         {% endif %}
       </div>
     {% endif %}

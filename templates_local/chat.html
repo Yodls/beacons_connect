@@ -217,6 +217,32 @@
       }
 
       .gamepane { min-width: 0; }
+      /* Who is at the board. Quiet when they are here, and only loud enough
+         to be noticed when they are not. */
+      .presence {
+        display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
+        margin: 0 0 .6rem; padding: .45rem .7rem;
+        background: var(--surface-2); border-radius: var(--r-sm);
+        font-size: .82rem; color: var(--muted);
+      }
+      .presence .dot {
+        width: .5rem; height: .5rem; border-radius: var(--pill);
+        background: var(--place); flex: 0 0 auto;
+      }
+      .presence.gone { background: var(--danger-bg); color: var(--danger); }
+      .presence.gone .dot { background: var(--danger); }
+      .presence form { margin: 0 0 0 auto; }
+      .presence .hint { margin-left: auto; }
+      button.claim, button.claim:hover {
+        border: 1px solid var(--danger); color: #fff;
+      }
+      button.claim { background: var(--danger); }
+      button.claim:hover { background: #8a2119; }
+      .presence button {
+        margin: 0; padding: .25rem .7rem; width: auto;
+        border-radius: var(--r-sm); font-size: .78rem; font-weight: 600;
+      }
+
       .gamehead {
         display: flex; align-items: center; gap: .6rem;
         padding: .6rem .8rem;

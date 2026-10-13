@@ -560,6 +560,15 @@ class Game(db.Model):
                          server_default="false")
     closed_b = db.Column(db.Boolean, nullable=False, default=False,
                          server_default="false")
+    # When each seat was last at this board. Stamped by the live request the
+    # board already holds, so it answers "are they still here" rather than
+    # "how long since anybody moved" -- somebody can sit and think for ten
+    # minutes, and that is not the same as having gone.
+    #
+    # Null means not seen since this shipped, which reads as absent and is
+    # true: nothing was recording it before.
+    seen_a = db.Column(db.DateTime)
+    seen_b = db.Column(db.DateTime)
 
     __table_args__ = (
         db.CheckConstraint("player_a <> player_b", name="ck_game_two_players"),
@@ -599,6 +608,15 @@ class Game(db.Model):
             self.closed_b = True
         else:
             self.closed_a = True
+
+    def seen_for(self, seat):
+        return self.seen_b if seat else self.seen_a
+
+    def mark_seen(self, seat, when):
+        if seat:
+            self.seen_b = when
+        else:
+            self.seen_a = when
 
 
 def pair(a, b):

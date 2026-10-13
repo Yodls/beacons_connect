@@ -111,47 +111,74 @@
   </section>
 
   <section class="sec-game">
-    {{ ui.section("Your games", "game", "game", rows | length) }}
-    <div class="grid two">
-      {% for row in rows %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.avatar(row.opponent, row.game.id, square=true) }}
-            <div class="grow">
-              <h3>{{ row.label }}</h3>
-              <span class="why">with {{ row.opponent }}</span>
-            </div>
-            {% if row.game.status == "invited" %}
-              <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
-                {{- "Invited you" if row.waiting_on_you else "Invite sent" -}}
-              </span>
-            {% elif row.game.status == "active" %}
-              <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
-                {{- "Your turn" if row.waiting_on_you else "Their turn" -}}
-              </span>
-            {% elif row.game.status == "declined" %}
-              <span class="pill dead">Declined</span>
-            {% elif row.game.outcome == "draw" %}
-              <span class="pill done">Draw</span>
-            {% elif row.game.winner_id == current_user.id %}
-              <span class="pill done">You won</span>
+    {# One card, drawn twice: once for games still going and once for games
+       that are over. `me` is passed in because a Jinja macro does not see the
+       template context, and current_user arrives through a context
+       processor. #}
+    {% macro gamecard(row, me) %}
+      <div class="card">
+        <div class="card-top">
+          {{ ui.avatar(row.opponent, row.game.id, square=true) }}
+          <div class="grow">
+            <h3>{{ row.label }}</h3>
+            <span class="why">with {{ row.opponent }}</span>
+          </div>
+          {% if row.game.status == "invited" %}
+            <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
+              {{- "Invited you" if row.waiting_on_you else "Invite sent" -}}
+            </span>
+          {% elif row.game.status == "active" %}
+            {% if row.waiting_on_you %}
+              <span class="pill you">Your turn</span>
+            {% elif row.opponent_away %}
+              {# "Their turn" would be true and useless: they are not there to
+                 take it. #}
+              <span class="pill dead">They left</span>
             {% else %}
-              <span class="pill dead">You lost</span>
+              <span class="pill them">Their turn</span>
             {% endif %}
-          </div>
-          <div class="actions">
-            {# home_kind, not "match": a game against somebody you were paired
-               with lives in a pair conversation, because you are not friends. #}
-            <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
-              <button type="submit">Open</button>
-            </form>
-          </div>
+          {% elif row.game.status == "declined" %}
+            <span class="pill dead">Declined</span>
+          {% elif row.game.outcome == "draw" %}
+            <span class="pill done">Draw</span>
+          {% elif row.game.winner_id == me %}
+            <span class="pill done">You won</span>
+          {% else %}
+            <span class="pill dead">You lost</span>
+          {% endif %}
         </div>
+        <div class="actions">
+          {# home_kind, not "match": a game against somebody you were paired
+             with lives in a pair conversation, because you are not friends. #}
+          <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
+            <button type="submit">{{ "Continue" if row.resumable else "Open" }}</button>
+          </form>
+        </div>
+      </div>
+    {% endmacro %}
+
+    {{ ui.section("Continue playing", "game", "game", resumable | length) }}
+    <div class="grid two">
+      {% for row in resumable %}
+        {{ gamecard(row, current_user.id) }}
       {% else %}
-        <div class="empty">No games yet. Send an invite above to get started.</div>
+        <div class="empty">Nothing in progress. Start one above.</div>
       {% endfor %}
     </div>
   </section>
+
+  {# Kept apart from the list above, so a game that is over never looks like
+     one you can go back to. #}
+  {% if done %}
+    <section class="sec-game">
+      {{ ui.section("Finished", "game", "check", done | length) }}
+      <div class="grid two">
+        {% for row in done %}
+          {{ gamecard(row, current_user.id) }}
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 {% endblock %}
 
 {% block script %}
