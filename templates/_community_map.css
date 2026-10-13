@@ -1,0 +1,220 @@
+      .campus-map-card {
+        margin-top: 2rem;
+        overflow: hidden;
+        background: var(--surface, #fff);
+        border: 1px solid var(--line, #dbe4ee);
+        border-top: 3px solid var(--place, #1b7f52);
+        border-radius: var(--r, 14px);
+        box-shadow: var(--shadow-2, 0 10px 26px rgba(22, 48, 80, .12));
+      }
+      .campus-map-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+        padding: 1rem 1.1rem;
+        background: linear-gradient(135deg, #ffffff 0%, #eef8f3 100%);
+        border-bottom: 1px solid var(--line, #dbe4ee);
+      }
+      .campus-map-head h2 { margin: .08rem 0 .18rem; font-size: 1.18rem; }
+      .campus-map-head p { color: var(--muted, #5f7288); font-size: .82rem; }
+      .campus-map-kicker {
+        display: block; color: var(--place, #1b7f52);
+        font-size: .66rem; font-weight: 800; letter-spacing: .1em;
+        text-transform: uppercase;
+      }
+      .campus-map-actions { display: flex; align-items: center; gap: .55rem; flex: none; }
+      .flag-count {
+        padding: .35rem .62rem;
+        background: var(--place-bg, #e3f3ea); color: #176842;
+        border-radius: 999px; font-size: .72rem; font-weight: 800;
+      }
+      .campus-map-grid {
+        display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(16rem, .75fr);
+        min-height: 31rem;
+      }
+      .campus-map-stage { position: relative; min-width: 0; background: #dfeaf1; }
+      #beaconCampusMap { width: 100%; height: 100%; min-height: 31rem; z-index: 1; }
+      #beaconCampusMap .leaflet-control-attribution {
+        background: rgba(255, 255, 255, .9); color: #42566c;
+        font-size: 10px;
+      }
+      #beaconCampusMap .leaflet-control-attribution a { font-size: inherit; }
+      #beaconCampusMap .leaflet-popup-content-wrapper {
+        border: 1px solid var(--line, #dbe4ee); border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(13, 27, 56, .22);
+      }
+      #beaconCampusMap .leaflet-popup-content { margin: .8rem .9rem; min-width: 13rem; }
+      .map-status {
+        position: absolute; left: .75rem; bottom: .75rem; z-index: 500;
+        max-width: calc(100% - 1.5rem); margin: 0; padding: .48rem .7rem;
+        background: rgba(13, 27, 56, .91); color: #fff;
+        border-radius: 9px; font-size: .72rem; font-weight: 650;
+        box-shadow: 0 5px 16px rgba(13, 27, 56, .2);
+      }
+      .map-status.error { background: rgba(135, 36, 30, .94); }
+      .map-status.success { background: rgba(19, 102, 67, .95); }
+
+      .flag-panel {
+        padding: 1rem; background: var(--surface, #fff);
+        border-left: 1px solid var(--line, #dbe4ee);
+      }
+      .flag-panel-title {
+        display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem;
+        margin-bottom: .85rem;
+      }
+      .flag-panel-title h3 { margin-top: .08rem; font-size: 1rem; }
+      .flag-limit { color: var(--muted, #5f7288); font-size: .68rem; font-weight: 700; }
+      #mapFlagForm { display: grid; gap: .65rem; }
+      #mapFlagForm label { font-size: .74rem; color: var(--muted, #5f7288); }
+      #mapFlagForm input, #mapFlagForm select, #mapFlagForm textarea {
+        margin-top: .25rem; padding: .52rem .62rem; font-size: .8rem;
+      }
+      #mapFlagForm textarea { min-height: 4.3rem; }
+      .map-point-picker {
+        padding: .65rem .7rem; background: var(--place-bg, #e3f3ea);
+        border: 1px dashed var(--place, #1b7f52); border-radius: 10px;
+      }
+      .map-field-label {
+        display: block; margin-bottom: .2rem; color: var(--muted, #5f7288);
+        font-size: .68rem; font-weight: 700;
+      }
+      .map-point-picker strong {
+        display: block; color: var(--ink, #182b43); font-size: .8rem;
+      }
+      .map-point-picker small {
+        display: block; margin-top: .15rem; color: var(--muted, #5f7288);
+        font-size: .66rem;
+      }
+      .flag-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+      .optional { font-weight: 500; color: #8a9aab; }
+      .map-button {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: auto; min-height: 42px; margin: 0; padding: .52rem .78rem;
+        border: 1px solid var(--line-2, #c2d2e4); border-radius: 9px;
+        font: inherit; font-size: .76rem; font-weight: 750; cursor: pointer;
+      }
+      .map-button-primary {
+        width: 100%; background: var(--place, #1b7f52); color: #fff;
+        border-color: var(--place, #1b7f52);
+      }
+      .map-button-primary:hover { background: #146840; }
+      .map-button-ghost { background: #fff; color: var(--ink, #182b43); }
+      .map-button-ghost:hover { background: var(--surface-2, #eef3f9); }
+      .map-button[disabled] { opacity: .55; cursor: not-allowed; }
+      .map-privacy {
+        margin-top: .7rem; color: var(--muted, #5f7288);
+        font-size: .68rem; line-height: 1.45;
+      }
+
+      .flag-feed { padding: .85rem 1rem 1rem; border-top: 1px solid var(--line, #dbe4ee); }
+      .flag-feed-head { display: flex; align-items: center; justify-content: space-between; }
+      .flag-feed-head h3 { font-size: .84rem; }
+      .map-text-button {
+        padding: .2rem; background: none; color: var(--blue, #005a8b);
+        border: 0; font: inherit; font-size: .72rem; font-weight: 750; cursor: pointer;
+      }
+      .flag-list {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .55rem; margin-top: .65rem;
+      }
+      .flag-list-empty {
+        grid-column: 1 / -1; padding: 1rem;
+        background: var(--surface-2, #eef3f9); color: var(--muted, #5f7288);
+        border-radius: 10px; text-align: center; font-size: .78rem;
+      }
+      .flag-item {
+        min-width: 0; padding: .68rem .72rem; background: #fff;
+        border: 1px solid var(--line, #dbe4ee); border-left: 4px solid var(--flag-color);
+        border-radius: 10px; cursor: pointer;
+      }
+      .flag-item:hover { border-color: var(--line-2, #c2d2e4); box-shadow: var(--shadow, 0 4px 14px rgba(22, 48, 80, .06)); }
+      .flag-item-top { display: flex; align-items: center; gap: .4rem; }
+      .flag-item b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+      .flag-item small { display: block; margin-top: .25rem; color: var(--muted, #5f7288); font-size: .67rem; }
+      .flag-chip {
+        flex: none; padding: .14rem .35rem; color: var(--flag-color);
+        background: color-mix(in srgb, var(--flag-color) 12%, white);
+        border-radius: 999px; font-size: .58rem; font-weight: 800; text-transform: uppercase;
+      }
+      .flag-popup-title { margin: 0 0 .25rem; font-size: .92rem; color: #182b43; }
+      .flag-popup-meta { margin: .14rem 0; color: #5f7288; font-size: .72rem; }
+      .flag-popup-note { margin: .45rem 0; font-size: .78rem; color: #263d56; }
+      .flag-popup-id { color: #8190a0; font: 600 .62rem/1.3 ui-monospace, monospace; }
+      .flag-popup-delete {
+        margin-top: .55rem; padding: .35rem .55rem; width: 100%;
+        background: #fff; color: #a3281f; border: 1px solid #e7b9b5;
+        border-radius: 8px; font-size: .7rem; font-weight: 750; cursor: pointer;
+      }
+      .beacon-flag-icon, .approved-place-icon, .user-position-icon,
+      .draft-position-icon {
+        background: transparent; border: 0;
+      }
+      .beacon-flag-pin {
+        position: relative; display: grid; place-items: center;
+        width: 30px; height: 30px; color: #fff; background: var(--flag-color);
+        border: 3px solid #fff; border-radius: 50% 50% 50% 8px;
+        transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(13, 27, 56, .28);
+      }
+      .beacon-flag-pin span { transform: rotate(45deg); font-size: 11px; font-weight: 900; }
+      .campus-lighthouse-pin {
+        display: block; width: 30px; height: 40px; color: #174a78;
+        filter: drop-shadow(0 3px 3px rgba(13, 27, 56, .3));
+        transform-origin: 50% 100%; transition: transform .14s ease;
+      }
+      .approved-place-icon:hover .campus-lighthouse-pin,
+      .approved-place-icon:focus .campus-lighthouse-pin {
+        transform: translateY(-1px) scale(1.06);
+      }
+      .campus-lighthouse-pin svg { display: block; width: 100%; height: 100%; overflow: visible; }
+      .lighthouse-blue { fill: currentColor; stroke: #fff; stroke-width: .7; stroke-linejoin: round; }
+      .lighthouse-lamp { fill: #ffd56a; stroke: currentColor; stroke-width: 1.5; }
+      .lighthouse-tower { fill: #fff; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+      .lighthouse-door { fill: #163c32; }
+      .lighthouse-rays {
+        fill: none; stroke: #f3b61f; stroke-width: 2;
+        stroke-linecap: round;
+      }
+      .user-position-dot {
+        width: 16px; height: 16px; background: #1677d2; border: 3px solid #fff;
+        border-radius: 50%; box-shadow: 0 0 0 4px rgba(22, 119, 210, .2);
+      }
+      .draft-position-pin {
+        display: grid; place-items: center; width: 28px; height: 28px;
+        background: #fff; color: var(--place, #1b7f52);
+        border: 3px solid var(--place, #1b7f52); border-radius: 50% 50% 50% 8px;
+        transform: rotate(-45deg); box-shadow: 0 5px 13px rgba(13, 27, 56, .3);
+      }
+      .draft-position-pin span {
+        transform: rotate(45deg); font-size: 14px; font-weight: 900;
+      }
+
+      @media (max-width: 850px) {
+        .campus-map-grid { grid-template-columns: 1fr; }
+        #beaconCampusMap { height: 27rem; min-height: 27rem; }
+        .flag-panel { border-left: 0; border-top: 1px solid var(--line, #dbe4ee); }
+        .flag-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 560px) {
+        .campus-map-card { margin-top: 1.4rem; border-radius: 12px; }
+        .campus-map-head {
+          align-items: flex-start; flex-direction: column;
+          gap: .8rem; padding: .9rem;
+        }
+        .campus-map-head h2 { font-size: 1.08rem; }
+        .campus-map-actions { width: 100%; justify-content: space-between; gap: .65rem; }
+        .campus-map-actions .map-button { flex: 1 1 auto; }
+        #beaconCampusMap { height: 23rem; min-height: 23rem; }
+        #beaconCampusMap .leaflet-bar a {
+          width: 44px; height: 44px; line-height: 44px;
+        }
+        .flag-panel { padding: .9rem; }
+        #mapFlagForm { gap: .8rem; }
+        #mapFlagForm input,
+        #mapFlagForm select,
+        #mapFlagForm textarea { min-height: 44px; padding: .65rem .7rem; font-size: 16px; }
+        #mapFlagForm textarea { min-height: 6rem; }
+        .map-point-picker { padding: .8rem; }
+        .map-button { min-height: 44px; font-size: .82rem; }
+        .flag-feed { padding: .9rem; }
+        .flag-list { grid-template-columns: 1fr; }
+        .flag-form-row { grid-template-columns: 1fr; }
+        .flag-item { min-height: 64px; padding: .75rem; }
+      }

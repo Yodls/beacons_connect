@@ -1,0 +1,103 @@
+<section class="campus-map-card" id="campusMapCard"
+         data-flags-url="{{ url_for('map_flags_list') }}">
+  <header class="campus-map-head">
+    <div>
+      <span class="campus-map-kicker">Meet on campus</span>
+      <h2>Community map</h2>
+      <p>See active plans or place a temporary flag anywhere inside the campus safety area.</p>
+    </div>
+    <div class="campus-map-actions">
+      <span class="flag-count" id="mapFlagCount">Loading flags&hellip;</span>
+      <button class="map-button map-button-ghost" id="mapLocate" type="button">
+        Locate me
+      </button>
+    </div>
+  </header>
+
+  <div class="campus-map-grid">
+    <div class="campus-map-stage">
+      <div id="beaconCampusMap" role="application"
+           aria-label="Interactive map for UMass Boston meetup flags"></div>
+      <p class="map-status" id="mapStatus" aria-live="polite">
+        Click inside the shaded campus area to choose a flag position.
+      </p>
+    </div>
+
+    <aside class="flag-panel" aria-labelledby="flagFormTitle">
+      <div class="flag-panel-title">
+        <div>
+          <span class="campus-map-kicker">New meetup</span>
+          <h3 id="flagFormTitle">Drop a flag</h3>
+        </div>
+        <span class="flag-limit">Maximum 3 active</span>
+      </div>
+
+      <form id="mapFlagForm" data-full>
+        <label>
+          Title
+          <input name="title" maxlength="100" placeholder="Pickup frisbee after class" required />
+        </label>
+
+        <div class="flag-form-row">
+          <label>
+            Type
+            <select name="category" required></select>
+          </label>
+          <label>
+            Expires after
+            <select name="duration" required></select>
+          </label>
+        </div>
+
+        <div class="map-point-picker">
+          <span class="map-field-label">Flag position</span>
+          <strong id="mapFlagPoint">Choose a point on the map</strong>
+          <small>You can drag the preview pin to adjust it.</small>
+          <input name="latitude" id="mapFlagLatitude" type="hidden" />
+          <input name="longitude" id="mapFlagLongitude" type="hidden" />
+        </div>
+
+        <label>
+          Location label
+          <input name="location_name" id="mapFlagLocationName" maxlength="120"
+                 placeholder="Campus Center lawn" required />
+        </label>
+
+        <div class="flag-form-row flag-audience-row">
+          <label>
+            Visibility
+            <select name="visibility" id="mapFlagVisibility">
+              <option value="public">All students</option>
+            </select>
+          </label>
+          <label id="mapFlagClubWrap" hidden>
+            Club
+            <select name="club_id" id="mapFlagClub"></select>
+          </label>
+        </div>
+
+        <label>
+          Note <span class="optional">optional</span>
+          <textarea name="description" maxlength="300"
+                    placeholder="How to find the group, what to bring, or who can join"></textarea>
+        </label>
+
+        <button class="map-button map-button-primary" type="submit" id="mapFlagSubmit">
+          Place temporary flag
+        </button>
+      </form>
+
+      <p class="map-privacy">
+        Your GPS position stays in this browser. Only the flag position you choose is saved.
+      </p>
+    </aside>
+  </div>
+
+  <div class="flag-feed">
+    <div class="flag-feed-head">
+      <h3>Active campus flags</h3>
+      <button class="map-text-button" id="mapRefresh" type="button">Refresh</button>
+    </div>
+    <div class="flag-list" id="mapFlagList" aria-live="polite"></div>
+  </div>
+</section>

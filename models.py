@@ -690,3 +690,53 @@ class Notice(db.Model):
 
     def seen(self):
         return self.read_at is not None
+
+
+class MapFlag(db.Model):
+    """A short-lived meetup beacon inside the approved campus boundary."""
+
+    __tablename__ = "map_flags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # This is the ID exposed to browsers. Database row IDs stay internal.
+    public_id = db.Column(db.String(36), unique=True, nullable=False)
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(300))
+    category = db.Column(db.String(20), nullable=False)
+    visibility = db.Column(db.String(12), nullable=False, default="public")
+    club_id = db.Column(
+        db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE")
+    )
+    location_key = db.Column(db.String(40), nullable=False)
+    location_name = db.Column(db.String(120), nullable=False)
+    latitude = db.Column(db.Numeric(9, 6), nullable=False)
+    longitude = db.Column(db.Numeric(9, 6), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "category IN ('game', 'study', 'social', 'club', 'event')",
+            name="ck_map_flag_category",
+        ),
+        db.CheckConstraint(
+            "visibility IN ('public', 'club')",
+            name="ck_map_flag_visibility",
+        ),
+        db.CheckConstraint(
+            "(visibility = 'public' AND club_id IS NULL) OR "
+            "(visibility = 'club' AND club_id IS NOT NULL)",
+            name="ck_map_flag_audience",
+        ),
+        db.CheckConstraint(
+            "expires_at > created_at", name="ck_map_flag_expiration"
+        ),
+        db.Index("ix_map_flags_expires", "expires_at"),
+        db.Index("ix_map_flags_owner_expires", "owner_id", "expires_at"),
+        db.Index("ix_map_flags_club_expires", "club_id", "expires_at"),
+    )
+
+

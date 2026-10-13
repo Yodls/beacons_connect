@@ -126,6 +126,8 @@
         font-size: .76rem; font-weight: 700;
       }
       .going.full { background: var(--danger-bg); color: var(--danger); }
+
+      {% include "_community_map.css" %}
 {% endblock %}
 
 {#
@@ -330,6 +332,8 @@
       {% endfor %}
     </div>
   </section>
+
+  {% include "_community_map.html" %}
 {% endblock %}
 
 {% block script %}
@@ -376,4 +380,5 @@
     });
   })();
 </script>
+<script src="{{ url_for('static', filename='community-map.js') }}"></script>
 {% endblock %}

@@ -2,6 +2,8 @@ import os
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from math import isfinite
+from uuid import uuid4
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -48,6 +50,7 @@ from models import (
     GameQueue,
     GAME_EVENTS,
     Match,
+    MapFlag,
     MESSAGE_PARENTS,
     Message,
     PRONOUNS,
@@ -2820,6 +2823,309 @@ def onboarding():
         pronoun_options=PRONOUNS,
         pronouns_now=current_user.pronouns,
     )
+
+
+# Campus Map: additions only; existing routes and behavior are preserved.
+MAP_FLAG_LIMIT = 3
+
+
+MAP_FLAG_CATEGORIES = {
+    "game": "Game",
+    "study": "Study",
+    "social": "Social",
+    "club": "Club",
+    "event": "Event",
+}
+
+
+MAP_FLAG_DURATIONS = {30, 60, 120, 240, 480}
+
+
+MAP_FLAG_BOUNDS = {
+    "south": 42.3097,
+    "west": -71.0436,
+    "north": 42.3174,
+    "east": -71.0317,
+}
+
+
+APPROVED_MAP_LOCATIONS = {
+    "campus-center": {
+        "name": "Campus Center",
+        "latitude": 42.312960,
+        "longitude": -71.036660,
+    },
+    "healey-library": {
+        "name": "Healey Library",
+        "latitude": 42.313620,
+        "longitude": -71.039720,
+    },
+    "university-hall": {
+        "name": "University Hall",
+        "latitude": 42.313320,
+        "longitude": -71.035550,
+    },
+    "clark-athletic-center": {
+        "name": "Clark Athletic Center",
+        "latitude": 42.315080,
+        "longitude": -71.039570,
+    },
+    "wheatley-hall": {
+        "name": "Wheatley Hall",
+        "latitude": 42.312080,
+        "longitude": -71.038290,
+    },
+    "mccormack-hall": {
+        "name": "McCormack Hall",
+        "latitude": 42.312750,
+        "longitude": -71.039350,
+    },
+}
+
+
+def purge_expired_map_flags(now=None):
+    """Delete elapsed flags and return the number removed.
+
+    Every read also filters by expiration, so a flag disappears on time even
+    if this cleanup has not run yet. This opportunistic deletion keeps a small
+    installation tidy; production can also schedule the CLI command below.
+    """
+    now = now or datetime.utcnow()
+    result = db.session.execute(
+        db.delete(MapFlag).where(MapFlag.expires_at <= now)
+    )
+    return result.rowcount or 0
+
+
+def map_flag_payload(flag, owner_name, club_name=None):
+    return {
+        "id": flag.public_id,
+        "title": flag.title,
+        "description": flag.description or "",
+        "category": flag.category,
+        "category_label": MAP_FLAG_CATEGORIES[flag.category],
+        "visibility": flag.visibility,
+        "club_name": club_name,
+        "location_key": flag.location_key,
+        "location_name": flag.location_name,
+        "latitude": float(flag.latitude),
+        "longitude": float(flag.longitude),
+        "owner_name": owner_name,
+        "mine": flag.owner_id == current_user.id,
+        "created_at": flag.created_at.isoformat() + "Z",
+        "expires_at": flag.expires_at.isoformat() + "Z",
+    }
+
+
+def map_flag_point_is_allowed(latitude, longitude):
+    """Return whether a coordinate is finite and inside the campus boundary."""
+    return (
+        isfinite(latitude)
+        and isfinite(longitude)
+        and MAP_FLAG_BOUNDS["south"] <= latitude <= MAP_FLAG_BOUNDS["north"]
+        and MAP_FLAG_BOUNDS["west"] <= longitude <= MAP_FLAG_BOUNDS["east"]
+    )
+
+
+@app.route("/api/map-flags")
+@login_required
+def map_flags_list():
+    """Return every active flag this student is allowed to see."""
+    now = datetime.utcnow()
+    if purge_expired_map_flags(now):
+        db.session.commit()
+
+    joined_club_ids = db.select(ClubMember.club_id).where(
+        ClubMember.user_id == current_user.id
+    )
+    rows = db.session.execute(
+        db.select(MapFlag, User.name, Club.name)
+        .join(User, User.id == MapFlag.owner_id)
+        .outerjoin(Club, Club.id == MapFlag.club_id)
+        .where(
+            MapFlag.expires_at > now,
+            db.or_(
+                MapFlag.visibility == "public",
+                MapFlag.owner_id == current_user.id,
+                MapFlag.club_id.in_(joined_club_ids),
+            ),
+        )
+        .order_by(MapFlag.expires_at, MapFlag.id)
+    ).all()
+    mine = db.session.scalar(
+        db.select(db.func.count())
+        .select_from(MapFlag)
+        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now)
+    )
+    clubs = db.session.execute(
+        db.select(Club.id, Club.name)
+        .join(ClubMember, ClubMember.club_id == Club.id)
+        .where(ClubMember.user_id == current_user.id)
+        .order_by(Club.name)
+    ).all()
+
+    return jsonify({
+        "flags": [map_flag_payload(flag, owner, club) for flag, owner, club in rows],
+        "mine": mine,
+        "limit": MAP_FLAG_LIMIT,
+        "categories": MAP_FLAG_CATEGORIES,
+        "durations": sorted(MAP_FLAG_DURATIONS),
+        "places": [
+            {"key": key, **place}
+            for key, place in APPROVED_MAP_LOCATIONS.items()
+        ],
+        "bounds": MAP_FLAG_BOUNDS,
+        "clubs": [{"id": club_id, "name": name} for club_id, name in clubs],
+    })
+
+
+@app.route("/api/map-flags", methods=["POST"])
+@login_required
+def map_flag_create():
+    """Create one expiring flag inside the reviewed campus boundary."""
+    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return jsonify({"error": "This request must come from the campus map."}), 400
+
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title", "")).strip()
+    description = str(data.get("description", "")).strip()
+    category = str(data.get("category", ""))
+    location_name = str(data.get("location_name", "")).strip()
+    visibility = str(data.get("visibility", "public"))
+
+    try:
+        duration = int(data.get("duration", 0))
+    except (TypeError, ValueError):
+        duration = 0
+    try:
+        latitude = float(data.get("latitude"))
+        longitude = float(data.get("longitude"))
+    except (TypeError, ValueError):
+        latitude = longitude = float("nan")
+
+    if not title:
+        return jsonify({"error": "Give the meetup a title."}), 400
+    if len(title) > 100:
+        return jsonify({"error": "Keep the title under 100 characters."}), 400
+    if len(description) > 300:
+        return jsonify({"error": "Keep the note under 300 characters."}), 400
+    if category not in MAP_FLAG_CATEGORIES:
+        return jsonify({"error": "Choose a valid flag category."}), 400
+    if not location_name:
+        return jsonify({"error": "Add a short label for the meetup location."}), 400
+    if len(location_name) > 120:
+        return jsonify({"error": "Keep the location label under 120 characters."}), 400
+    if not map_flag_point_is_allowed(latitude, longitude):
+        return jsonify({
+            "error": "Place the flag inside the shaded UMass Boston campus area."
+        }), 400
+    if duration not in MAP_FLAG_DURATIONS:
+        return jsonify({"error": "Choose a valid expiration time."}), 400
+    if visibility not in {"public", "club"}:
+        return jsonify({"error": "Choose who can see this flag."}), 400
+
+    club = None
+    if visibility == "club":
+        try:
+            club_id = int(data.get("club_id"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Choose one of your clubs."}), 400
+        if db.session.get(ClubMember, (current_user.id, club_id)) is None:
+            return jsonify({"error": "You can only post to a club you joined."}), 403
+        club = db.session.get(Club, club_id)
+        if club is None:
+            return jsonify({"error": "That club is no longer available."}), 400
+
+    now = datetime.utcnow()
+    if purge_expired_map_flags(now):
+        db.session.commit()
+
+    # Lock this student's row before counting. Two simultaneous create
+    # requests for the same person therefore cannot both claim the last slot.
+    db.session.execute(
+        db.select(User).where(User.id == current_user.id).with_for_update()
+    ).scalar_one()
+    active_count = db.session.scalar(
+        db.select(db.func.count())
+        .select_from(MapFlag)
+        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now)
+    )
+    if active_count >= MAP_FLAG_LIMIT:
+        db.session.rollback()
+        return jsonify({
+            "error": f"You already have {MAP_FLAG_LIMIT} active flags. "
+                     "Delete one or wait for it to expire."
+        }), 409
+
+    flag = MapFlag(
+        public_id=str(uuid4()),
+        owner_id=current_user.id,
+        title=title,
+        description=description or None,
+        category=category,
+        visibility=visibility,
+        club_id=(club.id if club else None),
+        location_key="custom",
+        location_name=location_name,
+        latitude=round(latitude, 6),
+        longitude=round(longitude, 6),
+        created_at=now,
+        expires_at=now + timedelta(minutes=duration),
+    )
+    db.session.add(flag)
+    db.session.commit()
+
+    return jsonify({
+        "flag": map_flag_payload(flag, current_user.name, club.name if club else None),
+        "mine": active_count + 1,
+        "limit": MAP_FLAG_LIMIT,
+    }), 201
+
+
+@app.route("/api/map-flags/<uuid:public_id>", methods=["DELETE"])
+@login_required
+def map_flag_delete(public_id):
+    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return jsonify({"error": "This request must come from the campus map."}), 400
+
+    flag = db.session.scalar(
+        db.select(MapFlag).filter_by(public_id=str(public_id))
+    )
+    if flag is None:
+        return jsonify({"error": "That flag has already expired or was removed."}), 404
+    if flag.owner_id != current_user.id:
+        return jsonify({"error": "You can only remove your own flags."}), 403
+
+    db.session.delete(flag)
+    db.session.commit()
+    return "", 204
+
+
+@app.cli.command("purge-expired-flags")
+def purge_expired_flags_command():
+    """Physically remove elapsed map flags (safe to schedule every minute)."""
+    removed = purge_expired_map_flags()
+    db.session.commit()
+    print(f"Removed {removed} expired map flag(s).")
+
+
+@app.cli.command("init-map-table")
+def init_map_table_command():
+    """Create only map_flags; preserve every existing table and row."""
+    import click
+    from sqlalchemy import inspect
+
+    inspector = inspect(db.engine)
+    missing = [name for name in ("user", "clubs")
+               if not inspector.has_table(name)]
+    if missing:
+        raise click.ClickException(
+            "Map setup needs the original project database first. "
+            "Missing tables: " + ", ".join(missing) +
+            ". No tables or data were changed."
+        )
+    MapFlag.__table__.create(bind=db.engine, checkfirst=True)
+    click.echo("Map table ready. Existing tables and rows were left intact.")
 
 
 if __name__ == "__main__":
