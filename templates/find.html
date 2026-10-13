@@ -19,6 +19,8 @@
       .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 8rem; }
       .newpost button { margin: 0; }
       .going { color: #555; font-size: 0.85rem; }
+
+      {% include "_community_map.css" %}
 {% endblock %}
 
 {% block main %}
@@ -165,6 +167,8 @@
   {% else %}
     <p class="why">No in-person meetups posted yet. Add one above.</p>
   {% endfor %}
+
+  {% include "_community_map.html" %}
 {% endblock %}
 
 {% block script %}
@@ -211,4 +215,5 @@
     });
   })();
 </script>
+<script src="{{ url_for('static', filename='community-map.js') }}"></script>
 {% endblock %}
