@@ -59,6 +59,14 @@
       .newpost { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
                  margin-bottom: 0.75rem; padding: 0.6rem; border: 1px solid #ddd; }
       .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 8rem; }
+      /* The day and the time as one control. */
+      .whenrow { display: inline-flex; flex-wrap: wrap; align-items: center;
+                 gap: 0.3rem; }
+      /* One group rather than three loose boxes, so wrapping cannot split a
+         single time across two lines. */
+      .timeset { display: inline-flex; align-items: stretch; flex: 0 0 auto; }
+      .timeset select { flex: 0 0 auto; width: auto; margin: 0; }
+      .newpost input[type="number"] { flex: 0 0 4rem; }
       .newpost button { margin: 0; }
       .post { display: block; margin-top: 0.3rem; padding: 0.5rem 0.7rem;
               border: 1px solid #ccc; background: #fafafa; }
@@ -196,8 +204,32 @@
              placeholder="What are you playing?" aria-label="Activity" />
       <input name="custom_location" class="custom" maxlength="120"
              placeholder="Where?" aria-label="Meetup location" />
-      <input name="max_players" type="number" min="2" max="50" value="2" />
-      <input name="when_text" maxlength="120" placeholder="When (optional)" />
+      <input name="max_players" type="number" min="2" max="50" value="2"
+             aria-label="How many players" title="How many players" />
+      {# The day in words, and the time as three choices. AM/PM starts blank
+         on purpose -- a preselected one is exactly the guess that makes a
+         meetup's time ambiguous -- and the server refuses an hour without it.
+         The day stays free text so "Tonight" and "Now" are still sayable. #}
+      <span class="whenrow">
+        <input name="when_text" maxlength="60" placeholder="Day (e.g. Friday)"
+               aria-label="Day" />
+        {# One group, not three boxes: a single border with hairlines between,
+           so the hour, the minutes and the half of the day read as one time
+           and cannot be split across two lines by wrapping. #}
+        <span class="timeset">
+          <select name="when_hour" aria-label="Hour">
+            <option value="">Hour</option>
+            {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+          </select>
+          <select name="when_minute" aria-label="Minutes">
+            {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
+          </select>
+          <select name="when_ampm" aria-label="AM or PM">
+            <option value="">AM/PM</option>
+            {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+          </select>
+        </span>
+      </span>
       <input name="note" maxlength="300" placeholder="Note (optional)" />
       <button type="submit">Post</button>
     </form>

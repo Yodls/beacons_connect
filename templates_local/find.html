@@ -76,7 +76,45 @@
 
       .newpost { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
       .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
-      .newpost select { margin: 0; flex: 1 1 10rem; width: auto; }
+      .newpost select { margin: 0; flex: 1 1 7rem; width: auto; }
+      /* The day and the time read as one control rather than four loose
+         boxes. After the .newpost rules above on purpose: these tie them on
+         specificity, so order is what decides. */
+      /* nowrap on purpose: if the row runs out of room the whole when-group
+         moves to the next line together, rather than leaving the day on one
+         line and its time on the next -- which is what looked broken. */
+      .whenrow {
+        display: inline-flex; flex-wrap: nowrap; align-items: center;
+        gap: .25rem; flex: 1 1 21rem; min-width: 0;
+      }
+      .whenrow input { flex: 1 1 5.5rem; min-width: 4.5rem; }
+
+      /* The three time selects as one control: one border around the set,
+         hairlines between, and no rounding or border on the parts. The group
+         is a single flex item, so wrapping can move it but never break it in
+         half the way three loose selects did. */
+      .timeset {
+        display: inline-flex; align-items: stretch; flex: 0 0 auto;
+        background: var(--surface);
+        border: 1px solid var(--line-2); border-radius: var(--r-sm);
+        overflow: hidden;
+      }
+      .timeset select {
+        flex: 0 0 auto; width: auto; margin: 0;
+        padding: .6rem .35rem .6rem .5rem;
+        background: none; border: 0; border-radius: 0;
+      }
+      .timeset select + select { border-left: 1px solid var(--line); }
+      /* The ring belongs to the whole group; a per-segment one would draw a
+         box inside a box. */
+      .timeset select:focus { box-shadow: none; }
+      .timeset:focus-within {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(0, 90, 139, .13);
+      }
+
+      /* A count of players is two digits, not a sentence. */
+      .newpost input[type="number"] { flex: 0 0 4.5rem; text-align: center; }
       .newpost button { margin: 0; white-space: nowrap; }
 
       .meta { display: block; color: var(--muted); font-size: .82rem; }
@@ -202,8 +240,32 @@
                placeholder="What are you playing?" aria-label="Activity" />
         <input name="custom_location" class="custom" maxlength="120"
                placeholder="Where?" aria-label="Meetup location" />
-        <input name="max_players" type="number" min="2" max="50" value="4" />
-        <input name="when_text" maxlength="120" placeholder="When" />
+        <input name="max_players" type="number" min="2" max="50" value="4"
+             aria-label="How many players" title="How many players" />
+        {# The day in words, and the time as three choices. AM/PM starts blank
+           on purpose -- a preselected one is exactly the guess that makes a
+           meetup's time ambiguous -- and the server refuses an hour without it.
+           The day stays free text so "Tonight" and "Now" are still sayable. #}
+        <span class="whenrow">
+          <input name="when_text" maxlength="60" placeholder="Day (e.g. Friday)"
+                 aria-label="Day" />
+          {# One group, not three boxes: a single border with hairlines between,
+             so the hour, the minutes and the half of the day read as one time
+             and cannot be split across two lines by wrapping. #}
+          <span class="timeset">
+            <select name="when_hour" aria-label="Hour">
+              <option value="">Hour</option>
+              {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+            </select>
+            <select name="when_minute" aria-label="Minutes">
+              {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
+            </select>
+            <select name="when_ampm" aria-label="AM or PM">
+              <option value="">AM/PM</option>
+              {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+            </select>
+          </span>
+        </span>
         <input name="note" maxlength="300" placeholder="Note (optional)" />
         <button type="submit">Post it</button>
       </form>

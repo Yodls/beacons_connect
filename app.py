@@ -340,6 +340,31 @@ COMMUNITY = "community"
 COMMUNITY_TITLE = "Community Chat"
 POST_MODES = {"online": "Online", "inperson": "In person"}
 
+# What the time selects offer. Twelve-hour on purpose: the whole point is that
+# a meetup's time cannot be read two ways, and "18:00" is only unambiguous to
+# people who already think in 24-hour time.
+WHEN_HOURS = tuple(str(h) for h in range(1, 13))
+WHEN_MINUTES = ("00", "15", "30", "45")
+WHEN_MERIDIEM = ("AM", "PM")
+WHEN_DAY_MAX = 60
+
+
+def when_label(day, hour, minute, ampm):
+    """One line saying when a meetup is, from a day and a clock time.
+
+    "Friday at 6:30 PM", or "6:30 PM", or "Friday", or nothing.
+
+    Composed into a string rather than stored structured, because when_text has
+    always been free text: a normalised value goes into the same column, and
+    every value posted before this -- 'Friday 6pm', '6 PM', 'Now' -- keeps
+    displaying exactly as it did, with no migration and no backfill that would
+    have to guess what 'Now' meant.
+    """
+    clock = f"{int(hour)}:{minute} {ampm}" if hour else ""
+    if day and clock:
+        return f"{day} at {clock}"
+    return day or clock or None
+
 # The one value the activity select may carry that is not a catalogue activity.
 # A sentinel rather than "anything we do not recognise" on purpose: writing an
 # activity in is an explicit choice with its own two fields, so a stray or
@@ -864,6 +889,9 @@ def chat(kind, target_id):
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
+        when_hours=WHEN_HOURS,
+        when_minutes=WHEN_MINUTES,
+        when_meridiem=WHEN_MERIDIEM,
         # Only the community room renders the meetup form, so only it needs
         # the catalogue. Building it unconditionally cost every other chat a
         # pile of queries for a form that was never on the page.
@@ -1908,6 +1936,9 @@ def find_game():
         games=[a["name"] for a in activity_catalogue(in_person_only=True,
                                                      presets_only=True)],
         catalogue=activity_catalogue(presets_only=True),
+        when_hours=WHEN_HOURS,
+        when_minutes=WHEN_MINUTES,
+        when_meridiem=WHEN_MERIDIEM,
         waiting=waiting,
         counts=counts,
         posts=[post_payload(p) for p in posts],
@@ -1999,7 +2030,13 @@ def post_new():
     mode = request.form.get("mode", "online")
     note = request.form.get("note", "").strip()
     location = request.form.get("location", "").strip()
-    when_text = request.form.get("when_text", "").strip()
+    # The day in words, and the time as three separate choices. Splitting
+    # them is what lets the time be strict without making the field itself
+    # mandatory: "Tonight" with no hour is still a perfectly good answer.
+    day = request.form.get("when_text", "").strip()
+    hour = request.form.get("when_hour", "").strip()
+    minute = request.form.get("when_minute", "").strip() or WHEN_MINUTES[0]
+    ampm = request.form.get("when_ampm", "").strip()
     players = request.form.get("max_players", type=int) or 2
 
     # A write-in: the activity and the place both come from the student, so
@@ -2036,6 +2073,18 @@ def post_new():
         flash("Pick where you'll be playing.")
     elif not wrote_in and mode == "inperson" and location not in allowed:
         flash(f"You can't play {activity.name} at that spot.")
+    # Only once an hour has been picked. Asking for AM or PM when nobody has
+    # named a time would turn an optional field into a required one.
+    elif hour and not ampm:
+        flash("Please select AM or PM.")
+    elif ampm and not hour:
+        flash("Pick an hour to go with the AM or PM.")
+    elif hour and (hour not in WHEN_HOURS or minute not in WHEN_MINUTES
+                   or ampm not in WHEN_MERIDIEM):
+        # Only reachable by posting the form by hand.
+        flash("That isn't a time we offer.")
+    elif len(day) > WHEN_DAY_MAX:
+        flash(f"Keep the day under {WHEN_DAY_MAX} characters.")
     elif len(note) > POST_NOTE_MAX:
         flash(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
@@ -2047,7 +2096,7 @@ def post_new():
             mode=mode,
             note=note or None,
             location=(location if mode == "inperson" else None),
-            when_text=when_text[:120] or None,
+            when_text=when_label(day, hour, minute, ampm),
             max_players=players,
         )
         db.session.add(post)
