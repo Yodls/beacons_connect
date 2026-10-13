@@ -44,6 +44,12 @@
         {{ match.name }}
         {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
       </h3>
+      {# Hobbies only, and only when there are some. The whole overlap stays
+         off person cards; a privacy test still holds the line on that. #}
+      {% if match.hobbies %}
+        <p class="hobbies">You both like: {{ match.hobbies[:3] | join(", ") }}
+          {%- if match.hobbies | length > 3 %} +{{ match.hobbies | length - 3 }} more{% endif %}</p>
+      {% endif %}
       <div class="actions">
         <form method="get"
               action="{{ url_for('chat', kind='match', target_id=match.user_id) }}">
@@ -68,6 +74,10 @@
         {{ rec.name }}
         {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
       </h3>
+      {% if rec.hobbies %}
+        <p class="hobbies">You both like: {{ rec.hobbies[:3] | join(", ") }}
+          {%- if rec.hobbies | length > 3 %} +{{ rec.hobbies | length - 3 }} more{% endif %}</p>
+      {% endif %}
       <div class="actions">
         <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
           <button type="submit">Send friend request</button>

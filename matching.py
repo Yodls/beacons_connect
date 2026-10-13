@@ -4,6 +4,30 @@ from sqlalchemy.exc import IntegrityError
 
 from models import Match, User, UserAnswer, db, pair, pronoun_label
 
+# The hobbies two students both picked, for one named person, as an array.
+#
+# Hobbies alone. The overlap as a whole is still private -- test_privacy keeps
+# majors, graduation years and the rest off every page -- and this is the one
+# question carved out of that, because "you both like Hiking" is the reason a
+# suggestion is a suggestion. _SHARED_SQL below is the same shape without the
+# q.key filter, and is still nobody's business.
+#
+# Written as a column rather than a second lookup because it is wanted for
+# whole lists: a per-row call would be one query per card, and test_privacy
+# section 6 exists to stop exactly that.
+def _hobbies_for(other):
+    return f"""
+        (SELECT COALESCE(array_agg(o.label ORDER BY o.sort_order), '{{}}')
+           FROM user_answers mine
+           JOIN user_answers theirs
+             ON theirs.option_id = mine.option_id
+            AND theirs.user_id = {other}
+           JOIN question_options o ON o.id = mine.option_id
+           JOIN questions q        ON q.id = mine.question_id
+          WHERE mine.user_id = :user_id
+            AND q.key = 'hobbies')"""
+
+
 _CLUBS_SQL = """
     WITH mine AS (
         SELECT option_id
@@ -69,7 +93,9 @@ _CLUBS_SQL = """
 # anyone you have removed. Together with the HAVING (shares at least one
 # answer, so they have answered at all) and email_verified, that makes every
 # row here someone request_match will accept outright.
-_CANDIDATES_SQL = """
+# An f-string purely for the hobbies column; there are no other braces in it,
+# and a future one would have to be doubled.
+_CANDIDATES_SQL = f"""
     WITH mine AS (
         SELECT question_id, option_id
         FROM user_answers
@@ -106,6 +132,7 @@ _CANDIDATES_SQL = """
            them.name      AS name,
            them.pronouns  AS pronouns,
            s.shared_score AS shared_score,
+           {_hobbies_for("s.other_id")} AS hobbies,
            s.shared_score + CASE
                WHEN me.gender IN ('man', 'woman') AND me.gender = them.gender
                THEN :gender_bonus ELSE 0
@@ -126,12 +153,13 @@ _CANDIDATES_SQL = """
     LIMIT :limit
 """
 
-_ACTIVE_SQL = """
+_ACTIVE_SQL = f"""
     SELECT other.id       AS user_id,
            other.name     AS name,
            other.pronouns AS pronouns,
            other.email    AS email,
-           m.score        AS score
+           m.score        AS score,
+           {_hobbies_for("other.id")} AS hobbies
     FROM matches m
     JOIN "user" other
       ON other.id = CASE WHEN m.user_lo = :user_id THEN m.user_hi ELSE m.user_lo END
@@ -187,12 +215,13 @@ _PAIR_SCORE_SQL = """
 # answers, which is the same bar recommendations apply, so they are the only
 # ones worth offering. The left join carries whatever already stands between
 # the two of you, so the page knows which button to draw.
-_SEARCH_SQL = """
+_SEARCH_SQL = f"""
     SELECT u.id            AS user_id,
            u.name          AS name,
            u.pronouns      AS pronouns,
            m.status        AS status,
-           m.requested_by  AS requested_by
+           m.requested_by  AS requested_by,
+           {_hobbies_for("u.id")} AS hobbies
     FROM "user" u
     LEFT JOIN matches m
       ON m.user_lo = LEAST(:user_id, u.id)
@@ -258,6 +287,7 @@ def recommend_people(user_id, limit=4, gender_bonus=0):
         "name": row["name"],
         "pronouns": pronoun_label(row["pronouns"]),
         "score": float(row["shared_score"]),
+        "hobbies": list(row["hobbies"] or []),
     } for row in rows]
 
 
@@ -274,6 +304,7 @@ def active_matches(user_id):
         "pronouns": pronoun_label(row["pronouns"]),
         "email": row["email"],
         "score": float(row["score"]),
+        "hobbies": list(row["hobbies"] or []),
     } for row in rows]
 
 
@@ -298,8 +329,22 @@ def pair_score(user_id, other_id):
 
 
 def shared_labels(user_id, other_id):
+    """Everything two students both picked. Internal: no page shows this."""
     return list(db.session.execute(
         db.text(_SHARED_SQL), {"user_id": user_id, "other_id": other_id}
+    ).scalar() or [])
+
+
+def shared_hobbies(user_id, other_id):
+    """Just the hobbies, for one pair. The part that is shown.
+
+    The listing functions get this as a column instead, so nothing has to call
+    this once per card; it is here for a page that has one person in front of
+    it, and for tests that want the answer without going through a card.
+    """
+    return list(db.session.execute(
+        db.text(f"SELECT {_hobbies_for(':other_id')} AS hobbies"),
+        {"user_id": user_id, "other_id": other_id}
     ).scalar() or [])
 
 
@@ -350,6 +395,7 @@ def search_people(user_id, term, limit=SEARCH_LIMIT):
         "name": row["name"],
         "pronouns": pronoun_label(row["pronouns"]),
         "state": match_state(user_id, row["status"], row["requested_by"]),
+        "hobbies": list(row["hobbies"] or []),
     } for row in rows]
 
 

@@ -12,6 +12,31 @@
 {%- endmacro %}
 
 {#
+  What two students both picked, on a person's card.
+
+  Hobbies only, and `.hobbies` rather than `.shared` on purpose: `.shared` is
+  the whole overlap, which club cards may show and person cards may not, and a
+  privacy test still asserts that it never appears above the club sections.
+  Keeping the two class names apart is what lets that assertion stay exactly
+  as strict as it was.
+
+  A long list is cut and counted rather than wrapped over three lines: these
+  sit on cards in a two-column grid, and somebody with twelve hobbies in
+  common should not get a card twice the height of everyone else's.
+#}
+{% macro both_like(shared, shown=3) -%}
+  {%- if shared -%}
+    <p class="hobbies">
+      <span class="lead">You both like:</span>
+      {%- for label in shared[:shown] %}<i>{{ label }}</i>{% endfor -%}
+      {%- if shared | length > shown %}
+        <span class="more">+{{ shared | length - shown }} more</span>
+      {%- endif -%}
+    </p>
+  {%- endif -%}
+{%- endmacro %}
+
+{#
   A section band. The accent comes from `kind` as a class on the wrapper, never
   as an inline style and never from a condition in the shared stylesheet --
   that sheet has to stay byte-identical across pages, so the colour has to be

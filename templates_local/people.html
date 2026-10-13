@@ -83,6 +83,7 @@
                 <span class="tag past">Were friends</span>
               {% endif %}
             </div>
+            {{ ui.both_like(person.hobbies) }}
             <div class="actions">
               {% if person.state == "matched" %}
                 <form method="get"

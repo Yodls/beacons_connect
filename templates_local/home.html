@@ -137,6 +137,7 @@
               </h3>
             </div>
           </div>
+          {{ ui.both_like(rec.hobbies) }}
           <div class="actions">
             <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
               <input type="hidden" name="back" value="home" />

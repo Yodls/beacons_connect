@@ -410,6 +410,23 @@
         background: var(--surface-2); border: 1px solid var(--line);
         border-radius: var(--pill); color: var(--muted);
       }
+      /* The hobbies two people share, on a person's card. Same chip as
+         .shared deliberately -- it is the same kind of fact -- but its own
+         class, because .shared is the whole overlap and may not appear on a
+         person at all. */
+      .hobbies {
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: .3rem; margin: .55rem 0 0;
+      }
+      .hobbies .lead { font-size: .76rem; color: var(--muted); }
+      .hobbies i {
+        font-style: normal; font-size: .73rem; font-weight: 600;
+        padding: .14rem .5rem;
+        background: var(--friend-bg, var(--surface-2));
+        border: 1px solid var(--line);
+        border-radius: var(--pill); color: var(--text);
+      }
+      .hobbies .more { font-size: .73rem; font-weight: 600; color: var(--muted); }
       .tag {
         flex: none; padding: .16rem .55rem;
         border-radius: var(--pill);
