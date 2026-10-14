@@ -235,6 +235,14 @@
       }
 
       .gamepane { min-width: 0; }
+      /* The two buttons under an invite shown in the panel. Here rather than
+         in base.html because the panel only ever appears on this page, which
+         is the rule base.html states for its shared stylesheet. */
+      .invite-row {
+        display: flex; gap: 8px; justify-content: center;
+        margin-top: 10px;
+      }
+      .invite-row form { margin: 0; }
       /* Who is at the board. Quiet when they are here, and only loud enough
          to be noticed when they are not. */
       .presence {

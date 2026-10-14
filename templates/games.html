@@ -71,7 +71,9 @@
       <h3>{{ row.label }} with {{ row.opponent }}</h3>
       <p class="why">
         {% if row.game.status == "invited" %}
-          {% if row.waiting_on_you %}They invited you.{% else %}Waiting for them to accept.{% endif %}
+          {% if row.expired %}That invite expired.
+          {%- elif row.waiting_on_you %}They invited you.
+          {%- else %}Waiting for them to accept.{% endif %}
         {% elif row.game.status == "active" %}
           {% if row.waiting_on_you %}
             <span class="turn">Your turn.</span>
@@ -91,6 +93,32 @@
         {% endif %}
       </p>
       <div class="actions">
+        {# An invite is answered here as well as in the chat. These read the
+           games row and nothing else -- no message, no notice -- so an invite
+           whose message never got written is still answerable. That is the
+           whole point of them: it is the state four pairs on live were stuck
+           in, with nothing anywhere to press. #}
+        {% if row.game.status == "invited" %}
+          {% if row.waiting_on_you %}
+            <form method="post"
+                  action="{{ url_for('game_action', game_id=row.game.id, action='accept') }}">
+              <input type="hidden" name="back" value="games" />
+              <button type="submit">Accept</button>
+            </form>
+            <form method="post"
+                  action="{{ url_for('game_action', game_id=row.game.id, action='decline') }}">
+              <input type="hidden" name="back" value="games" />
+              <button type="submit" class="ghost">Decline</button>
+            </form>
+          {% else %}
+            {# The way out for whoever sent it, which until now did not exist. #}
+            <form method="post"
+                  action="{{ url_for('game_action', game_id=row.game.id, action='withdraw') }}">
+              <input type="hidden" name="back" value="games" />
+              <button type="submit" class="ghost">Withdraw</button>
+            </form>
+          {% endif %}
+        {% endif %}
         {# home_kind, not "match": a paired game lives in a pair chat. #}
         <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
           <button type="submit">{{ "Continue" if row.resumable else "Open" }}</button>

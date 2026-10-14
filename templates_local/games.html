@@ -148,8 +148,13 @@
             <span class="why">with {{ row.opponent }}</span>
           </div>
           {% if row.game.status == "invited" %}
-            <span class="pill {% if row.waiting_on_you %}you{% else %}them{% endif %}">
-              {{- "Invited you" if row.waiting_on_you else "Invite sent" -}}
+            {# Expired means it no longer stands between these two -- the row
+               is still here and the buttons below still clear it. #}
+            <span class="pill {% if row.expired %}dead
+                              {%- elif row.waiting_on_you %}you{% else %}them{% endif %}">
+              {%- if row.expired %}Expired
+              {%- elif row.waiting_on_you %}Invited you
+              {%- else %}Invite sent{% endif -%}
             </span>
           {% elif row.game.status == "active" %}
             {% if row.waiting_on_you %}
@@ -172,6 +177,32 @@
           {% endif %}
         </div>
         <div class="actions">
+          {# An invite is answered here as well as in the chat. These read the
+             games row and nothing else -- no message, no notice -- so an invite
+             whose message never got written is still answerable. That is the
+             whole point of them: it is the state four pairs on live were stuck
+             in, with nothing anywhere to press. #}
+          {% if row.game.status == "invited" %}
+            {% if row.waiting_on_you %}
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='accept') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit">Accept</button>
+              </form>
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='decline') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit" class="ghost">Decline</button>
+              </form>
+            {% else %}
+              {# The way out for whoever sent it, which until now did not exist. #}
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='withdraw') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit" class="ghost">Withdraw</button>
+              </form>
+            {% endif %}
+          {% endif %}
           {# home_kind, not "match": a game against somebody you were paired
              with lives in a pair conversation, because you are not friends. #}
           <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">

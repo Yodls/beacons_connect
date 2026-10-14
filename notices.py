@@ -332,6 +332,22 @@ def close(user_id, notice_id):
     return mark_read(user_id, notice_id)
 
 
+def close_invite(user_id, game_id):
+    """Retire a game invite notice because the invite itself is gone.
+
+    By game rather than by notice id, which is what close() takes: the person
+    withdrawing an invite is not the person holding the notice about it, so
+    there is no hidden field to read it from. Marked read rather than deleted,
+    the same as every other answered notice.
+    """
+    return db.session.execute(
+        db.update(Notice)
+        .where(Notice.user_id == user_id, Notice.game_id == game_id,
+               Notice.kind == "game_invite", Notice.read_at.is_(None))
+        .values(read_at=datetime.utcnow())
+    ).rowcount
+
+
 def clear_chat(user_id, kind, target_id):
     """Reading a conversation retires its message notice.
 

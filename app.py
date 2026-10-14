@@ -1726,11 +1726,29 @@ def shared_with(other_id):
 
 
 def live_game_with(other_id):
-    """The game in play with someone, or None."""
+    """The game in play with someone, or None.
+
+    An invite past INVITE_TTL does not count. "One game at a time" is a rule
+    about a game two people are actually having, and an invite nobody has
+    touched for a week is not one -- enforcing it from a fossil is how a pair
+    ends up unable to play each other with nothing to press.
+    """
     return db.session.scalar(
         db.select(Game)
-        .where(shared_with(other_id), Game.status.in_(LIVE_GAME))
+        .where(shared_with(other_id), db.or_(
+            Game.status == "active",
+            db.and_(Game.status == "invited",
+                    Game.created_at > datetime.utcnow() - INVITE_TTL)))
         .order_by(Game.updated_at.desc(), Game.id.desc())
+    )
+
+
+def pending_invite_with(other_id):
+    """The unanswered invite between us, fresh or stale, or None."""
+    return db.session.scalar(
+        db.select(Game)
+        .where(shared_with(other_id), Game.status == "invited")
+        .order_by(Game.id.desc())
     )
 
 
@@ -1743,9 +1761,13 @@ def pane_game(other_id):
     never dismissed was queued up behind it. Looking only at the latest game
     makes that impossible rather than tidying up after it.
 
-    An invite is not shown here: it arrives as a message with its own buttons.
-    It is also skipped when picking the latest game, so sending one does not
-    blank a result the other player is still looking at.
+    An invite is not what this shows when there is anything else to show: it
+    arrives as a message with its own buttons, and letting it become the
+    newest game would blank a result the other player is still reading. So it
+    is skipped when picking the latest game, exactly as before -- and offered
+    only where this would otherwise return nothing at all. That costs no
+    result its place and gives an invite a second way to be answered, one
+    that needs no message and no notice.
 
     Also where an abandoned game gets settled, because this is the one place
     both the page render and the poller pass through.
@@ -1762,20 +1784,22 @@ def pane_game(other_id):
         .where(shared_with(other_id), Game.status != "invited")
         .order_by(Game.updated_at.desc(), Game.id.desc())
     )
-    if game is None:
-        return None
 
-    if game.status == "active":
-        return game
-    if game.status not in OVER_GAME:
-        return None                      # nothing a panel can render
-    if game.updated_at <= datetime.utcnow() - CLOSE_AFTER:
-        return None                      # the result has had its ten minutes
+    # Each of these used to return None outright. They now fall through to the
+    # invite instead, which is the same thing whenever there is no invite --
+    # and the only change in what a panel showing something shows.
+    if game is not None:
+        if game.status == "active":
+            return game
+        if game.status in OVER_GAME:
+            # The result has ten minutes, and only for somebody who has not
+            # put it away.
+            seat = game.seat_of(current_user.id)
+            if (game.updated_at > datetime.utcnow() - CLOSE_AFTER
+                    and seat is not None and not game.closed_for(seat)):
+                return game
 
-    seat = game.seat_of(current_user.id)
-    if seat is None or game.closed_for(seat):
-        return None
-    return game
+    return pending_invite_with(other_id)
 
 
 # How long a finished game's result stays in the chat before the panel puts
@@ -1790,6 +1814,21 @@ PRESENT_WITHIN = timedelta(seconds=50)
 # How long they have to be gone before the other player may take the win.
 # Nothing happens on its own when this passes: it only unlocks the offer.
 CLAIM_AFTER = timedelta(minutes=5)
+
+# How long an unanswered invite goes on counting as a game in progress.
+#
+# The backstop, not the fix: an invite is answerable from the lobby and from
+# the chat panel, both built from the games row alone, so one should never
+# need this. It is here because the fault it guards against was not one
+# anybody predicted -- eight invites on live were committed with no message
+# and no notice, which left four pairs unable to play each other at all, with
+# nothing in the interface to press. Whatever does that next, this means it
+# stops mattering after a week.
+#
+# CLAIM_AFTER's rule holds here too: nothing happens on its own when this
+# passes. The stale invite simply stops blocking, and is cleared when one of
+# them acts -- see game_new.
+INVITE_TTL = timedelta(days=7)
 
 
 def mark_present(game, user_id, here=True):
@@ -1913,9 +1952,15 @@ def game_event(game, event, actor_id, body):
         db.select(Match).filter_by(user_lo=lo, user_hi=hi)
     )
     if match is None:
-        return
+        # Says so rather than swallowing it. For an invite this line IS the
+        # Accept button, and a game committed without one locks both players
+        # out of playing each other at all -- which is what happened on live
+        # in October. The caller decides what that is worth; game_new treats
+        # it as fatal.
+        return False
     db.session.add(Message(user_id=actor_id, match_id=match.id,
                            game_id=game.id, event=event, body=body))
+    return True
 
 
 def award_walkover(game, seat):
@@ -2057,6 +2102,12 @@ def game_lobby():
             # a result. Listing them together made a game look resumable when
             # it was over.
             "resumable": game.status in LIVE_GAME,
+            # Past INVITE_TTL, so it no longer stands between these two. Said
+            # on the card rather than left looking live, because the row is
+            # still there and the two buttons beside it still work on it.
+            "expired": (game.status == "invited"
+                        and game.created_at
+                        <= datetime.utcnow() - INVITE_TTL),
             "opponent_away": (away_for(game, 1 - seat)
                               if game.status == "active" else None),
         })
@@ -2243,6 +2294,21 @@ def game_new():
               "Finish that one first.")
         return redirect(url_for("chat", kind="match", target_id=opponent_id))
 
+    # Nothing live, but there may still be an invite old enough that
+    # live_game_with no longer counts it. Cleared here rather than on a read
+    # path: a stale invite stops blocking on its own, but it is only written
+    # off when somebody does something about it. Doing it here also keeps the
+    # invariant pane_game relies on -- one invited-or-active game per pair.
+    fossil = pending_invite_with(opponent_id)
+    if fossil is not None:
+        fossil.status = "declined"
+        fossil.turn_id = None
+        fossil.updated_at = datetime.utcnow()
+        game_event(fossil, "declined", current_user.id,
+                   f"{current_user.name} let the "
+                   f"{rules.LABELS.get(fossil.kind, fossil.kind)} invite "
+                   "expire and started a new game.")
+
     game = Game(
         kind=kind,
         status="invited",
@@ -2256,9 +2322,20 @@ def game_new():
     db.session.flush()
 
     other = db.session.get(User, opponent_id)
-    game_event(game, "invited", current_user.id,
-               f"{current_user.name} invited {other.name if other else 'them'} "
-               f"to {rules.LABELS[kind]}.")
+    # This line is the Accept button. An invite committed without it is one
+    # nobody can answer, and because an unanswered invite counts as a game in
+    # progress, it locks both players out of playing each other at all -- the
+    # fault that reached live in October. So a failure here throws the invite
+    # away rather than committing half of it.
+    said = game_event(game, "invited", current_user.id,
+                      f"{current_user.name} invited "
+                      f"{other.name if other else 'them'} "
+                      f"to {rules.LABELS[kind]}.")
+    if not said:
+        db.session.rollback()
+        flash("That invite could not be sent. Nothing was started.")
+        return redirect(url_for("chat", kind="match", target_id=opponent_id))
+
     notices.game_invite(opponent_id, current_user, game, rules.LABELS[kind])
     db.session.commit()
 
@@ -2347,8 +2424,9 @@ def game_move(game_id):
     return game_chat(game, seat)
 
 
-@app.route("/games/<int:game_id>/<any(accept, decline, resign):action>",
-           methods=["POST"])
+@app.route(
+    "/games/<int:game_id>/<any(accept, decline, withdraw, resign):action>",
+    methods=["POST"])
 @login_required
 def game_action(game_id, action):
     game, seat = game_for(game_id)
@@ -2357,7 +2435,29 @@ def game_action(game_id, action):
         flash("That game is not available to you.")
         return redirect(url_for("game_lobby"))
 
-    if action in ("accept", "decline"):
+    if action == "withdraw":
+        # The way back out for whoever sent it. Until now only the invitee
+        # could resolve an invite, so a sender who changed their mind -- or
+        # whose invite the other person never answered -- had no way to stop
+        # it standing between them.
+        if game.status != "invited":
+            flash("That invite has already been answered.")
+        elif game.player_a != current_user.id:
+            flash("Only the person who sent it can take it back.")
+        else:
+            game.status = "declined"
+            game.turn_id = None
+            game.updated_at = datetime.utcnow()
+            label = rules.LABELS.get(game.kind, game.kind)
+            game_event(game, "declined", current_user.id,
+                       f"{current_user.name} took the {label} invite back.")
+            # The invitee's bell stops offering a game that is no longer on
+            # the table. By game, not by notice id: the notice belongs to
+            # them, so this request has no hidden field carrying it.
+            notices.close_invite(game.player_b, game.id)
+            db.session.commit()
+
+    elif action in ("accept", "decline"):
         # Answered either way, so the notice that offered the game stops
         # offering it -- including when the answer came from the chat instead.
         notices.close(current_user.id, request.form.get("notice"))
@@ -2404,6 +2504,10 @@ def game_action(game_id, action):
                        f"won {label}.")
             db.session.commit()
 
+    # The lobby answers invites too now, and sending somebody to the chat from
+    # there would be answering one question with a different page.
+    if request.form.get("back") == "games":
+        return redirect(url_for("game_lobby"))
     return game_chat(game, seat)
 
 

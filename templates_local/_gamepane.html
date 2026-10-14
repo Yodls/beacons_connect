@@ -64,10 +64,37 @@
     </div>
   {% endif %}
 
-  {# An invite is not shown here any more: it arrives as a message in the log
-     with its own Accept and Decline, so the panel only appears once there is
-     a board. pane_game() enforces that. #}
-  {% if game.status == "declined" %}
+  {# An invite appears here only where the panel would otherwise be empty.
+     It normally arrives as a message in the log with its own Accept and
+     Decline, and it must never cover a result somebody is still reading --
+     pane_game decides that, and this only draws what it is handed. The
+     reason it is drawn at all: a message can be missing, and an invite that
+     cannot be answered locks both players out of playing each other. #}
+  {% if game.status == "invited" %}
+    <div class="empty invite">
+      {% if game.player_b == current_user.id %}
+        <b>{{ payload.opponent }} invited you to {{ payload.label }}.</b>
+        <span class="invite-row">
+          <form method="post"
+                action="{{ url_for('game_action', game_id=game.id, action='accept') }}">
+            <button type="submit">Accept</button>
+          </form>
+          <form method="post"
+                action="{{ url_for('game_action', game_id=game.id, action='decline') }}">
+            <button type="submit" class="ghost">Decline</button>
+          </form>
+        </span>
+      {% else %}
+        <b>Waiting for {{ payload.opponent }} to accept.</b>
+        <span class="invite-row">
+          <form method="post"
+                action="{{ url_for('game_action', game_id=game.id, action='withdraw') }}">
+            <button type="submit" class="ghost">Withdraw</button>
+          </form>
+        </span>
+      {% endif %}
+    </div>
+  {% elif game.status == "declined" %}
     <div class="empty">{{ payload.opponent }} turned this invite down.</div>
   {% else %}
     {% if game.outcome == "abandoned" %}
