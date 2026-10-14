@@ -430,6 +430,64 @@ def find_activity(name):
     return db.session.scalar(db.select(Activity).filter_by(name=name))
 
 
+def fold_name(text):
+    """An activity name reduced to what two people have to agree on.
+
+    Trimmed, inner runs of whitespace collapsed, lowercased. This is the whole
+    reason the in-person queue can take a write-in at all: it used to match on
+    the string as typed, so "basketball" and "Basketball" were two queues and
+    the two students in them never met.
+
+    Folded for comparison rather than rewritten on the way in, so what gets
+    stored is still the spelling somebody chose -- "FIFA" would come back as
+    "Fifa" from anything that normalised instead.
+    """
+    return " ".join((text or "").split()).lower()
+
+
+def queue_name(text):
+    """What to store for a typed activity.
+
+    The catalogue's spelling when the text names an in-person activity, so a
+    student who types "chess" joins the Chess queue that the picker fills
+    rather than starting a second one next to it. Otherwise their own words,
+    tidied of stray whitespace.
+
+    Only in-person activities are resolved. Battleship is in the catalogue as
+    online-only, and somebody typing it here means the board on a table --
+    resolving it would hand back an activity this page then has to refuse.
+    """
+    tidy = " ".join((text or "").split())
+    if not tidy:
+        return ""
+    known = db.session.scalar(
+        db.select(Activity).where(db.func.lower(Activity.name) == tidy.lower(),
+                                  Activity.in_person.is_(True))
+    )
+    return known.name if known else tidy
+
+
+def queue_waiting(user_id):
+    """Who else is waiting, keyed by folded name: counts and a spelling.
+
+    One query, and the rows are grouped here rather than by the database
+    because the page wants a name to show as well as a number -- and the name
+    has to be somebody's actual spelling, picked the same way every time. The
+    longest-waiting student's wins.
+    """
+    counts, display = {}, {}
+    rows = db.session.scalars(
+        db.select(GameQueue)
+        .where(GameQueue.user_id != user_id)
+        .order_by(GameQueue.created_at, GameQueue.user_id)
+    )
+    for row in rows:
+        key = fold_name(row.game)
+        counts[key] = counts.get(key, 0) + 1
+        display.setdefault(key, row.game)
+    return counts, display
+
+
 
 
 class _Room:
@@ -2124,26 +2182,40 @@ def find_game():
             "other": other.name if other else "Partner",
         })
 
-    # How many others are waiting per game, so the page is honest about odds.
-    counts = dict(db.session.execute(
-        db.select(GameQueue.game, db.func.count())
-        .where(GameQueue.user_id != current_user.id)
-        .group_by(GameQueue.game)
-    ).all())
+    # How many others are waiting per activity, so the page is honest about
+    # odds. Keyed by the folded name, because "Chess" and "chess" are one
+    # queue now and counting them apart would say otherwise.
+    counts, spelled = queue_waiting(current_user.id)
+
+    presets = [a["name"] for a in activity_catalogue(in_person_only=True,
+                                                     presets_only=True)]
+
+    # What people have typed in, so a write-in is something you can join
+    # rather than a word you have to guess. The presets are left out: they are
+    # in the picker already, with their own count beside them.
+    picked = {fold_name(name) for name in presets}
+    elsewhere = sorted(
+        ({"name": spelled[key], "count": counts[key]}
+         for key in counts if key not in picked),
+        key=lambda row: (-row["count"], row["name"].lower()),
+    )
 
     return render_template(
         "find.html",
-        # Both lists are the focused set. "Get paired" gets no write-in:
-        # pairing matches two people on a string, so one typing "basketball"
-        # and another "Basketball" would wait forever without ever meeting.
-        games=[a["name"] for a in activity_catalogue(in_person_only=True,
-                                                     presets_only=True)],
+        # The picker is the focused set, plus a write-in. It used to have none
+        # -- pairing matched two people on the string as typed, so one typing
+        # "basketball" and another "Basketball" would have waited for ever
+        # without meeting. fold_name is what made it safe to offer.
+        games=presets,
         catalogue=activity_catalogue(presets_only=True),
         when_hours=WHEN_HOURS,
         when_minutes=WHEN_MINUTES,
         when_meridiem=WHEN_MERIDIEM,
         waiting=waiting,
         counts=counts,
+        elsewhere=elsewhere,
+        other=OTHER,
+        custom_max=CUSTOM_GAME_MAX,
         posts=[post_payload(p) for p in posts],
         pairings=pairings,
     )
@@ -2152,16 +2224,37 @@ def find_game():
 @app.route("/find/queue", methods=["POST"])
 @login_required
 def find_queue():
-    game = request.form.get("game", "")
+    chosen = request.form.get("game", "")
 
-    activity = find_activity(game)
-    if activity is None or not activity.in_person:
-        flash("Pick an activity from the list.")
-        return redirect(url_for("find_game"))
+    # A write-in, the same way the meetup form on this page takes one: the
+    # sentinel in the picker, the words in a field beside it. Typing a name
+    # nobody recognises only counts when it was typed on purpose -- sending an
+    # unknown name as the picker's value is still refused, because that is a
+    # form being posted by hand rather than a student saying what they want.
+    if chosen == OTHER:
+        typed = request.form.get("custom_game", "").strip()
+        if not typed:
+            flash("Type what you want to play.")
+            return redirect(url_for("find_game"))
+        if len(typed) > CUSTOM_GAME_MAX:
+            flash(f"Keep the activity under {CUSTOM_GAME_MAX} characters.")
+            return redirect(url_for("find_game"))
+        game = queue_name(typed)
+    else:
+        activity = find_activity(chosen)
+        if activity is None or not activity.in_person:
+            flash("Pick an activity from the list.")
+            return redirect(url_for("find_game"))
+        game = activity.name
+
+    # Folded, so the two students only have to mean the same activity rather
+    # than type it identically. The stored spelling is left alone.
+    folded = fold_name(game)
 
     partner = db.session.scalars(
         db.select(GameQueue)
-        .where(GameQueue.game == game, GameQueue.user_id != current_user.id)
+        .where(db.func.lower(GameQueue.game) == folded,
+               GameQueue.user_id != current_user.id)
         .order_by(GameQueue.created_at)
     ).first()
 

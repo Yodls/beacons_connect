@@ -18,6 +18,12 @@
         width: auto; flex: 1 1 11rem; margin: 0;
         border-color: transparent; background: #fff;
       }
+      /* Sized like the select beside it, or the global full-width input rule
+         gives it a line of its own and pushes the button onto a third one. */
+      .queuebox .custom {
+        width: auto; flex: 1 1 11rem; margin: 0;
+        border-color: transparent; background: #fff;
+      }
       .queuebox button {
         margin: 0; background: #fff; color: var(--place);
         white-space: nowrap;
@@ -25,6 +31,18 @@
       .queuebox button:hover { background: #eaf6f0; }
 
       /* Scoped: base's .waiting is the friend-request banner on home. */
+      /* The write-in queues other people are sitting in. One row of pills, so
+         three of them do not become three lines inside the green box: each is
+         its own little form, and a form is a block by default. */
+      .alsowaiting {
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: .4rem; margin-top: .9rem;
+      }
+      .alsowaiting .lead {
+        margin: 0 .2rem 0 0; color: #d8f0e4; font-size: .82rem;
+      }
+      .alsowaiting form { display: inline-flex; }
+      .alsowaiting .n { opacity: .7; }
       .queuebox .waiting {
         display: inline-flex; align-items: center; gap: .4rem;
         padding: .2rem .6rem; border-radius: var(--pill);
@@ -150,8 +168,10 @@
       {% if waiting %}
         <h3>Waiting for {{ waiting.game }}</h3>
         <p>
-          {% if counts.get(waiting.game) %}
-            <span class="waiting">{{ counts[waiting.game] }} other student(s) waiting</span>
+          {# Counted by the folded name, so somebody who typed it in a
+             different case is counted as waiting for the same thing. #}
+          {% if counts.get(waiting.game | lower) %}
+            <span class="waiting">{{ counts[waiting.game | lower] }} other student(s) waiting</span>
           {% else %}
             Nobody else has picked it yet &mdash; you're first in line.
           {% endif %}
@@ -161,17 +181,46 @@
         </form>
       {% else %}
         <h3>Get paired with someone</h3>
-        <p>You'll be matched with the next student who picks the same game.</p>
+        <p>You'll be matched with the next student who picks the same game.
+          Capitals don't matter.</p>
         <form method="post" action="{{ url_for('find_queue') }}">
-          <select name="game" required>
+          <select name="game" required class="act">
             {% for game in games %}
               <option value="{{ game }}">
-                {{ game }}{% if counts.get(game) %} &mdash; {{ counts[game] }} waiting{% endif %}
+                {{ game }}{% if counts.get(game | lower) %} &mdash; {{ counts[game | lower] }} waiting{% endif %}
               </option>
             {% endfor %}
+            {# The write-in. Safe to offer now that pairing folds the name
+               before comparing it; before that it would have made a queue
+               only its author could ever be in. #}
+            <option value="{{ other }}">Something else&hellip;</option>
           </select>
+          {# Shown only for a write-in, and rendered plainly so the form still
+             works with no JavaScript. #}
+          <input name="custom_game" class="custom" maxlength="{{ custom_max }}"
+                 placeholder="What do you want to play?" aria-label="Activity" />
           <button type="submit">Find me someone</button>
         </form>
+      {% endif %}
+
+      {# What people have actually typed in. Without this a write-in only ever
+         pairs by coincidence -- two strangers reaching for the same word. #}
+      {% if elsewhere %}
+        <div class="alsowaiting">
+          <p class="lead">Others are waiting for:</p>
+          {% for row in elsewhere %}
+            <form method="post" action="{{ url_for('find_queue') }}">
+              <input type="hidden" name="game" value="{{ other }}" />
+              <input type="hidden" name="custom_game" value="{{ row.name }}" />
+              {# The count only when there is more than one. Whoever arrives
+                 second is paired on the spot, so this is one almost always --
+                 printing it on every chip would say nothing and look like it
+                 was saying something. #}
+              <button type="submit">{{ row.name
+                }}{% if row.count > 1 %} <span class="n">{{ row.count }}</span>{% endif %}</button>
+            </form>
+          {% endfor %}
+        </div>
       {% endif %}
     </div>
   </section>
@@ -345,7 +394,6 @@
     document.querySelectorAll("form .act").forEach(function (act) {
       var form = act.closest("form");
       var loc = form.querySelector(".loc");
-      if (!loc) { return; }
 
       function sync() {
         var name = act.value;
@@ -356,9 +404,15 @@
           el.hidden = !writing;
           el.disabled = !writing;
         });
-        // This form marks the location select `required`, so hiding it is not
-        // enough -- a required control that cannot be filled would refuse to
-        // submit. Disabled is neither submitted nor validated.
+        // The queue form has a write-in but nowhere to be: it is a queue, not
+        // a meetup. Everything below here is about narrowing the location
+        // list, so it stops at the reveal. This used to return before the
+        // reveal instead, which left the queue's box permanently hidden.
+        if (!loc) { return; }
+
+        // The meetup form marks the location select `required`, so hiding it
+        // is not enough -- a required control that cannot be filled would
+        // refuse to submit. Disabled is neither submitted nor validated.
         loc.hidden = writing;
         loc.disabled = writing;
         if (writing) { return; }

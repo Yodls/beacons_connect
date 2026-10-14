@@ -38,9 +38,10 @@
   <h2>Matchmaking</h2>
   <div class="card">
     {% if waiting %}
+      {# Counted by the folded name: a different case is the same queue. #}
       <p>You're waiting for <b>{{ waiting.game }}</b>.
-        {% if counts.get(waiting.game) %}
-          {{ counts[waiting.game] }} other student(s) waiting for it too.
+        {% if counts.get(waiting.game | lower) %}
+          {{ counts[waiting.game | lower] }} other student(s) waiting for it too.
         {% else %}
           Nobody else is waiting for it yet.
         {% endif %}
@@ -52,16 +53,39 @@
       </div>
     {% else %}
       <form class="queue" method="post" action="{{ url_for('find_queue') }}">
-        <select name="game" required>
+        <select name="game" required class="act">
           {% for game in games %}
             <option value="{{ game }}">
-              {{ game }}{% if counts.get(game) %} ({{ counts[game] }} waiting){% endif %}
+              {{ game }}{% if counts.get(game | lower) %} ({{ counts[game | lower] }} waiting){% endif %}
             </option>
           {% endfor %}
+          {# The write-in. Pairing folds the name before comparing, so this
+             no longer makes a queue only its author can be in. #}
+          <option value="{{ other }}">Something else&hellip;</option>
         </select>
+        {# Plain markup, so the form still works with no JavaScript. #}
+        <input name="custom_game" class="custom" maxlength="{{ custom_max }}"
+               placeholder="What do you want to play?" aria-label="Activity" />
         <button type="submit">Find me someone</button>
       </form>
-      <p class="why">You'll be paired with the next person who picks the same game.</p>
+      <p class="why">You'll be paired with the next person who picks the same
+        game. Capitals don't matter.</p>
+    {% endif %}
+
+    {% if elsewhere %}
+      <p class="why">Others are waiting for:</p>
+      <div class="actions">
+        {% for row in elsewhere %}
+          <form method="post" action="{{ url_for('find_queue') }}">
+            <input type="hidden" name="game" value="{{ other }}" />
+            <input type="hidden" name="custom_game" value="{{ row.name }}" />
+            {# The count only when there is more than one: whoever arrives
+               second is paired on the spot, so it is one almost always. #}
+            <button type="submit">{{ row.name
+              }}{% if row.count > 1 %} ({{ row.count }}){% endif %}</button>
+          </form>
+        {% endfor %}
+      </div>
     {% endif %}
   </div>
 
@@ -212,7 +236,6 @@
     document.querySelectorAll("form .act").forEach(function (act) {
       var form = act.closest("form");
       var loc = form.querySelector(".loc");
-      if (!loc) { return; }
 
       function sync() {
         var name = act.value;
@@ -223,6 +246,10 @@
           el.hidden = !writing;
           el.disabled = !writing;
         });
+        // The queue form has a write-in but nowhere to be. Everything below
+        // narrows the location list, so it stops here. This used to return
+        // above the reveal, leaving the queue's box permanently hidden.
+        if (!loc) { return; }
         // This form marks the location select `required`, so hiding it is not
         // enough -- a required control that cannot be filled would refuse to
         // submit. Disabled is neither submitted nor validated.
