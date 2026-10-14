@@ -1,0 +1,68 @@
+/* Beacon Connect — Revolution at Sea. Scoped to avoid changing existing games. */
+.naval-game, .naval-practice { --nav-ink:#173b87; --nav-ink-2:#4366ac; --nav-paper:#fffefb; --nav-line:rgba(64,174,220,.35); --nav-panel:rgba(255,255,255,.94); --nav-red:#c93535; --nav-hit-bg:#ffe4e1; --nav-water:#eff9ff; --nav-frame:#9ab9d7; font-family:"Segoe Print","Comic Sans MS", system-ui, sans-serif; color:var(--nav-ink); }
+body.theme-dark .naval-game, body.theme-dark .naval-practice, [data-theme="dark"] .naval-game { --nav-ink:#d7edff; --nav-ink-2:#a6cdec; --nav-paper:#102840; --nav-line:rgba(110,185,222,.3); --nav-panel:#163450; --nav-red:#ff7a75; --nav-hit-bg:#543340; --nav-water:#163957; --nav-frame:#547b9b; }
+.naval-game *, .naval-practice * { box-sizing:border-box; }
+.naval-illustration {width:100%; min-height:140px; aspect-ratio:1448 / 355; max-height:325px; background:url('revolutionary-naval-banner.webp') center center / cover no-repeat; border:2px solid var(--nav-frame); border-radius:14px 14px 2px 2px; overflow:hidden;}
+.naval-game { width:min(100%,1150px); margin:auto; }
+.naval-explainer {display:flex; align-items:center; gap:14px; padding:13px 18px; background:var(--nav-paper); background-image:linear-gradient(90deg,transparent 97%,var(--nav-line) 100%); background-size:28px 28px; border:2px solid var(--nav-frame); border-top:0; border-radius:0 0 12px 12px;}
+.naval-explainer p {margin:3px 0 0; font: 500 .86rem/1.5 system-ui,sans-serif; color:var(--nav-ink-2);}
+.naval-emblem {font-size:1.6rem;}
+.naval-explainer strong {font-size:.98rem;}
+.naval-phase {margin-left:auto; padding:6px 10px; border:1px dashed var(--nav-frame); border-radius:8px; font-size:.7rem; text-transform:uppercase; font-weight:800; white-space:nowrap;}
+.naval-panels {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin-top:16px;}
+.naval-panel {min-width:0; padding:14px; background-color:var(--nav-paper); background-image:linear-gradient(var(--nav-line) 1px,transparent 1px),linear-gradient(90deg,var(--nav-line) 1px,transparent 1px); background-size:30px 30px; border:2px solid var(--nav-frame); border-radius:13px;box-shadow:0 7px 0 rgba(21,57,100,.09);}
+.naval-panel-head {display:flex; align-items:center; gap:10px; min-height:54px; margin-bottom:10px; padding:8px 12px; background:var(--nav-panel); border:1.5px solid var(--nav-ink-2); border-radius:55% 11% 40% 13% / 30% 26% 21% 35%; transform:rotate(-.3deg);}
+.naval-panel-head h3 {margin:0!important; color:var(--nav-ink)!important; text-transform:uppercase; font-size:clamp(.88rem,1.7vw,1.23rem)!important; letter-spacing:.03em!important;}
+.naval-panel-head small {color:var(--nav-ink-2); font:.72rem system-ui,sans-serif; text-transform:uppercase;letter-spacing:.09em;}
+.naval-panel-icon {font-size:1.85rem; color:var(--nav-ink);}
+.naval-grid-shell {display:grid; grid-template-columns:1.5rem minmax(0,1fr); grid-template-rows:1.5rem auto; width:100%; max-width:490px; margin:auto;}
+.naval-column-labels {grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));}
+.naval-row-labels {grid-column:1;grid-row:2;display:grid;grid-template-rows:repeat(10,minmax(0,1fr));}
+.naval-column-labels span, .naval-row-labels span {display:grid;place-items:center;font:bold clamp(.66rem,1.5vw,.9rem)/1 system-ui,sans-serif;color:var(--nav-ink);}
+.naval-square-grid {grid-column:2;grid-row:2;position:relative;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));grid-template-rows:repeat(10,minmax(0,1fr));aspect-ratio:1;min-width:0;max-width:100%;background:var(--nav-water);border:2px solid var(--nav-ink);overflow:hidden;}
+.naval-square-grid > .naval-cell {position:relative;display:grid;place-items:center;min-width:0;min-height:0;width:100%;height:auto;aspect-ratio:1;padding:0;margin:0;border:0;border-right:1px solid var(--nav-line);border-bottom:1px solid var(--nav-line);background:transparent;border-radius:0;box-shadow:none;color:var(--nav-ink);font-family:system-ui,sans-serif;font-size:clamp(.65rem,2.3vw,1.5rem);line-height:1;isolation:isolate;}
+.naval-square-grid > .naval-cell.occupied {background:rgba(27,77,137,.075);}
+.naval-square-grid > .naval-cell.hit {background:var(--nav-hit-bg);color:var(--nav-red);}
+.naval-square-grid > .naval-cell.miss {background:rgba(72,158,202,.15); color:var(--nav-ink-2);}
+.naval-square-grid > button.naval-cell:not(:disabled) {cursor:crosshair;touch-action:manipulation;}
+.naval-square-grid > button.naval-cell:hover:not(:disabled), .naval-square-grid > button.naval-cell:focus-visible {outline:2px solid var(--nav-red); outline-offset:-3px; z-index:3;background:var(--nav-hit-bg);}
+.naval-square-grid > button.naval-cell.aimed {background:var(--nav-hit-bg);box-shadow:inset 0 0 0 2px var(--nav-red);z-index:3;}
+.naval-square-grid > .naval-cell .naval-mark {position:relative;z-index:5;font-size:1.3em;font-weight:900;text-shadow:0 1px 0 #fff;pointer-events:none;}
+.naval-square-grid > .naval-cell .naval-splash {font-size:1.08em;transform:rotate(24deg);}
+.naval-ship-overlay {position:absolute;z-index:2;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(14,39,88,.22));}
+.naval-fleet {margin-top:13px;padding:9px 10px;background:var(--nav-panel);border:1px dashed var(--nav-frame);border-radius:9px;}
+.naval-fleet strong {font-size:.83rem;letter-spacing:.04em;}
+.naval-fleet-list {display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.naval-ship-tag {border:1px solid var(--nav-frame);border-radius:7px;padding:3px 7px;font-size:.7rem;background:var(--nav-water);font-weight:700;}
+.naval-ship-tag small {font:.67rem system-ui,sans-serif;color:var(--nav-ink-2);}
+.naval-ship-tag.sunk {text-decoration:line-through;opacity:.65;}
+.naval-buttons {display:flex;flex-wrap:wrap;gap:8px;margin-top:13px;}
+.naval-buttons form {flex:1 1 130px;margin:0;}
+.naval-game .naval-buttons button, .naval-practice .naval-buttons button {margin:0;min-height:44px;width:100%;font:bold .87rem system-ui,sans-serif;white-space:normal;border-radius:9px;}
+.naval-game .naval-primary, .naval-practice .naval-primary {color:#fff;background:#17468a;border:1.5px solid #17468a;}
+.naval-game .naval-secondary, .naval-practice .naval-secondary {color:var(--nav-ink);background:var(--nav-panel);border:1.5px solid var(--nav-frame);}
+.naval-note {margin:11px 2px 0;color:var(--nav-ink-2);font:.77rem/1.5 system-ui,sans-serif;}
+.naval-shot-form {margin:0;}
+.naval-fire-row {display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:12px;}
+.naval-fire-row > span {font:.8rem/1.3 system-ui,sans-serif;font-weight:700;color:var(--nav-ink-2);}
+.naval-game .naval-fire, .naval-practice .naval-fire {margin:0;padding:10px 20px;min-width:125px;min-height:44px;background:var(--nav-red);color:#fff;border:2px dashed #f8aa9c;border-radius:9px;font-size:1.1rem;font-weight:900;letter-spacing:.045em;transform:rotate(-1deg);cursor:pointer;}
+.naval-game .naval-fire[disabled], .naval-practice .naval-fire[disabled] {opacity:.55;cursor:not-allowed;background:#65768c;color:#fff;}
+.naval-game .naval-fire:not([disabled]):hover, .naval-practice .naval-fire:not([disabled]):hover {filter:brightness(1.09);transform:rotate(0);}
+.naval-bottom-status {margin-top:16px;padding:13px;border:2px dotted var(--nav-frame);border-radius:9px;background:var(--nav-paper);color:var(--nav-ink);font:bold .9rem system-ui,sans-serif;text-align:center;}
+.naval-bottom-status.naval-my-turn {border-color:var(--nav-red);}
+.naval-game .sr-only {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+/* The legacy game shell centers small games; let Battleship use available width. */
+.boardwrap:has(.naval-game) {display:block;padding:clamp(.45rem,1.2vw,.85rem);}
+#board-area:has(.naval-game) {width:100%;}
+@media (max-width:700px) { .naval-panels {grid-template-columns:minmax(0,1fr);} .naval-panels.firing .naval-panel--enemy {order:-1;} .naval-phase {display:none;} .naval-panel {padding:10px;} .naval-illustration {aspect-ratio:1448/355;min-height:90px;} .naval-explainer {padding:11px;} .naval-grid-shell {max-width:520px;} }
+@media (max-width:370px) { .naval-panel {padding:6px;} .naval-grid-shell {grid-template-columns:1.1rem minmax(0,1fr);grid-template-rows:1.1rem auto;} .naval-ship-tag small {display:none;} .naval-explainer {gap:7px;} .naval-fire-row {flex-wrap:wrap;} }
+@media (prefers-reduced-motion:reduce) { .naval-game *, .naval-practice * {transition:none!important;} }
+
+/* Since latest main embeds games in chat, give the paired naval grids the full chat width.
+   Keep the messaging pane immediately below instead of squeezing ships into the 18–20rem rail. */
+.gamewrap.playing:has(.naval-game) { display:grid; grid-template-columns:minmax(0,1fr); }
+.gamewrap.playing:has(.naval-game) #gamepane-slot, .gamewrap.playing:has(.naval-game) .talkcol { min-width:0; width:100%; }
+.gamewrap.playing:has(.naval-game) #board-area { overflow-x:visible; }
+.gamewrap.playing:has(.naval-game) .boardwrap { width:100%; max-width:100%; }
+.gamewrap.playing:has(.naval-game) .naval-game { max-width:100%; }
+@media (max-width:650px) { .gamewrap.playing:has(.naval-game) .naval-panels { grid-template-columns:minmax(0,1fr); } }

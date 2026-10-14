@@ -126,11 +126,11 @@ def _c4_result(state):
 
 BS_SIZE = 10
 BS_FLEET = (
-    ("Carrier", 5),
-    ("Battleship", 4),
-    ("Cruiser", 3),
-    ("Submarine", 3),
-    ("Destroyer", 2),
+    ("Frigate", 5),
+    ("Brig", 4),
+    ("Schooner", 3),
+    ("Sloop", 3),
+    ("Cutter", 2),
 )
 _BS_CELLS = BS_SIZE * BS_SIZE
 
@@ -261,10 +261,16 @@ def _bs_view(state, seat):
         "their_grid": their_grid,
         "my_fleet": [
             {"name": s["name"], "length": len(s["cells"]),
+             "cells": list(s["cells"]),
              "sunk": set(s["cells"]).issubset(their_shots)}
             for s in mine
         ],
         "their_sunk": [s["name"] for s in _bs_sunk(state["ships"][1 - seat], my_shots)],
+        # Only disclosed after the player has hit every cell of that ship.
+        "their_sunk_ships": [
+            {"name": s["name"], "cells": list(s["cells"])}
+            for s in _bs_sunk(state["ships"][1 - seat], my_shots)
+        ],
         "turn": state["turn"],
     }
 
