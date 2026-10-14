@@ -1,0 +1,15 @@
+{# avatar functionality; if no image is applicable default 
+   avatar of user letters with a colored avatar appears #}
+
+{% macro avatar(name, picture_url=None, size=40, id=None, tone="blue", square=False) -%}
+  {%- set parts = (name or "?").split() -%}
+  {%- set initials = (parts[0][:1] ~ (parts[-1][:1] if parts | length > 1 else "")) | upper -%}
+  <span class="av av-{{ tone }}{% if square %} av-sq{% endif %}" style="--av: {{ size }}px" {% if id %}id="{{ id }}"{% endif %}
+        data-initials="{{ initials }}" aria-hidden="true">
+    {%- if picture_url -%}
+      <img src="{{ picture_url }}" alt="" />
+    {%- else -%}
+      {{ initials }}
+    {%- endif -%}
+  </span>
+{%- endmacro %}

@@ -1,0 +1,209 @@
+{# asks for confirmation and lists changes
+  #}
+
+
+<dialog id="bc-confirm" class="bcc" aria-labelledby="bcc-title">
+  <form method="dialog">
+    <h2 id="bcc-title">Save your changes?</h2>
+    <p id="bcc-body" class="bcc-body"></p>
+    <img id="bcc-img" class="bcc-img" alt="" hidden />
+    <ul id="bcc-list" class="bcc-list" hidden></ul>
+    <p id="bcc-warn" class="bcc-warn" hidden></p>
+    <div class="bcc-actions">
+      <button value="cancel" id="bcc-cancel">Cancel</button>
+      <button value="ok" id="bcc-ok" class="bcc-yes">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  (function () {
+
+    // script runs once even if called multiple times, every time _enhance.html
+    // swaps the site over without reload the initial instance continues
+
+    if (window.BeaconConfirm) { return; }
+
+    var tracked = [];   // forms registered with track(), each with a snapshot
+
+    function el(id) { return document.getElementById(id); }
+
+    // every named value in a form, as {name: [values]}. unticked boxes count
+    // as an empty list so that ticking then unticking reads as "no change".
+
+    function values(form) {
+      var out = {};
+      Array.prototype.forEach.call(form.elements, function (f) {
+        if (!f.name || f.type === "submit" || f.type === "button") { return; }
+        var list = out[f.name] || (out[f.name] = []);
+        if (f.type === "checkbox" || f.type === "radio") {
+          if (f.checked) { list.push(f.value); }
+        } else if (f.type === "file") {
+          Array.prototype.forEach.call(f.files, function (x) { list.push(x.name + ":" + x.size); });
+        } else {
+          list.push(f.value);
+        }
+      });
+      return out;
+    }
+
+    // compares current site changes to snapshot of data on hand, shows 
+    // "changed" if entries differ
+
+    function changes(entry) {
+      var now = values(entry.form), seen = {}, out = [];
+      Object.keys(now).forEach(function (name) {
+        if (JSON.stringify(now[name]) === JSON.stringify(entry.snap[name] || [])) { return; }
+        var field = entry.form.elements[name];
+        if (field && !field.closest && field[0]) { field = field[0]; }
+        var holder = field && field.closest ? field.closest("[data-section]") : null;
+        var label = holder ? holder.dataset.section : name;
+        if (!seen[label]) { seen[label] = true; out.push(label); }
+      });
+      return out;
+    }
+
+    function find(form) {
+      for (var i = 0; i < tracked.length; i += 1) {
+        if (tracked[i].form === form) { return tracked[i]; }
+      }
+      return null;
+    }
+
+    // when a form is completed, the site reloads, this looks for 
+    // unsaved edits and warns they will be lost
+
+    function dirtyElsewhere(form, includeSelf) {
+      return tracked.filter(function (t) {
+        return document.contains(t.form) && (includeSelf || t.form !== form)
+               && changes(t).length > 0;
+      }).map(function (t) { return t.form.dataset.group; });
+    }
+
+    function ask(opts, onOk) {
+      var box = el("bc-confirm");
+      if (!box || !box.showModal) {            // very old browser: plain confirm
+        if (opts.alertOnly) { window.alert(opts.title); return; }
+        if (window.confirm(opts.title + (opts.body ? "\n\n" + opts.body : ""))) { onOk(); }
+        return;
+      }
+      el("bcc-title").textContent = opts.title;
+      el("bcc-body").textContent = opts.body || "";
+      el("bcc-body").hidden = !opts.body;
+
+      var list = el("bcc-list");
+      list.replaceChildren();
+      (opts.list || []).forEach(function (text) {
+        var li = document.createElement("li");
+        li.textContent = text;            // textContent: section names are plain text
+        list.appendChild(li);
+      });
+      list.hidden = !(opts.list && opts.list.length);
+
+      el("bcc-warn").textContent = opts.warn || "";
+      el("bcc-warn").hidden = !opts.warn;
+
+      var img = el("bcc-img");
+      img.hidden = !opts.img;
+      if (opts.img) { img.src = opts.img; }
+
+      el("bcc-ok").textContent = opts.ok || "Save changes";
+      el("bcc-ok").classList.toggle("bcc-danger", !!opts.danger);   // red, for deleting
+      el("bcc-cancel").textContent = opts.alertOnly ? "OK" : "Cancel";
+      el("bcc-ok").hidden = !!opts.alertOnly;
+
+      box.returnValue = "";
+      box.onclose = function () {
+        box.onclose = null;
+        if (box.returnValue === "ok" && onOk) { onOk(); }
+      };
+      box.showModal();
+      (opts.alertOnly ? el("bcc-cancel") : el("bcc-ok")).focus();
+    }
+
+    function lostWarning(groups) {
+      return groups.length
+        ? "Unsaved changes in " + groups.join(" and ") + " will be lost, because the page reloads. Save them first if you want to keep them."
+        : "";
+    }
+
+    document.addEventListener("submit", function (e) {
+      var form = e.target;
+      if (!(form instanceof HTMLFormElement) || form.method === "dialog") { return; }
+
+      if (form.dataset.confirmed === "1") {     // second pass: the user said yes
+        form.dataset.confirmed = "";
+        window.bcLeaving = true;
+        return;
+      }
+
+      var button = e.submitter || null;
+      var skip = button && button.hasAttribute("data-skip-confirm");
+      var entry = find(form);
+
+      // forms that dont ask a 'save' question (e.g emailing a code)
+
+      if (!form.dataset.confirm || skip) {
+        var lost = dirtyElsewhere(form, !!skip);
+        if (!lost.length) { window.bcLeaving = true; return; }
+        e.preventDefault();
+        e.stopPropagation();
+        ask({ title: "Continue without saving?", body: lostWarning(lost), ok: "Continue" }, function () {
+          form.dataset.confirmed = "1";
+          form.requestSubmit(button || undefined);
+        });
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      var changed = entry ? changes(entry) : null;
+      if (entry && !changed.length) {
+        ask({ title: "Nothing to save yet", body: "Make a change in " + form.dataset.group + " first.", alertOnly: true });
+        return;
+      }
+
+      ask({
+        title: form.dataset.confirm,
+        body: form.dataset.confirmBody || "Are you sure you want to save your changes?",
+        ok: form.dataset.confirmOk || "Save changes",
+        danger: form.hasAttribute("data-confirm-danger"),
+        list: changed ? changed.map(function (s) { return "Changed: " + s; }) : null,
+        warn: lostWarning(dirtyElsewhere(form, false))
+      }, function () {
+        form.dataset.confirmed = "1";
+        form.requestSubmit(button || undefined);
+      });
+    }, true);
+
+    // if leaving the page by refresh, bookmark, link etc. asks 'Leave site?'
+    // skipped when site is leaving the current page
+
+    window.addEventListener("beforeunload", function (e) {
+      if (window.bcLeaving) { return; }
+      if (dirtyElsewhere(null, true).length) { e.preventDefault(); e.returnValue = ""; }
+    });
+
+    window.BeaconConfirm = {
+      ask: ask,
+
+      // lists  unsaved edits in a form
+
+      changed: function (form) {
+        var entry = find(form);
+        return entry ? changes(entry) : [];
+      },
+
+      // form starting value saved to be compared to later to prompt messages
+      // depending on case: e.g if form is saved, show (Changed: Bio), or if left,
+      // prompts 'Leave site?'
+
+      track: function (form) {
+        window.bcLeaving = false;   // a fresh page: start warning about unsaved edits again
+        tracked = tracked.filter(function (t) { return document.contains(t.form); });
+        tracked.push({ form: form, snap: values(form) });
+      }
+    };
+  })();
+</script>

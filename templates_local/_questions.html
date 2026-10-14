@@ -1,0 +1,33 @@
+{# 
+   takes only the questions and their functionalities from onboarding.html
+   to be loaded as a standalone page for the account menu #}
+
+    {% for question in questions %}
+      <fieldset>
+        <legend>{{ question.prompt }}</legend>
+        {% if question.allows_multiple %}
+          {% for option in question.options %}
+            <label>
+              <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
+                {% if option.id in selected %}checked{% endif %} />
+              {{ option.label }}
+            </label>
+          {% endfor %}
+        {% elif question.options | length > 12 %}
+          <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
+            <option value="">Choose one</option>
+            {% for option in question.options %}
+              <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          {% for option in question.options %}
+            <label>
+              <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
+                {% if option.id in selected %}checked{% endif %} required />
+              {{ option.label }}
+            </label>
+          {% endfor %}
+        {% endif %}
+      </fieldset>
+    {% endfor %}
