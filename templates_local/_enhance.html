@@ -53,6 +53,32 @@
       watching: null
     };
 
+    // The friends panel and the bell are <details>, so the browser leaves
+    // them open until their own summary is clicked again -- and a panel that
+    // stays put while you go and do something else is not behaving like a
+    // panel. Clicking anywhere outside one now shuts it.
+    //
+    // Here rather than with the panels themselves, for the reason this whole
+    // file is here: the shell lives inside #live and is replaced on every
+    // swap, so a listener bound there would be bound again on every
+    // navigation and pile up. This binds once, on document, and finds the
+    // panels when the click happens -- so it goes on working against panels
+    // that did not exist when it was bound.
+    //
+    // Above the capability check below, deliberately: a browser that cannot
+    // swap pages still has panels that need shutting.
+    //
+    // Capture, so that a click on something which removes itself from the
+    // page -- a form row that submits and swaps -- is still inside the panel
+    // at the moment this asks whether it was.
+    document.addEventListener("click", function (e) {
+      var open = document.querySelectorAll(
+        "details.dock[open], details.bell[open]");
+      Array.prototype.forEach.call(open, function (panel) {
+        if (!panel.contains(e.target)) { panel.removeAttribute("open"); }
+      });
+    }, true);
+
     if (!window.fetch || !window.history.pushState || !window.DOMParser) { return; }
 
     function live() { return document.getElementById("live"); }

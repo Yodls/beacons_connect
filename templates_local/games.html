@@ -74,16 +74,7 @@
   <section class="sec-game">
     {{ ui.section("Start a game", "game", "plus") }}
 
-    {# Browser-only practice; does not write Game rows or change matchmaking. #}
-  <section class="card" aria-labelledby="naval-practice-heading">
-    <h2 id="naval-practice-heading" style="margin-top:0">Revolution at Sea</h2>
-    <p>Command the Continental Navy against the Royal Navy in a
-       graph-paper, Revolutionary War version of Battleship.</p>
-    <a href="{{ url_for('static', filename='battleship-practice.html') }}">Practice Battleship against the computer</a>
-    <p class="why">Solo practice runs in your browser; multiplayer battles use the usual invitations and chat.</p>
-  </section>
-
-  {% if seeking %}
+    {% if seeking %}
       {# Waiting for the queue. The live channel swaps this page out the moment
          somebody is found, so there is no polling here and no refresh. #}
       <div class="starter" id="seekbox">
