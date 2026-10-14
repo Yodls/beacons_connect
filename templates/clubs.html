@@ -6,12 +6,25 @@
 
 {% block main %}
   <h1>All clubs</h1>
-  <p>Every club on campus. You're in {{ joined_ids | length }} of {{ clubs | length }}.</p>
+  <p>Every club on campus, with the ones your answers point at first.
+    You're in {{ joined_ids | length }} of {{ clubs | length }}.</p>
 
   {% for club in clubs %}
     <div class="card">
-      <h3>{{ club.name }}</h3>
+      <h3>{{ club.name }}
+        {%- if club.id not in joined_ids and club.id in picks %}
+          <span class="pick">Suggested</span>
+        {% endif -%}
+      </h3>
       <p class="why">{{ club.description }}</p>
+      {# The reason on the club's own card: a separate suggested band would
+         list the same clubs twice on one page. #}
+      {% if club.id in picks %}
+        <p class="why-lead">Because you picked:</p>
+        <div class="shared">
+          {% for item in picks[club.id].shared %}<i>{{ item }}</i>{% endfor %}
+        </div>
+      {% endif %}
       <div class="actions">
         {% if club.id in joined_ids %}
           <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">

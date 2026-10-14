@@ -1,0 +1,118 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}You're all set{% endblock %}
+
+{% block appstyle %}
+      /* The hand-off, which is the one thing on this page that is not a
+         suggestion. Centred and alone under the two lists so it reads as
+         "done here" rather than as a third option. */
+      .onward {
+        display: flex; justify-content: center;
+        margin: 1.4rem 0 .4rem;
+      }
+      .onward a {
+        display: inline-flex; align-items: center; gap: .45rem;
+        padding: .7rem 1.4rem; border-radius: var(--pill);
+        background: var(--navy); color: #fff;
+        font-weight: 700; text-decoration: none;
+      }
+      .onward a:hover { background: var(--navy-deep); text-decoration: none; }
+
+      /* Why a club is here. Same markup as /matches, because a suggestion
+         explained one way on the first screen and another way afterwards is
+         two different features to the person reading it. */
+      .why-lead { margin: .6rem 0 0; font-size: .76rem; color: var(--muted); }
+      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+      .shared i {
+        font-style: normal; font-size: .72rem; font-weight: 600;
+        padding: .14rem .5rem; border-radius: var(--pill);
+        background: var(--club-bg); color: #7d5512;
+      }
+{% endblock %}
+
+{#
+  The first screen after onboarding, and the only place that says out loud
+  what the eight questions were for.
+
+  Both lists are the same calls the rest of the app makes -- recommend_people
+  and recommend_clubs -- drawn with the same cards. Nothing here knows
+  anything the friends page does not.
+
+  No score is shown. /matches renders one beside a club because it is a dense
+  page for somebody already using the app; a number against a club you have
+  never heard of, on your first screen, is noise. The reason chips say the
+  same thing in words.
+#}
+{% block main %}
+  <h1>You're all set</h1>
+  <p class="lede">Here's who and what your answers point at. Join or say hello
+    now, or go straight in &mdash; all of this is waiting for you later.</p>
+
+  <section class="sec-friend">
+    {{ ui.section("People you might like", "friend", "people", recs | length) }}
+    <div class="grid two">
+      {% for rec in recs %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(rec.name, rec.user_id) }}
+            <div class="grow">
+              <h3>{{ rec.name }}
+                {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
+              </h3>
+            </div>
+          </div>
+          {{ ui.both_like(rec.hobbies) }}
+          <div class="actions">
+            <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+              <input type="hidden" name="back" value="welcome" />
+              <button type="submit">Send friend request</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>Nobody to suggest just yet.</b>
+          You're early &mdash; <a href="{{ url_for('people') }}">search by name</a>
+          if you already know somebody here.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="sec-club">
+    {{ ui.section("Clubs you might like", "club", "star", clubs | length) }}
+    <div class="grid two">
+      {% for club in clubs %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(club.name, club.club_id, square=true) }}
+            <div class="grow">
+              <h3>{{ club.name }}</h3>
+              <span class="why">{{ club.description }}</span>
+            </div>
+          </div>
+          <p class="why-lead">Suggested because you picked:</p>
+          <div class="shared">
+            {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
+          </div>
+          <div class="actions">
+            <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
+              <input type="hidden" name="back" value="welcome" />
+              <button type="submit">Join</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>No club matches your answers yet.</b>
+          <a href="{{ url_for('clubs') }}">Browse all clubs</a> &mdash; there
+          are more than your answers touch.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="onward">
+    <a href="{{ url_for('index') }}">Continue to Beacons Connect {{ ui.icon("arrow") }}</a>
+  </div>
+{% endblock %}

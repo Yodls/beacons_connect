@@ -1,0 +1,71 @@
+{% extends "shell.html" %}
+{% block title %}You're all set{% endblock %}
+
+{#
+  The first screen after onboarding, and the only place that says out loud
+  what the eight questions were for. Both lists are the same calls the rest
+  of the app makes -- recommend_people and recommend_clubs -- so nothing here
+  knows anything the friends page does not.
+
+  No score is shown: a number against a club you have never heard of, on your
+  first screen, is noise. The reasons say it in words.
+#}
+{% block main %}
+  <h1>You're all set</h1>
+  <p>Here's who and what your answers point at. Join or say hello now, or go
+    straight in &mdash; all of this is waiting for you later.</p>
+
+  <h2>People you might like</h2>
+  {% for rec in recs %}
+    <div class="card">
+      <h3>
+        {{ rec.name }}
+        {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
+      </h3>
+      {% if rec.hobbies %}
+        <p class="hobbies">You both like:
+          {% for label in rec.hobbies[:3] %}<i>{{ label }}</i>{% endfor %}
+          {%- if rec.hobbies | length > 3 %}
+            <span class="more">+{{ rec.hobbies | length - 3 }} more</span>
+          {% endif %}
+        </p>
+      {% endif %}
+      <div class="actions">
+        <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+          <input type="hidden" name="back" value="welcome" />
+          <button type="submit">Send friend request</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">Nobody to suggest just yet. You're early &mdash;
+      <a href="{{ url_for('people') }}">search by name</a> if you already know
+      somebody here.</p>
+  {% endfor %}
+
+  <h2>Clubs you might like</h2>
+  {% for club in clubs %}
+    <div class="card">
+      <h3>{{ club.name }}</h3>
+      <p class="why">{{ club.description }}</p>
+      <p class="why-lead">Suggested because you picked:</p>
+      <div class="shared">
+        {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
+      </div>
+      <div class="actions">
+        <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
+          <input type="hidden" name="back" value="welcome" />
+          <button type="submit">Join</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p class="why">No club matches your answers yet.
+      <a href="{{ url_for('clubs') }}">Browse all clubs</a> &mdash; there are
+      more than your answers touch.</p>
+  {% endfor %}
+
+  <p class="nav">
+    <a href="{{ url_for('index') }}">Continue to Beacons Connect &rarr;</a>
+  </p>
+{% endblock %}

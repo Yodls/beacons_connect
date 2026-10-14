@@ -206,6 +206,10 @@ def require_onboarding():
     return redirect(url_for("onboarding"))
 
 
+# How many clubs on the browse page carry a "suggested" badge. A handful:
+# past that it stops being a recommendation and becomes the list again.
+CLUB_PICKS = 4
+
 DOCK_FRIENDS = 8
 DOCK_REQUESTS = 3
 DOCK_RESULTS = 5
@@ -293,7 +297,7 @@ def inject_dock():
     }
 
 
-RETURN_TO = {"matches", "clubs", "chats"}
+RETURN_TO = {"matches", "clubs", "chats", "welcome"}
 
 
 def joined_clubs(user_id):
@@ -940,6 +944,40 @@ def index():
         recs=matching.recommend_people(
             current_user.id, limit=RECOMMEND_LIMIT, gender_bonus=GENDER_BONUS
         ),
+    )
+
+
+# What the welcome page offers. Fewer than /matches shows: this is the first
+# screen of the app and a wall of strangers is not a welcome.
+WELCOME_PEOPLE = 4
+WELCOME_CLUBS = 4
+
+
+@app.route("/welcome")
+@login_required
+def welcome():
+    """What the answers just given are actually worth, before the app proper.
+
+    Onboarding asks eight questions and then dropped the student straight on
+    the home page, where the connection between what they had just typed and
+    what they were looking at was left for them to notice. This is that
+    connection, said once: these people, because you like the same things;
+    these clubs, because you picked these answers.
+
+    Nothing here is new machinery. recommend_people and recommend_clubs are
+    the same two calls /matches makes, and the cards are the same cards --
+    which is the point: a suggestion must not be made one way on the first
+    screen and another way everywhere else.
+
+    Reachable afterwards at its own address, and a perfectly good page to
+    come back to. What is one-time is the redirect, not the page.
+    """
+    return render_template(
+        "welcome.html",
+        recs=matching.recommend_people(
+            current_user.id, limit=WELCOME_PEOPLE, gender_bonus=GENDER_BONUS
+        ),
+        clubs=matching.recommend_clubs(current_user.id, limit=WELCOME_CLUBS),
     )
 
 
@@ -2961,10 +2999,32 @@ def post_close(post_id):
 @app.route("/clubs")
 @login_required
 def clubs():
+    """Every club, with the ones the student's answers point at first.
+
+    Ordered rather than listed twice. A "suggested" band above the full list
+    would show the same four clubs on the same page in two places, and the
+    count this page is checked by -- one card per club -- would stop meaning
+    anything. So a suggestion is a position and a reason on the one card the
+    club already has.
+    """
     joined = joined_clubs(current_user.id)
+    # Keyed by club, because the template asks "is this one suggested, and
+    # why" per card rather than walking a second list.
+    picks = {row["club_id"]: row for row in
+             matching.recommend_clubs(current_user.id, limit=CLUB_PICKS)}
+    everything = db.session.scalars(db.select(Club).order_by(Club.name)).all()
+    # Suggested first, best first; everything else keeps the alphabet. Both
+    # halves come out of the one query above, so this is a sort, not a second
+    # trip to the database.
+    ordered = (
+        sorted((c for c in everything if c.id in picks),
+               key=lambda c: (-picks[c.id]["score"], c.name))
+        + [c for c in everything if c.id not in picks]
+    )
     return render_template(
         "clubs.html",
-        clubs=db.session.scalars(db.select(Club).order_by(Club.name)).all(),
+        clubs=ordered,
+        picks=picks,
         joined_ids={club.id for club in joined},
     )
 
@@ -3407,6 +3467,10 @@ def match_ask(other_id):
         return back
     if request.form.get("back") == "home":
         return redirect(url_for("index"))
+    # Somebody working down a list of suggestions should still be looking at
+    # the list afterwards, not at the friends page with their place lost.
+    if request.form.get("back") == "welcome":
+        return redirect(url_for("welcome"))
     if outcome in ("asked", "matched"):
         return redirect(url_for("matches"))
     return back_to_people()
@@ -3609,6 +3673,13 @@ def onboarding():
         elif stray:
             flash("Please choose from the listed options.")
         else:
+            # Asked before the delete below, which is what makes it an answer
+            # about the student rather than about this submit.
+            #
+            # First time only: somebody editing answers they gave in
+            # September is not being welcomed, and sending them to a page
+            # that says so would be odd. They go where they always went.
+            first_time = not has_onboarded(current_user.id)
             db.session.execute(db.delete(UserAnswer).filter_by(user_id=current_user.id))
             for question in questions:
                 for option_id in picks[question.id]:
@@ -3626,7 +3697,7 @@ def onboarding():
             if choice in PRONOUNS:
                 current_user.pronouns = choice
             db.session.commit()
-            return redirect(url_for("index"))
+            return redirect(url_for("welcome" if first_time else "index"))
 
     return render_template(
         "onboarding.html",
