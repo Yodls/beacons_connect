@@ -1,0 +1,110 @@
+{# revamped dropdown menu that allows profile picture changing
+  as well as a view my profile button alongside the original links #}
+
+
+{% from "_avatar.html" import avatar %}
+{% if current_user and current_user.is_authenticated %}
+  <details class="acct" id="acct-menu">
+    <summary aria-label="Your account menu">
+      {{ avatar(current_user.name, current_user.picture_url, 41, tone="orange", square=True) }}
+    </summary>
+    <div class="acct-panel">
+      {# picture, full name, email, photo buttons #}
+      <div class="acct-head">
+        {{ avatar(current_user.name, current_user.picture_url, 64, id="acct-av") }}
+        <div class="acct-who">
+          <b>{{ current_user.name }}</b>
+          <span class="acct-email">{{ current_user.email }}</span>
+          <form class="acct-photo" id="acct-photo" method="post"
+                action="{{ url_for('profile_picture') }}" enctype="multipart/form-data">
+            <input type="hidden" name="next" value="{{ request.path }}" />
+            <label class="acct-btn">Change photo
+              <input type="file" name="picture" accept="image/png,image/jpeg,image/gif,image/webp" />
+            </label>
+            {% if current_user.picture_url %}
+              <button type="submit" name="remove" value="1">Remove photo</button>
+            {% endif %}
+            <noscript><button type="submit">Upload</button></noscript>
+          </form>
+        </div>
+      </div>
+      <nav class="acct-links" aria-label="Account">
+        {# "View my profile" takes the place the live site
+           gives "Change your answers" (the answers are edited on the profile now). #}
+        <a class="acct-main" href="{{ url_for('profile') }}">View my profile</a>
+        <a href="{{ url_for('people') }}">Find people</a>
+        <hr />
+        {# the original menu links, unchanged #}
+        <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
+          if pending_count | default(0) %} ({{ pending_count }}){% endif %}</a>
+        <a href="{{ url_for('clubs') }}">Browse all clubs</a>
+        <a href="{{ url_for('chats') }}">Group chats{%
+          if invite_count | default(0) %} ({{ invite_count }}){% endif %}</a>
+        <hr />
+        <a href="{{ url_for('logout') }}">Sign out</a>
+      </nav>
+    </div>
+  </details>
+
+{# the shared "Are you sure?" box: the photo buttons above use it, and so do
+   profile.html and the Block button on matches_v2.html #}
+{% include "_confirm.html" %}
+
+<script>
+  (function () {
+    var menu = document.querySelector(".acct");
+    var form = document.getElementById("acct-photo");
+    if (!menu || !form) { return; }
+
+    // closes the dropdown when you click anywhere outside it
+    
+    function closeOutside(e) {
+      if (menu.open && !menu.contains(e.target) && !e.target.closest(".bcc")) { menu.open = false; }
+    }
+    Beacon.live(function () {
+      document.addEventListener("click", closeOutside);
+      return function () { document.removeEventListener("click", closeOutside); };
+    });
+
+    // confirms photo choice, refuses photo sizes past 2mb
+
+    var file = form.querySelector('input[type="file"]');
+    file.addEventListener("change", function () {
+      var picked = file.files[0];
+      if (!picked) { return; }
+      if (picked.size > 2 * 1024 * 1024) {
+        BeaconConfirm.ask({ title: "That photo is too large", body: "Pick an image under 2 MB.", alertOnly: true });
+        file.value = "";
+        return;
+      }
+      var url = URL.createObjectURL(picked);
+      BeaconConfirm.ask({ title: "Use this as your profile photo?", body: "It shows on your profile and in this menu.",
+                          img: url, ok: "Use photo" }, function () {
+        form.dataset.confirmed = "1";
+        form.requestSubmit();
+      });
+
+      // if cancelled, clear the choice so it can be done or same image used again
+
+      document.getElementById("bc-confirm").addEventListener("close", function () {
+        if (form.dataset.confirmed !== "1") { file.value = ""; }
+      }, { once: true });
+    });
+
+    // removing confirmation
+
+    var remove = form.querySelector('button[name="remove"]');
+    if (remove) {
+      remove.addEventListener("click", function (e) {
+        if (form.dataset.confirmed === "1") { return; }
+        e.preventDefault();
+        BeaconConfirm.ask({ title: "Remove your profile photo?", body: "Your initials will show in a circle instead.",
+                            ok: "Remove photo" }, function () {
+          form.dataset.confirmed = "1";
+          form.requestSubmit(remove);
+        });
+      });
+    }
+  })();
+</script>
+{% endif %}
