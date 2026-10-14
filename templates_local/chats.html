@@ -98,14 +98,27 @@
               <h3>{{ row.chat.name }}</h3>
               <span class="why">
                 {{ row.members }} member{{ "" if row.members == 1 else "s" }}
+                {# Whether it is a meetup chat and whether it has ended are
+                   both on the pill beside this, so they are not repeated
+                   here. Marked rather than dropped: the conversation is
+                   still worth opening once the meetup is over. #}
                 {%- if row.owner %} &middot; you made this{% endif %}
               </span>
             </div>
-            <span class="vis {{ 'open' if row.chat.is_public else 'shut' }}">
-              {{- "Public" if row.chat.is_public else "Private" -}}
+            {# A meetup chat is neither public nor joinable by code, so it
+               gets the state that is actually true of it. #}
+            <span class="vis {{ 'shut' if row.meetup or not row.chat.is_public else 'open' }}">
+              {%- if row.meetup -%}
+                {{ "Ended" if row.ended else "Meetup" }}
+              {%- else -%}
+                {{ "Public" if row.chat.is_public else "Private" }}
+              {%- endif -%}
             </span>
           </div>
-          <p class="why">Code <span class="code">{{ row.chat.code }}</span></p>
+          {# No code for a meetup chat: it would not let anybody in. #}
+          {% if not row.meetup %}
+            <p class="why">Code <span class="code">{{ row.chat.code }}</span></p>
+          {% endif %}
           <div class="actions">
             <form method="get"
                   action="{{ url_for('chat', kind='group', target_id=row.chat.id) }}">

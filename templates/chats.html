@@ -37,9 +37,14 @@
       <h3>{{ row.chat.name }}</h3>
       <p class="why">
         {{ row.members }} member(s) &middot;
-        {{ "Public" if row.chat.is_public else "Private" }} &middot;
-        code {{ row.chat.code }}
-        {%- if row.owner %} &middot; you made this{% endif %}
+        {% if row.meetup %}
+          meetup
+        {% else %}
+          {{ "Public" if row.chat.is_public else "Private" }} &middot;
+          code {{ row.chat.code }}
+        {% endif %}
+        {%- if row.owner %} &middot; you made this{% endif -%}
+        {%- if row.ended %} &middot; <b class="chat-ended">ended</b>{% endif %}
       </p>
       <div class="actions">
         <form method="get"

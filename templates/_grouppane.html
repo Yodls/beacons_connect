@@ -1,0 +1,81 @@
+{#
+  Who is in a group chat, and the bar above it. Included by chat.html and
+  returned on its own by the live channel when somebody joins or leaves, so
+  the markup has one source and the two cannot drift.
+
+  data-token moves only when membership moves, never when somebody talks.
+#}
+<div class="group-pane" data-token="{{ group_token }}">
+  <div class="card">
+    <p class="why">
+      {% if meetup %}
+        {# No join code: it would not admit anybody. The RSVP list is the
+           membership. #}
+        Everyone going to this meetup &middot;
+      {% else %}
+        Join code <b>{{ group.code }}</b> &middot;
+        {{ "Public" if group.is_public else "Private" }} &middot;
+      {% endif %}
+      {{ members | length }} member(s)
+    </p>
+
+    {% if invitable and not meetup %}
+      <form method="post" action="{{ url_for('chat_invite', chat_id=group.id) }}">
+        <select name="other_id" required>
+          {% for friend in invitable %}
+            <option value="{{ friend.user_id }}">{{ friend.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Invite</button>
+      </form>
+    {% else %}
+      <p class="why">Everyone you are friends with is already in here.</p>
+    {% endif %}
+
+    <p class="why">In this chat:</p>
+    {% for person in members %}
+      <p class="why">
+        {{ person.name }}
+        {%- if person.id == group.owner_id %} (made it){% endif %}
+        {% if is_owner and not meetup and person.id != group.owner_id %}
+          <form method="post" style="display:inline"
+                action="{{ url_for('chat_remove', chat_id=group.id, user_id=person.id) }}">
+            <button type="submit">Remove</button>
+          </form>
+        {% endif %}
+      </p>
+    {% endfor %}
+
+    <div class="actions">
+      {# Leaving a meetup's chat is done by leaving the meetup. #}
+      {% if meetup %}
+        <span class="why">Leave the meetup to leave this chat.</span>
+      {% elif is_owner %}
+        {# Handing over is how whoever made the chat gets out of it. #}
+        {% set others = members | rejectattr("id", "equalto", group.owner_id) | list %}
+        {% if others %}
+          <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+            <select name="successor" required>
+              <option value="">Hand over to&hellip;</option>
+              {% for person in others %}
+                <option value="{{ person.id }}">{{ person.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Hand over and leave</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+            <button type="submit">Leave and close it</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('chat_delete', chat_id=group.id) }}">
+          <button type="submit">Delete this chat</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
+          <button type="submit">Leave</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>

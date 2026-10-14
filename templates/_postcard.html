@@ -1,0 +1,66 @@
+{#
+  One meetup card, as it appears inside a message in the campus-wide room.
+
+  Rendered two ways from this one file, exactly as _grouppane.html is:
+  included by chat.html on first load, and returned on its own by the live
+  channel when an RSVP moves what it says -- so the number somebody watches
+  change cannot drift from the number they would get by reloading.
+
+  data-token (post_card_token) is a digest of everything below, and the
+  client replaces this card only when it moves.
+#}
+<div class="post" data-post="{{ post.id }}" data-token="{{ post.card_token }}">
+  <b>{{ post.game }}</b>
+  <span class="meta">{{ post.mode_label }}
+    {%- if post.location %} &middot; {{ post.location }}{% endif -%}
+    {%- if post.when_text %} &middot; {{ post.when_text }}{% endif -%}
+  </span>
+  {% if post.note %}<span class="note">{{ post.note }}</span>{% endif %}
+  <span class="meta">
+    {{ post.count }} of {{ post.max_players }} going{% if post.going %}:
+    {{ post.going | join(", ") }}{% endif %}
+  </span>
+  {# One action row at the foot of the card. Both labels name the meetup:
+     "Leave" alone was read as leaving the conversation and "Close" as
+     shutting the window. #}
+  <div class="post-actions">
+    {% if post.status != "open" %}
+      <span class="meta">Closed</span>
+    {% else %}
+      {% if post.im_going %}
+        {# A <details>, so the confirmation needs no JavaScript. #}
+        <details class="confirm">
+          <summary class="leave">Leave Meetup</summary>
+          <div class="confirm-body">
+            <span class="confirm-ask">Are you sure you want to leave
+              this meetup?</span>
+            <span class="confirm-row">
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                <button type="submit" class="leave-yes">Yes, leave</button>
+              </form>
+              <button type="button" class="confirm-no">Keep my spot</button>
+            </span>
+          </div>
+        </details>
+      {% else %}
+        <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+          <button type="submit"
+                  {% if post.full %}disabled{% endif %}>I'm in</button>
+        </form>
+      {% endif %}
+      {# Only for somebody going: the chat refuses anybody else, so offering
+         it to them would be a door that does not open. #}
+      {% if post.im_going and post.chat_id %}
+        <form method="get"
+              action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+          <button type="submit" class="ghost">Open chat</button>
+        </form>
+      {% endif %}
+      {% if post.mine %}
+        <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
+          <button type="submit">Cancel meetup</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>

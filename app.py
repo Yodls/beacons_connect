@@ -1,3 +1,4 @@
+import hashlib
 import os
 import secrets
 import time
@@ -349,20 +350,21 @@ POST_MODES = {"online": "Online", "inperson": "In person"}
 WHEN_HOURS = tuple(str(h) for h in range(1, 13))
 WHEN_MINUTES = ("00", "15", "30", "45")
 WHEN_MERIDIEM = ("AM", "PM")
-WHEN_DAY_MAX = 60
 
 
-def when_label(day, hour, minute, ampm):
-    """One line saying when a meetup is, from a day and a clock time.
+def when_label(on, hour, minute, ampm):
+    """One line saying when a meetup is, from its date and a clock time.
 
-    "Friday at 6:30 PM", or "6:30 PM", or "Friday", or nothing.
+    "Tue 3 Nov at 6:30 PM", or "Tue 3 Nov" when no time was picked.
 
-    Composed into a string rather than stored structured, because when_text has
-    always been free text: a normalised value goes into the same column, and
-    every value posted before this -- 'Friday 6pm', '6 PM', 'Now' -- keeps
-    displaying exactly as it did, with no migration and no backfill that would
-    have to guess what 'Now' meant.
+    The date is required now and the typed day is gone, so this composes from
+    a real date rather than from whatever somebody wrote. What it returns
+    still goes into when_text, which stays free text and stays exactly as it
+    is for everything posted before this -- 'Friday 6pm', '6 PM', 'Now' all
+    keep displaying as they always did, with no backfill that would have to
+    guess what 'Now' meant.
     """
+    day = f"{on:%a} {on.day} {on:%b}" if on else ""
     clock = f"{int(hour)}:{minute} {ampm}" if hour else ""
     if day and clock:
         return f"{day} at {clock}"
@@ -376,6 +378,82 @@ def when_label(day, hour, minute, ampm):
 OTHER = "other"
 CUSTOM_GAME_MAX = 60
 CUSTOM_LOCATION_MAX = 120
+
+# How long a meetup's chat outlives the meetup. Long enough to say how it went
+# and sort out who left what behind; not so long that a chat for a thing that
+# happened last week is still sitting in everybody's list.
+MEETUP_CHAT_GRACE = timedelta(hours=12)
+# And when no date was given -- "Tonight", "Now" -- measured from the posting
+# instead. A meetup with no date still has to stop at some point, or its chat
+# would be the one thing on the site that lives for ever.
+MEETUP_CHAT_DEFAULT = timedelta(hours=36)
+
+
+def meetup_chat_deadline(post):
+    """When a meetup's chat stops taking messages.
+
+    The end of its date plus a grace window, or a fixed horizon from the
+    posting when the date was left out. Computed once, when the chat is made:
+    a meetup cannot be edited, so there is nothing for this to drift from.
+    """
+    if post.when_on is not None:
+        # datetime.max.time() rather than the `time` class: the name `time` is
+        # taken here by the stdlib module the live loop uses for monotonic().
+        end_of_day = datetime.combine(post.when_on, datetime.max.time())
+        return end_of_day + MEETUP_CHAT_GRACE
+    return (post.created_at or datetime.utcnow()) + MEETUP_CHAT_DEFAULT
+
+
+def chat_ended(chat):
+    """Whether a chat has stopped taking messages, and why it would have.
+
+    A read rather than a stored flag, for the same reason away_for is one:
+    nothing has to run for either fact to become true. A meetup chat ends when
+    its deadline passes *or* when the meetup is cancelled, and deriving both
+    means there is no second copy of the answer to go stale -- cancelling is
+    felt by everyone in the same instant, with nothing to sweep.
+
+    An ordinary chat has neither a deadline nor a meetup, so this is False for
+    every chat a student made by hand.
+    """
+    if chat is None:
+        return False
+    if chat.expires_at is not None and datetime.utcnow() >= chat.expires_at:
+        return True
+    if chat.post_id is None:
+        return False
+    post = db.session.get(GamePost, chat.post_id)
+    return post is None or post.status != "open"
+
+
+def make_meetup_chat(post):
+    """The chat that belongs to a meetup, with its author already in it.
+
+    Insert and retry on the code, exactly as chat_new does and for the same
+    reason: two students posting in the same moment could both pass a
+    pre-check and then collide on it.
+
+    Never public, and the code it carries will not let anybody in -- a meetup
+    chat's membership is the RSVP list. It gets a code at all because the
+    column is NOT NULL and shared with every other chat; nothing shows it.
+    """
+    for _ in range(CODE_TRIES):
+        # A savepoint, where chat_new rolls the whole thing back. That one is
+        # creating nothing but the chat, so a rollback costs it nothing; here
+        # the meetup is already in this transaction and a rollback would throw
+        # the post away to retry a join code.
+        try:
+            with db.session.begin_nested():
+                room = Chat(name=post.game[:80], code=new_code(),
+                            is_public=False, owner_id=post.author_id,
+                            post_id=post.id,
+                            expires_at=meetup_chat_deadline(post))
+                db.session.add(room)
+        except IntegrityError:
+            continue
+        db.session.add(ChatMember(user_id=post.author_id, chat_id=room.id))
+        return room
+    return None
 
 # There are four kinds of chat. Naming them here rather than in the templates
 # keeps the two places that label a chat from drifting apart, and stops a new
@@ -617,11 +695,13 @@ def chat_rows(kind, parent, after=0):
     posts = {}
     going = {}
     attending = set()
+    rooms = {}
     post_ids = [m.post_id for m, _ in rows if m.post_id]
     if post_ids:
         posts = {p.id: p for p in db.session.scalars(
             db.select(GamePost).where(GamePost.id.in_(post_ids)))}
         going, attending = rsvps_for(post_ids)
+        rooms = chats_for(post_ids)
 
     # One query for every game mentioned, rather than one per message.
     events = {}
@@ -643,7 +723,7 @@ def chat_rows(kind, parent, after=0):
         post = posts.get(m.post_id)
         if post is not None:
             entry["post"] = post_payload(
-                post, going.get(post.id, []), post.id in attending)
+                post, going.get(post.id, []), post.id in attending, rooms)
 
         if m.event:
             game = events.get(m.game_id)
@@ -697,12 +777,53 @@ def rsvps_for(post_ids):
     return names, mine
 
 
-def post_payload(post, going=None, im_going=None):
+def chats_for(post_ids):
+    """Each meetup's chat id, for a whole page in one query.
+
+    rsvps_for's shape, for the same reason: these are built for lists, and a
+    lookup per card is a query per card. Meetups posted before meetups had
+    chats are simply absent from the result.
+    """
+    if not post_ids:
+        return {}
+    return dict(db.session.execute(
+        db.select(Chat.post_id, Chat.id).where(Chat.post_id.in_(post_ids))
+    ).all())
+
+
+# What the card shows, in the order a reader reads it. Named here because
+# post_card_token digests exactly this and nothing else: a field added to the
+# card and not to this list would change the card without moving its token,
+# and the card would then sit stale under somebody watching it.
+CARD_SHOWS = ("id", "game", "mode_label", "location", "when_text", "note",
+              "max_players", "status", "count", "full", "im_going", "mine",
+              "chat_id")
+
+
+def post_card_token(payload):
+    """What one meetup card compares, so only a card that moved is replaced.
+
+    Per card rather than per room, because a swap costs something: a reader
+    halfway through the "are you sure" on their own card should not have it
+    shut by somebody else's RSVP to the meetup underneath it.
+
+    Who is going is folded in by name, not just by count -- one person leaving
+    as another joins leaves the count where it was and the line of names
+    completely different.
+    """
+    shown = [str(payload[key]) for key in CARD_SHOWS] + list(payload["going"])
+    digest = hashlib.sha1("|".join(shown).encode()).hexdigest()[:12]
+    return f"{payload['id']}:{digest}"
+
+
+def post_payload(post, going=None, im_going=None, chats=None):
     if going is None:
         going, mine = rsvps_for([post.id])
         going = going.get(post.id, [])
         im_going = post.id in mine
-    return {
+    if chats is None:
+        chats = chats_for([post.id])
+    data = {
         "id": post.id,
         "game": post.game,
         "mode": post.mode,
@@ -717,7 +838,15 @@ def post_payload(post, going=None, im_going=None):
         "full": len(going) >= post.max_players,
         "im_going": bool(im_going),
         "mine": post.author_id == current_user.id,
+        # The meetup's own chat, so the card can offer a way into it rather
+        # than sending people round by the chats hub. None for meetups posted
+        # before meetups had chats.
+        "chat_id": chats.get(post.id),
     }
+    # Last, and from the finished dict: the card's own token is a digest of
+    # what is in here, so it has to be built after the rest of it.
+    data["card_token"] = post_card_token(data)
+    return data
 
 
 def chat_entry(kind, target_id, title):
@@ -883,6 +1012,11 @@ def chat(kind, target_id):
 
         if not body:
             flash("Write something first.")
+        # A meetup's chat stops taking messages once the meetup has been and
+        # gone, or the moment it is cancelled. Refused here as well as hidden
+        # in the template: the composer going away is not a rule.
+        elif kind == "group" and chat_ended(parent):
+            flash("That meetup has ended, so its chat is closed.")
         elif len(body) > MESSAGE_MAX:
             flash(f"Messages are limited to {MESSAGE_MAX} characters.")
         else:
@@ -939,6 +1073,11 @@ def chat(kind, target_id):
         group=group,
         members=chat_members(group.id) if group is not None else [],
         is_owner=group is not None and group.owner_id == current_user.id,
+        # A meetup's chat: its membership is the RSVP list, so the controls
+        # that add and remove people do not belong on it, and the join code
+        # it carries would not work for anybody who tried it.
+        meetup=group is not None and group.post_id is not None,
+        ended=chat_ended(group),
         invitable=invitable,
         subtitle=CHAT_SUBTITLE[kind],
         game=game,
@@ -964,6 +1103,11 @@ def chat(kind, target_id):
         # pile of queries for a form that was never on the page.
         catalogue=(activity_catalogue(presets_only=True)
                    if kind == COMMUNITY else []),
+        # What the cards on this page add up to, handed over the way the game
+        # pane's and the roster's tokens are: on the markup. Without it the
+        # first live round of every visit to the campus room would come back
+        # at once with every card in it.
+        card_token=(live_cards_token() if kind == COMMUNITY else "none"),
     )
 
 
@@ -988,6 +1132,133 @@ def live_pane(target_id, game):
                                 payload=game_payload(game, seat),
                                 other_id=target_id),
     }
+
+
+def live_group_token(chat_id):
+    """What the poller compares to decide whether to swap the roster.
+
+    Membership and nothing else: the count, and the newest joined_at. Both
+    move when somebody joins and when somebody leaves, and neither moves when
+    somebody talks -- which is the property that matters. This is recomputed
+    on every probe of every held request in a group chat, so a token that
+    moved per message would wake every tab in the chat on every message, and
+    the channel would stop being a channel.
+
+    One indexed aggregate, for the same reason.
+    """
+    if chat_id is None:
+        return "none"
+    count, newest = db.session.execute(
+        db.select(db.func.count(), db.func.max(ChatMember.joined_at))
+        .where(ChatMember.chat_id == chat_id)
+    ).one()
+    return f"{chat_id}:{count}:{newest.isoformat() if newest else '-'}"
+
+
+def live_group(chat):
+    """The roster half of a live answer, for a group chat.
+
+    live_pane's shape, deliberately: the client already knows how to swap a
+    {token, html} pair without re-rendering markup that has not changed.
+    """
+    if chat is None:
+        return None
+    token = live_group_token(chat.id)
+    return {
+        "token": token,
+        "html": render_template(
+            "_grouppane.html", group=chat, group_token=token,
+            members=chat_members(chat.id),
+            is_owner=chat.owner_id == current_user.id,
+            meetup=chat.post_id is not None,
+            # The invite picker is rebuilt with the rest of the bar. It is
+            # only ever offered on an ordinary chat.
+            invitable=[] if chat.post_id is not None else [
+                f for f in matching.friend_names(current_user.id)
+                if f["user_id"] not in {m.id for m in chat_members(chat.id)}],
+        ),
+    }
+
+
+def live_cards_token():
+    """What the poller compares to decide whether the meetup cards have moved.
+
+    Every RSVP on the site in one aggregate, with no join to the room. A
+    Message carries a post_id in exactly one place -- post_new, into the
+    campus-wide room -- so every meetup card there is, is in that room; the
+    whole table *is* this room's cards, and scoping the probe to it would buy
+    nothing and cost a join.
+
+    Three parts, for the three ways a card changes under a reader who is not
+    touching it. The count moves when somebody joins or leaves. The newest
+    RSVP moves when a join and a leave land between the same two probes,
+    which the count alone would miss. And the closed count moves when an
+    author cancels a meetup -- that writes no message at all, so nothing else
+    in this loop would notice it.
+
+    One round trip, because this runs five times a second for every tab with
+    the campus room open.
+    """
+    count, newest, shut = db.session.execute(db.select(
+        db.select(db.func.count()).select_from(GamePostRsvp).scalar_subquery(),
+        db.select(db.func.max(GamePostRsvp.created_at)).scalar_subquery(),
+        db.select(db.func.count()).select_from(GamePost)
+        .where(GamePost.status != "open").scalar_subquery(),
+    )).one()
+    return f"{count}:{newest.isoformat() if newest else '-'}:{shut}"
+
+
+def live_cards(kind, token):
+    """The meetup cards half of a live answer, for the campus-wide room.
+
+    live_pane's and live_group's shape, and for the same reason: the client
+    already knows how to be handed markup with a token on it.
+
+    Every card in the room is rendered, which is more than has changed. That
+    is deliberate: the alternative is the client telling the server which
+    cards it is holding, and a page that has a card the server left out would
+    disagree for ever and spin the channel. Rendering them all is paid when
+    somebody RSVPs rather than on every probe, and each card carries its own
+    token -- so the client replaces only the one that moved and the rest of
+    the room is not touched.
+    """
+    if kind != COMMUNITY:
+        return None
+
+    rows = db.session.execute(
+        db.select(Message.id, GamePost)
+        .join(GamePost, GamePost.id == Message.post_id)
+        .where(Message.room == COMMUNITY)
+        .order_by(Message.id)
+    ).all()
+    ids = [post.id for _, post in rows]
+    # Batched once for the room, not once per card: the whole point of
+    # rsvps_for and chats_for taking lists.
+    going, mine = rsvps_for(ids)
+    rooms = chats_for(ids)
+
+    # Straight off the environment, not through render_template. That runs
+    # every context processor, and inject_dock is six queries -- the right
+    # price for a page, and an unaffordable one per card: rendering the 113
+    # cards in a real campus room measured at 2.9 SECONDS, 678 queries for a
+    # partial that reads none of what they fetched. This keeps the loader and
+    # url_for and skips the page context, which nothing in the card looks at.
+    card_markup = app.jinja_env.get_template("_postcard.html")
+
+    cards = []
+    for message_id, post in rows:
+        card = post_payload(post, going.get(post.id, []), post.id in mine,
+                            rooms)
+        cards.append({
+            # The message the card lives inside, so a card can be put back
+            # where it belongs -- including into a message that arrived live
+            # a moment ago and has no card in it yet.
+            "id": message_id,
+            "post": post.id,
+            "token": card["card_token"],
+            "html": card_markup.render(post=card),
+        })
+    return {"token": token, "cards": cards}
 
 
 def notice_slice(user_id, seen, skip_url=None):
@@ -1089,6 +1360,13 @@ def live_reply(kind, target_id):
 
     after = request.args.get("after", type=int, default=0)
     token = request.args.get("token", "")
+    # The roster the page already has, so it is only re-rendered once
+    # membership has actually moved.
+    group_token = request.args.get("crowd", "")
+    # And the meetup cards it is holding. RSVPing writes no message into the
+    # campus room, so without this the "2 of 4 going" on a card sat stale
+    # under whoever posted it until they reloaded.
+    card_token = request.args.get("cards", "")
 
     # Built from primitives, because the ORM object behind `parent` is
     # released along with the session between probes.
@@ -1138,6 +1416,16 @@ def live_reply(kind, target_id):
         newest = after
         game = None
         fresh = token
+        # Defaulted to what the page already has, exactly as `fresh` is: a
+        # channel with no chat open -- which is every page that is not a chat
+        # -- never reaches the branch below, and comparing an unset name is a
+        # 500 on the site's busiest request.
+        crowd = group_token
+        # Defaulted the same way, and for a second reason as well: a page
+        # that does not know about this field at all sends nothing, and
+        # comparing it against a freshly computed token would return on every
+        # round for ever.
+        deck = card_token
         if watching:
             newest = db.session.scalar(
                 db.select(db.func.max(Message.id)).where(where)
@@ -1147,8 +1435,17 @@ def live_reply(kind, target_id):
             # game gets settled. Reproducing that here would let the two drift.
             game = pane_game(watch_other) if watch_other else None
             fresh = game_token(game, game.seat_of(me) if game else None)
+            # Membership, for a group chat only. Same shape as the game
+            # token: one cheap aggregate, compared rather than rendered.
+            crowd = (live_group_token(target_id)
+                     if kind == "group" else "none")
+            # Only the campus room has meetup cards in it, so only it pays
+            # for this probe.
+            if kind == COMMUNITY:
+                deck = live_cards_token()
 
-        if newest > after or fresh != token or bell_now != bell:
+        if (newest > after or fresh != token or bell_now != bell
+                or crowd != group_token or deck != card_token):
             rows = []
             if watching:
                 parent, _ = chat_target(kind, target_id)
@@ -1158,6 +1455,9 @@ def live_reply(kind, target_id):
                 "messages": rows,
                 "game": (live_pane(watch_other, game)
                          if watch_other else None),
+                "group": (live_group(db.session.get(Chat, target_id))
+                          if kind == "group" else None),
+                "cards": live_cards(kind, deck),
                 "notices": notice_slice(
                     me, seen,
                     skip_url=notices.chat_url(kind, target_id) if watching
@@ -2200,6 +2500,9 @@ def find_game():
         key=lambda row: (-row["count"], row["name"].lower()),
     )
 
+    # Once for the whole list, not once per card.
+    rooms = chats_for([p.id for p in posts])
+
     return render_template(
         "find.html",
         # The picker is the focused set, plus a write-in. It used to have none
@@ -2216,7 +2519,7 @@ def find_game():
         elsewhere=elsewhere,
         other=OTHER,
         custom_max=CUSTOM_GAME_MAX,
-        posts=[post_payload(p) for p in posts],
+        posts=[post_payload(p, chats=rooms) for p in posts],
         pairings=pairings,
     )
 
@@ -2329,7 +2632,19 @@ def post_new():
     # The day in words, and the time as three separate choices. Splitting
     # them is what lets the time be strict without making the field itself
     # mandatory: "Tonight" with no hour is still a perfectly good answer.
-    day = request.form.get("when_text", "").strip()
+    # The date, and it is required: a meetup whose "when" is a sentence has no
+    # day its chat can end after, and nothing can be sorted by it. The typed
+    # day this replaced is gone from the forms.
+    #
+    # Parsed rather than trusted, so a malformed one is refused below instead
+    # of quietly becoming no date at all.
+    on_text = request.form.get("when_on", "").strip()
+    on, on_bad = None, False
+    if on_text:
+        try:
+            on = datetime.strptime(on_text, "%Y-%m-%d").date()
+        except ValueError:
+            on_bad = True
     hour = request.form.get("when_hour", "").strip()
     minute = request.form.get("when_minute", "").strip() or WHEN_MINUTES[0]
     ampm = request.form.get("when_ampm", "").strip()
@@ -2379,8 +2694,12 @@ def post_new():
                    or ampm not in WHEN_MERIDIEM):
         # Only reachable by posting the form by hand.
         flash("That isn't a time we offer.")
-    elif len(day) > WHEN_DAY_MAX:
-        flash(f"Keep the day under {WHEN_DAY_MAX} characters.")
+    elif on_bad:
+        flash("That isn't a date we can read.")
+    elif on is None:
+        # Required, so its chat has a day to end after and so two meetups can
+        # be told apart by when they are.
+        flash("Pick the date of the meetup.")
     elif len(note) > POST_NOTE_MAX:
         flash(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
@@ -2392,11 +2711,17 @@ def post_new():
             mode=mode,
             note=note or None,
             location=(location if mode == "inperson" else None),
-            when_text=when_label(day, hour, minute, ampm),
+            when_text=when_label(on, hour, minute, ampm),
+            when_on=on,
             max_players=players,
         )
         db.session.add(post)
         db.session.flush()
+
+        # Its own chat, so the people going have somewhere to talk that is not
+        # the campus-wide room. Membership is this post's RSVP list, and the
+        # author is already on it.
+        make_meetup_chat(post)
 
         # The post lives in the room as a message, so one timeline and one
         # poller cover both chatter and posts.
@@ -2426,9 +2751,28 @@ def post_rsvp(post_id):
     elif post.status != "open":
         flash("That post is closed.")
     else:
+        # The meetup's chat, if it has one. Posts made before this feature do
+        # not, and nothing below needs them to.
+        room = db.session.scalar(db.select(Chat).filter_by(post_id=post_id))
+
         rsvp = db.session.get(GamePostRsvp, (post_id, current_user.id))
         if rsvp is not None:
             db.session.delete(rsvp)
+            # Out of the meetup is out of its chat. chat_target already
+            # refuses a group chat to a non-member, so removing the row is the
+            # whole of closing it for them.
+            if room is not None:
+                seat = db.session.get(ChatMember, (current_user.id, room.id))
+                if seat is not None:
+                    db.session.delete(seat)
+                    # A plain message rather than an event, the same choice
+                    # game_new makes and for the same reason: Message.event is
+                    # a CHECK constraint tied to a game, and widening it for a
+                    # sentence would be a migration for a sentence.
+                    said = Message(user_id=current_user.id,
+                                   chat_id=room.id,
+                                   body=f"{current_user.name} left the meetup.")
+                    db.session.add(said)
             db.session.commit()
             flash(f"You're no longer down for {post.game}.")
         else:
@@ -2442,6 +2786,18 @@ def post_rsvp(post_id):
                 db.session.add(
                     GamePostRsvp(post_id=post_id, user_id=current_user.id)
                 )
+                # And into its chat. Not while it has ended, or cancelling a
+                # meetup and then RSVPing would put somebody into a closed
+                # conversation.
+                if room is not None and not chat_ended(room):
+                    db.session.add(ChatMember(user_id=current_user.id,
+                                              chat_id=room.id))
+                    # So the people already in it see somebody arrive without
+                    # refreshing: the live channel carries this like any other
+                    # message.
+                    db.session.add(Message(
+                        user_id=current_user.id, chat_id=room.id,
+                        body=f"{current_user.name} joined the meetup."))
                 db.session.commit()
                 flash(f"You're in for {post.game}.")
 
@@ -2552,8 +2908,13 @@ def chats():
 
     return render_template(
         "chats.html",
+        # `ended` rather than leaving them out: a meetup's chat is still worth
+        # opening after the meetup, to read what was said in it. Marked, not
+        # hidden.
         mine=[{"chat": c, "members": counts.get(c.id, 0),
-               "owner": c.owner_id == current_user.id} for c in mine],
+               "owner": c.owner_id == current_user.id,
+               "meetup": c.post_id is not None,
+               "ended": chat_ended(c)} for c in mine],
         public=[{"chat": c, "members": counts.get(c.id, 0),
                  "joined": c.id in mine_ids} for c in public],
     )
@@ -2606,6 +2967,11 @@ def chat_join():
     chat = db.session.scalar(db.select(Chat).filter_by(code=code))
     if chat is None:
         flash("No chat has that code.")
+    # A meetup's chat is its RSVP list. A code that let somebody in would put
+    # a person in the conversation for a thing they are not going to, and no
+    # amount of leaving the chat would keep them out while they were on it.
+    elif chat.post_id is not None:
+        flash("That chat belongs to a meetup. RSVP to the meetup to join it.")
     elif is_member(chat.id):
         flash(f"You are already in {chat.name}.")
         return redirect(url_for("chat", kind="group", target_id=chat.id))
@@ -2632,6 +2998,10 @@ def chat_invite(chat_id):
 
     if chat is None or not is_member(chat_id):
         flash("That chat is not yours to invite to.")
+    elif chat.post_id is not None:
+        # Who is in a meetup's chat is who is going to the meetup. An invite
+        # would put somebody in it who is not on that list.
+        flash("People join this chat by RSVPing to the meetup.")
     elif other is None:
         flash("We couldn't find that student.")
     elif other.id == current_user.id:
@@ -2706,6 +3076,13 @@ def chat_leave(chat_id):
         flash("You are not in that chat.")
         return redirect(url_for("chats"))
 
+    if chat.post_id is not None:
+        # There is no being in the meetup but out of its chat: the RSVP list
+        # is the membership. Leaving the meetup is the action that does this,
+        # and it is the one offered on the page.
+        flash("Leave the meetup itself and this chat closes with it.")
+        return redirect(url_for("chat", kind="group", target_id=chat.id))
+
     if chat.owner_id != current_user.id:
         db.session.delete(membership)
         db.session.commit()
@@ -2745,6 +3122,8 @@ def chat_remove(chat_id, user_id):
 
     if chat is None or chat.owner_id != current_user.id:
         flash("Only the person who made the chat can remove people.")
+    elif chat.post_id is not None:
+        flash("People leave this chat by leaving the meetup.")
     elif user_id == current_user.id:
         flash("You cannot remove yourself. Delete the chat instead.")
     else:
@@ -2769,6 +3148,12 @@ def chat_delete(chat_id):
     if chat is None or chat.owner_id != current_user.id:
         flash("Only the person who made the chat can delete it.")
         return redirect(url_for("chats"))
+
+    if chat.post_id is not None:
+        # The meetup owns this chat's life. Cancelling the meetup is what
+        # ends it, and it ends for everyone at once when that happens.
+        flash("Cancel the meetup to close its chat.")
+        return redirect(url_for("chat", kind="group", target_id=chat.id))
 
     name = chat.name
     # Messages, memberships and invites go with it: each of those tables

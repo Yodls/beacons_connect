@@ -187,6 +187,19 @@ class Chat(db.Model):
     owner_id = db.Column(
         db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
+    # The meetup this chat belongs to, if it belongs to one. Null is an
+    # ordinary chat made by a student, and everything about those is unchanged:
+    # this column is the whole of how the two are told apart.
+    #
+    # A meetup chat's membership is the meetup's RSVP list, which is why the
+    # join code and the invite controls are refused on one.
+    post_id = db.Column(
+        db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    # When it stops taking messages. Null never expires, which is every chat
+    # that existed before this and every one a student makes by hand.
+    expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
@@ -372,6 +385,12 @@ class GamePost(db.Model):
     # Filled in for in-person meetups; unused by online posts.
     location = db.Column(db.Text)
     when_text = db.Column(db.Text)
+    # The one structured part of when a meetup is, and optional. when_text
+    # stays free prose -- "Tonight", "Now", "Friday 6pm" -- because that is
+    # what it has always held and a backfill would have to guess what those
+    # meant. This is here so the meetup's chat has a date to end after; when
+    # it is null the chat falls back to a fixed horizon.
+    when_on = db.Column(db.Date)
     max_players = db.Column(db.Integer, nullable=False, default=2)
     status = db.Column(db.Text, nullable=False, default="open")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

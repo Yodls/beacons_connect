@@ -150,9 +150,12 @@
          on purpose -- a preselected one is exactly the guess that makes a
          meetup's time ambiguous -- and the server refuses an hour without it.
          The day stays free text so "Tonight" and "Now" are still sayable. #}
+        {# Required: the meetup's chat ends after this date, and a meetup
+             whose "when" is a sentence has no day to end after.
+             The time beside it stays optional. #}
+        <input name="when_on" type="date" class="ondate" required
+             aria-label="Date" title="Date" />
       <span class="whenrow">
-        <input name="when_text" maxlength="60" placeholder="Day (e.g. Friday)"
-               aria-label="Day" />
         {# One group, not three boxes: a single border with hairlines between,
            so the hour, the minutes and the half of the day read as one time
            and cannot be split across two lines by wrapping. #}
@@ -210,6 +213,14 @@
             <input type="hidden" name="back" value="find" />
             <button type="submit"
                     {% if post.full %}disabled{% endif %}>I'm in</button>
+          </form>
+        {% endif %}
+        {# Only for somebody going: the chat refuses anybody else, so
+           offering it to them would be a door that does not open. #}
+        {% if post.im_going and post.chat_id %}
+          <form method="get"
+                action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+            <button type="submit" class="ghost">Open chat</button>
           </form>
         {% endif %}
         {% if post.mine %}

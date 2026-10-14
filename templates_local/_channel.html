@@ -76,7 +76,13 @@
         var state = (what.state ? what.state() : null) || {};
         q += "&here=" + encodeURIComponent(what.here) +
              "&after=" + (state.after || 0) +
-             "&token=" + encodeURIComponent(state.token || "");
+             "&token=" + encodeURIComponent(state.token || "") +
+             "&crowd=" + encodeURIComponent(state.crowd || "") +
+             // The meetup cards the page is holding. Absent on a page that
+             // has none, and the server defaults it to whatever arrived --
+             // so a page that knows nothing about this field is not woken on
+             // every round by a token it never sent.
+             "&cards=" + encodeURIComponent(state.cards || "");
         // Only presence cares about this: a tab behind another window should
         // still collect notices, but it is not somebody sitting at a board.
         // Saying so is the whole fix -- this loop re-issues on each response

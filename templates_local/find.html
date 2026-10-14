@@ -101,6 +101,24 @@
       /* nowrap on purpose: if the row runs out of room the whole when-group
          moves to the next line together, rather than leaving the day on one
          line and its time on the next -- which is what looked broken. */
+      /* The optional meetup date. Sized with the rest of the row, or the
+         global full-width input rule gives it a line to itself. */
+      /* No shrink: the meetup row is already crowded, and a date
+         input squeezed below its own content renders as a bare
+         "mm" with a calendar glyph. The row wraps instead. */
+      /* .newpost .ondate, not .ondate: the rule above it is
+         `.newpost input`, which is an element plus a class and so
+         outranks a bare class however they are ordered. A plain
+         .ondate lost the flex-basis and the box rendered as a
+         naked "mm" with a calendar glyph. */
+      .newpost .ondate { width: auto; flex: 0 0 9.5rem; margin: 0; }
+      /* What stands where the composer was once a meetup is over. */
+      .chat-ended {
+        margin: 0; padding: .7rem .9rem;
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        color: var(--muted); font-size: .85rem; text-align: center;
+      }
       .whenrow {
         display: inline-flex; flex-wrap: nowrap; align-items: center;
         gap: .25rem; flex: 1 1 21rem; min-width: 0;
@@ -297,9 +315,12 @@
            on purpose -- a preselected one is exactly the guess that makes a
            meetup's time ambiguous -- and the server refuses an hour without it.
            The day stays free text so "Tonight" and "Now" are still sayable. #}
+          {# Required: the meetup's chat ends after this date, and a meetup
+             whose "when" is a sentence has no day to end after.
+             The time beside it stays optional. #}
+          <input name="when_on" type="date" class="ondate" required
+                 aria-label="Date" title="Date" />
         <span class="whenrow">
-          <input name="when_text" maxlength="60" placeholder="Day (e.g. Friday)"
-                 aria-label="Day" />
           {# One group, not three boxes: a single border with hairlines between,
              so the hour, the minutes and the half of the day read as one time
              and cannot be split across two lines by wrapping. #}
@@ -366,6 +387,14 @@
                 <input type="hidden" name="back" value="find" />
                 <button type="submit"
                         {% if post.full %}disabled{% endif %}>I'm in</button>
+              </form>
+            {% endif %}
+            {# Only for somebody going: the chat refuses anybody else, so
+               offering it to them would be a door that does not open. #}
+            {% if post.im_going and post.chat_id %}
+              <form method="get"
+                    action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+                <button type="submit" class="ghost">Open chat</button>
               </form>
             {% endif %}
             {% if post.mine %}

@@ -92,6 +92,24 @@
       /* nowrap on purpose: if the row runs out of room the whole when-group
          moves to the next line together, rather than leaving the day on one
          line and its time on the next -- which is what looked broken. */
+      /* The optional meetup date. Sized with the rest of the row, or the
+         global full-width input rule gives it a line to itself. */
+      /* No shrink: the meetup row is already crowded, and a date
+         input squeezed below its own content renders as a bare
+         "mm" with a calendar glyph. The row wraps instead. */
+      /* .newpost .ondate, not .ondate: the rule above it is
+         `.newpost input`, which is an element plus a class and so
+         outranks a bare class however they are ordered. A plain
+         .ondate lost the flex-basis and the box rendered as a
+         naked "mm" with a calendar glyph. */
+      .newpost .ondate { width: auto; flex: 0 0 9.5rem; margin: 0; }
+      /* What stands where the composer was once a meetup is over. */
+      .chat-ended {
+        margin: 0; padding: .7rem .9rem;
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        color: var(--muted); font-size: .85rem; text-align: center;
+      }
       .whenrow {
         display: inline-flex; flex-wrap: nowrap; align-items: center;
         gap: .25rem; flex: 1 1 21rem; min-width: 0;
@@ -476,79 +494,11 @@
   </div>
 
   {% if group %}
-    <div class="groupbar">
-      <span class="why">
-        Code <span class="code">{{ group.code }}</span>
-        &middot; <span class="vis {{ 'open' if group.is_public else 'shut' }}">
-          {{- "Public" if group.is_public else "Private" -}}
-        </span>
-        &middot; {{ members | length }} member{{ "" if members | length == 1 else "s" }}
-      </span>
-
-      {% if invitable %}
-        <form method="post" action="{{ url_for('chat_invite', chat_id=group.id) }}">
-          <select name="other_id" required>
-            {% for friend in invitable %}
-              <option value="{{ friend.user_id }}">{{ friend.name }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit">Invite</button>
-        </form>
-      {% endif %}
-    </div>
-
-    <details class="roster">
-      <summary>Who is in here &middot; {{ members | length }}</summary>
-      <div class="roster-body">
-        {% for person in members %}
-          <div class="dock-row">
-            {{ ui.avatar(person.name, person.id) }}
-            <span class="grow">{{ person.name }}
-              {%- if person.id == group.owner_id %}
-                <span class="dock-quiet">made it</span>
-              {% endif -%}
-            </span>
-            {% if is_owner and person.id != group.owner_id %}
-              <form method="post"
-                    action="{{ url_for('chat_remove', chat_id=group.id, user_id=person.id) }}">
-                <button type="submit" class="ghost">Remove</button>
-              </form>
-            {% endif %}
-          </div>
-        {% endfor %}
-
-        <div class="actions">
-          {% if is_owner %}
-            {# Handing over is the way out for whoever made the chat. The
-               picker lists the other members only; the route re-checks that,
-               so a posted id cannot name an outsider. #}
-            {% set others = members | rejectattr("id", "equalto", group.owner_id) | list %}
-            {% if others %}
-              <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
-                <select name="successor" required>
-                  <option value="">Hand over to&hellip;</option>
-                  {% for person in others %}
-                    <option value="{{ person.id }}">{{ person.name }}</option>
-                  {% endfor %}
-                </select>
-                <button type="submit" class="ghost">Hand over and leave</button>
-              </form>
-            {% else %}
-              <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
-                <button type="submit" class="ghost">Leave and close it</button>
-              </form>
-            {% endif %}
-            <form method="post" action="{{ url_for('chat_delete', chat_id=group.id) }}">
-              <button type="submit" class="ghost">Delete this chat</button>
-            </form>
-          {% else %}
-            <form method="post" action="{{ url_for('chat_leave', chat_id=group.id) }}">
-              <button type="submit" class="ghost">Leave</button>
-            </form>
-          {% endif %}
-        </div>
-      </div>
-    </details>
+    {# Swapped by the live channel when somebody joins or
+       leaves. One slot for the bar and the roster together:
+       both carry the member count, and two slots for one fact
+       is two ways to disagree about it. #}
+    <div id="group-slot">{% include "_grouppane.html" %}</div>
   {% endif %}
 
   {% if kind == "community" %}
@@ -595,9 +545,12 @@
          on purpose -- a preselected one is exactly the guess that makes a
          meetup's time ambiguous -- and the server refuses an hour without it.
          The day stays free text so "Tonight" and "Now" are still sayable. #}
+        {# Required: the meetup's chat ends after this date, and a meetup
+             whose "when" is a sentence has no day to end after.
+             The time beside it stays optional. #}
+        <input name="when_on" type="date" class="ondate" required
+             aria-label="Date" title="Date" />
       <span class="whenrow">
-        <input name="when_text" maxlength="60" placeholder="Day (e.g. Friday)"
-               aria-label="Day" />
         {# One group, not three boxes: a single border with hairlines between,
            so the hour, the minutes and the half of the day read as one time
            and cannot be split across two lines by wrapping. #}
@@ -633,7 +586,9 @@
     {% endif %}
 
     <div class="talkcol">
-  <div id="log">
+  {# data-cards is the deck token, handed over on the markup the way
+     the game pane and the roster hand theirs over. #}
+  <div id="log" data-cards="{{ card_token }}">
     {% for message in messages %}
       {% if message.event %}
         {# A game moment, not speech. It keeps the .msg class because the
@@ -661,57 +616,10 @@
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
         {% if message.post %}
-          <div class="post">
-            <b>{{ message.post.game }}</b>
-            <span class="meta">{{ message.post.mode_label }}
-              {%- if message.post.location %} &middot; {{ message.post.location }}{% endif -%}
-              {%- if message.post.when_text %} &middot; {{ message.post.when_text }}{% endif -%}
-            </span>
-            {% if message.post.note %}<span class="note">{{ message.post.note }}</span>{% endif %}
-            <span class="meta">
-              {{ message.post.count }} of {{ message.post.max_players }} going{% if message.post.going %}:
-              {{ message.post.going | join(", ") }}{% endif %}
-            </span>
-            {# One action row at the foot of the card, divided off from the
-               details above it, so these never read as chat-window controls.
-               Both labels name the meetup: "Leave" alone was taken for
-               leaving the conversation, and "Close" for shutting the window.
-               "Cancel meetup" is the word /find already uses for this. #}
-            <div class="post-actions">
-              {% if message.post.status != "open" %}
-                <span class="meta">Closed</span>
-              {% else %}
-                {% if message.post.im_going %}
-                  {# Asked before you give up your place. A <details>, like the
-                     bell and the game picker, so it needs no JavaScript --
-                     clicking the summary again puts it away. #}
-                  <details class="confirm">
-                    <summary class="leave">Leave Meetup</summary>
-                    <div class="confirm-body">
-                      <span class="confirm-ask">Are you sure you want to leave
-                        this meetup?</span>
-                      <span class="confirm-row">
-                        <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
-                          <button type="submit" class="leave-yes">Yes, leave</button>
-                        </form>
-                        <button type="button" class="confirm-no">Keep my spot</button>
-                      </span>
-                    </div>
-                  </details>
-                {% else %}
-                  <form method="post" action="{{ url_for('post_rsvp', post_id=message.post.id) }}">
-                    <button type="submit"
-                            {% if message.post.full %}disabled{% endif %}>I'm in</button>
-                  </form>
-                {% endif %}
-                {% if message.post.mine %}
-                  <form method="post" action="{{ url_for('post_close', post_id=message.post.id) }}">
-                    <button type="submit" class="ghost">Cancel meetup</button>
-                  </form>
-                {% endif %}
-              {% endif %}
-            </div>
-          </div>
+          {# One source for the card, so a live swap cannot render it
+             differently from a reload. `with` because the partial speaks of
+             `post` and the loop calls it message.post. #}
+          {% with post = message.post %}{% include "_postcard.html" %}{% endwith %}
         {% endif %}
         <span class="at">{{ message.at }}</span>
       </div>
@@ -738,11 +646,19 @@
       </details>
     {% endif %}
 
+  {# A meetup's chat stops taking messages once the meetup is over or has been
+     cancelled. The history stays: people come back to a conversation to find
+     what somebody said they would bring. The server refuses a post either
+     way -- the composer going away is the courtesy, not the rule. #}
+  {% if ended %}
+    <p class="chat-ended">This meetup has ended, so its chat is closed.</p>
+  {% else %}
   <form class="composer" method="post">
     <input name="body" maxlength="2000" autocomplete="off" autofocus
            placeholder="Write a message&hellip;" required />
     <button type="submit">Send</button>
   </form>
+  {% endif %}
   </div>
     </div>
   </div>
@@ -855,6 +771,50 @@
     var token = (slot && slot.firstElementChild
                  && slot.firstElementChild.dataset.token) || "none";
 
+    // The meetup cards in this room, which go stale in a way messages do not:
+    // RSVPing writes nothing into the room, so the "2 of 4 going" on a card
+    // used to sit there until a reload. The token comes off the markup, the
+    // way the pane's and the roster's do, so a fresh load asks for nothing.
+    var deck = log.dataset.cards || "none";
+
+    // One card back where it belongs. Keyed by the message it lives inside,
+    // so a card can also be filled into a message that arrived live a moment
+    // ago and has none -- a meetup posted while you watch used to appear as
+    // its one-line summary and nothing else.
+    function placeCard(card) {
+      var msg = log.querySelector('.msg[data-id="' + card.id + '"]');
+      if (!msg) { return; }
+      var had = msg.querySelector(".post");
+      // Its own token, so an RSVP to one meetup leaves every other card in
+      // the room alone.
+      if (had && had.dataset.token === card.token) { return; }
+
+      var parsed = new DOMParser().parseFromString(card.html, "text/html");
+      var fresh = parsed.querySelector(".post");
+      if (!fresh) { return; }
+      if (!had) {
+        var at = msg.querySelector(".at");
+        if (at) { msg.insertBefore(fresh, at); } else { msg.appendChild(fresh); }
+        return;
+      }
+      // Whether the "are you sure" is open is the reader's business, not the
+      // server's -- the same care the roster takes. Somebody deciding whether
+      // to give up their place must not have the question shut under them
+      // because a third person joined.
+      var asking = !!had.querySelector("details.confirm[open]");
+      had.replaceWith(fresh);
+      if (asking) {
+        var again = fresh.querySelector("details.confirm");
+        if (again) { again.setAttribute("open", ""); }
+      }
+    }
+
+    // Who is in this chat, by the same means: a token on the markup, and a
+    // swap only when it moves.
+    var crowdSlot = document.getElementById("group-slot");
+    var crowd = (crowdSlot && crowdSlot.firstElementChild
+                 && crowdSlot.firstElementChild.dataset.token) || "none";
+
     log.scrollTop = log.scrollHeight;
 
     function span(cls, text) {
@@ -939,6 +899,29 @@
       }
       if (typeof data.after === "number") { after = data.after; }
 
+      // The meetup cards, when an RSVP or a cancellation has moved one.
+      // Nothing else moves the deck token, so this does not run on an
+      // ordinary message.
+      var deal = data.cards;
+      if (deal && deal.token !== deck) {
+        deck = deal.token;
+        (deal.cards || []).forEach(placeCard);
+      }
+
+      // The roster, when somebody has joined or left. Nothing else moves
+      // its token, so this does not run on an ordinary message.
+      var group = data.group;
+      if (group && crowdSlot && group.token !== crowd) {
+        crowd = group.token;
+        // Whether the roster was open is the reader's business, not the
+        // server's: carry it across the swap rather than shutting it.
+        var wasOpen = !!crowdSlot.querySelector("details.roster[open]");
+        var fresh = new DOMParser().parseFromString(group.html, "text/html");
+        crowdSlot.replaceChildren.apply(crowdSlot, fresh.body.childNodes);
+        var reopened = crowdSlot.querySelector("details.roster");
+        if (wasOpen && reopened) { reopened.setAttribute("open", ""); }
+      }
+
       var pane = data.game;
       if (pane && slot && wrap && pane.token !== token) {
         token = pane.token;
@@ -965,7 +948,10 @@
     // there is nothing to tear down here.
     Beacon.watch({
       here: {{ (kind ~ ":" ~ target_id) | tojson }},
-      state: function () { return {after: after, token: token}; },
+      state: function () {
+        return {after: after, token: token, crowd: crowd,
+                cards: deck};
+      },
       apply: apply
     });
   })();
