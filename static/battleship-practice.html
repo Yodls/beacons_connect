@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a2540">
+  <title>Revolution at Sea — Beacon Connect</title>
+  <link rel="stylesheet" href="naval-battleship.css">
+  <style>
+    :root {color-scheme:light;--page-bg:#eef5fa;--page-ink:#143c62;}
+    body {margin:0;padding:0;background:var(--page-bg);color:var(--page-ink);font:16px/1.5 system-ui,sans-serif;}
+    body.theme-dark {color-scheme:dark;--page-bg:#091e33;--page-ink:#e5f3ff;}
+    a {color:inherit;}
+    .practice-top {display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px max(14px,calc((100vw - 1210px) / 2));background:#0a2540;color:white;}
+    .practice-top .identity {display:flex;align-items:center;gap:10px;font-weight:850;letter-spacing:.025em;}
+    .practice-top .identity i {font:normal 1.65rem serif;}
+    .practice-top .right {display:flex;align-items:center;gap:10px;}
+    .practice-top a {border:1px solid #8cb5d5;border-radius:8px;padding:6px 10px;text-decoration:none;font-size:.84rem;}
+    .practice-top button {background:#1b4965;color:#fff;border:1px solid #7fb4ce;border-radius:8px;padding:8px 12px;cursor:pointer;}
+    main {width:min(1210px,100%);margin:15px auto 40px;padding:0 12px;}
+    .practice-intro {margin:10px 0 16px;font-size:.89rem;}
+    .naval-practice .naval-panel {box-shadow:0 6px 0 rgba(10,37,64,.06);}
+    .naval-practice .naval-panels {grid-template-columns:repeat(2,minmax(0,1fr));}
+    .practice-toolbar {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+    .practice-toolbar .naval-buttons {margin:0;}
+    #practice-history {padding-left:1.4rem;max-height:8rem;overflow:auto;margin:5px 0;color:var(--nav-ink-2);font: .79rem/1.5 system-ui,sans-serif;}
+    .naval-practice .naval-bottom-status {margin-top:14px;}
+    @media (max-width:700px) { .naval-practice .naval-panels {grid-template-columns:minmax(0,1fr);} .naval-practice .naval-panels.firing .naval-panel--enemy{order:-1;} .practice-top {flex-wrap:wrap;} }
+  </style>
+</head>
+<body>
+  <header class="practice-top">
+    <span class="identity"><i aria-hidden="true">⚓</i> BEACONS CONNECT <small>· Games</small></span>
+    <span class="right"><a href="/games" id="back-link">← All games</a><button type="button" id="practice-theme">Dark mode</button></span>
+  </header>
+  <main class="naval-practice">
+    <header class="naval-illustration"><h1 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Revolution at Sea — Battleship</h1></header>
+    <div class="naval-explainer"><span class="naval-emblem" aria-hidden="true">⚓</span><div><strong>1777 · Atlantic Coast · Practice battle</strong><p>Command a Revolutionary-era Continental fleet against the computer-controlled Royal Navy. Place five vessels, then take turns firing cannonballs.</p></div><span class="naval-phase">Solo practice</span></div>
+    <p class="practice-intro">This game runs locally in your browser. Practice victories are not saved to your Beacon Connect profile. Your progress is remembered on this device.</p>
+    <div class="naval-panels placing" id="practice-panels">
+      <section class="naval-panel naval-panel--own">
+        <div class="naval-panel-head"><span class="naval-panel-icon" aria-hidden="true">★</span><div><h3>Continental Navy</h3><small>Your fleet</small></div></div>
+        <div class="naval-grid-shell"><div class="naval-column-labels" id="my-cols"></div><div class="naval-row-labels" id="my-rows"></div><div class="naval-square-grid" id="practice-mine" role="img" aria-label="Your ships and incoming cannon fire"></div></div>
+        <div class="naval-fleet"><strong>Ship's manifest</strong><div class="naval-fleet-list" id="practice-manifest"></div></div>
+        <div class="naval-buttons"><button type="button" id="practice-shuffle" class="naval-secondary">↻ Shuffle ships</button><button type="button" id="practice-ready" class="naval-primary">Ready for battle</button></div>
+      </section>
+      <section class="naval-panel naval-panel--enemy">
+        <div class="naval-panel-head"><span class="naval-panel-icon" aria-hidden="true">♛</span><div><h3>Royal Navy</h3><small>Enemy waters</small></div></div>
+        <div class="naval-grid-shell"><div class="naval-column-labels" id="their-cols"></div><div class="naval-row-labels" id="their-rows"></div><div class="naval-square-grid" id="practice-enemy" role="group" aria-label="Target grid, ten columns by ten rows"></div></div>
+        <div class="naval-fire-row"><span id="practice-aim" aria-live="polite">Prepare your fleet first</span><button type="button" id="practice-fire" class="naval-fire" disabled>FIRE! ➤</button></div>
+        <p class="naval-note" id="practice-enemy-sunk">No Royal Navy vessels sunk yet.</p>
+      </section>
+    </div>
+    <p role="status" aria-live="polite" id="practice-status" class="naval-bottom-status">Prepare for battle: shuffle or ready your fleet.</p>
+    <div class="practice-toolbar"><h2 style="font-size:1rem;margin:14px 0 3px">Captain's log</h2><div class="naval-buttons"><button type="button" id="practice-new" class="naval-secondary">Start a new battle</button></div></div>
+    <ol id="practice-history"></ol>
+  </main>
+  <script src="naval-battleship.js"></script>
+  <script src="battleship-practice.js"></script>
+</body>
+</html>

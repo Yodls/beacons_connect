@@ -94,6 +94,7 @@
 {% endblock %}
 
 {% block main %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
   {# The chip stays outside the <h1>: tests identify pages by that heading's
      text, so it has to read exactly the title. #}
   <h1>{{ title }}</h1>
@@ -354,6 +355,7 @@
 {% endblock %}
 
 {% block script %}
+<script src="{{ url_for('static', filename='naval-battleship.js') }}"></script>
 <script>
   // Narrows mode and location to whatever activity is picked. Without this the
   // form still works: every location is listed under its activity and the
@@ -554,10 +556,13 @@
         wrap.classList.toggle("playing", !!pane.html);
         if (launch) { launch.hidden = !!pane.live; }
         bindChess();
+        // Live updates replace the board DOM; bind the naval controls again.
+        if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
       }
     }
 
     bindChess();
+    if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
 
     // Everything this page wants from the channel. `state` is read fresh every
     // round rather than captured, because `after` and `token` move as messages
