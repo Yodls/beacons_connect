@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>{% if db_banner %}[{{ db_banner }}] {% endif %}{% block title %}Beacons Center{% endblock %}</title>
+    <title>{% if db_banner %}[{{ db_banner }}] {% endif %}{% block title %}Beacons Connect{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='logo.webp') }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet"
@@ -145,12 +146,21 @@
       }
       .brand { display: flex; align-items: center; gap: 9px; color: var(--navy); }
       .brand:hover { text-decoration: none; }
+      /* The logo is a finished circular badge -- its own background, its own
+         rim -- so this is the mark itself rather than a tile with a glyph
+         sitting inside one. The box keeps its 36px footprint, so the topbar
+         row does not move; what goes is the blue fill and the border the
+         badge brings with it. display:block rather than the inline default,
+         which would leave a baseline gap under it.
+
+         The image's address is on the <img> in the markup, not here. This
+         stylesheet carries no Jinja at all -- see the note at the top of the
+         <style> -- and test_enhance checks that by comparing it byte for
+         byte across nine pages. */
       .brand-mark {
         width: 36px; height: 36px; flex: none;
-        border-radius: var(--r-sm);
-        background: var(--blue); color: #fff;
-        border: 2px solid #9cc6e6;
-        display: grid; place-items: center;
+        border-radius: 50%;
+        display: block; object-fit: contain;
       }
       .brand-name { display: block; font-size: .94rem; font-weight: 800; line-height: 1.15; }
       .brand-sub { display: block; font-size: .69rem; font-weight: 600; color: var(--muted); }

@@ -1,4 +1,5 @@
 import hashlib
+import mimetypes
 import os
 import secrets
 import time
@@ -79,6 +80,13 @@ GENDERS = {
     "undisclosed": "Prefer not to say",
 }
 
+# Windows' mimetypes has no entry for .webp, so the static route served the
+# logo -- and the battleship banner before it -- as application/octet-stream.
+# An <img> sniffs the bytes and shows it anyway, which is why this went
+# unnoticed; a favicon does not, and browsers decline one whose type is not an
+# image. Registered rather than relied upon, so it is the same on the host.
+mimetypes.add_type("image/webp", ".webp")
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
@@ -147,10 +155,10 @@ def issue_verification_code(user):
 def send_verification_email(user, code):
     mail.send(
         MailMessage(
-            subject="Verify your Beacon account",
+            subject="Verify your Beacons Connect account",
             recipients=[user.email],
             body=(
-                f"Your Beacon verification code is {code}\n\n"
+                f"Your Beacons Connect verification code is {code}\n\n"
                 f"It expires in {int(CODE_TTL.total_seconds() // 60)} minutes."
             ),
         )
