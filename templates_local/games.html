@@ -24,6 +24,28 @@
       }
       .starter button:hover { background: #fdf0e6; }
 
+      /* The note that turns up once waiting has gone on a while. Shaped like
+         the chat's .presence strip -- a dot and a sentence -- and coloured
+         like find's .queuebox .waiting, which is the same problem of a badge
+         sitting on a saturated card. It had no rule of its own before, so it
+         came out as loose prose with a second white button under it. */
+      .starter .seek-slow {
+        display: flex; align-items: center; gap: .5rem;
+        margin: 0 0 .9rem; padding: .45rem .75rem;
+        background: rgba(255, 255, 255, .18);
+        border-radius: var(--r-sm);
+        color: #fff; font-size: .82rem;
+      }
+      .starter .seek-slow::before {
+        content: ""; flex: 0 0 auto;
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #ffd27a;
+      }
+      /* The display above beats the browser's own [hidden] rule, so the note
+         would be on screen from the first second rather than after a minute.
+         .bell-count carries the same line for the same reason. */
+      .starter .seek-slow[hidden] { display: none; }
+
       /* Whose turn it is. Base scopes its own .pill to the friends dock, so
          these are fully declared here. */
       .pill {
@@ -68,11 +90,13 @@
         <h3>Finding a player&hellip;</h3>
         <p>Looking for somebody who wants {{ seeking_label }}. You can leave
           this page open.</p>
-        <div class="seek-slow" id="seek-slow" hidden>
-          <p><b>Still looking.</b> Nobody is waiting for {{ seeking_label }}
-            just yet.</p>
-          <button type="button" id="seek-keep">Keep waiting</button>
-        </div>
+        {# One element, not a div around a paragraph: it is a status note, and
+           .starter p would otherwise put its prose margin inside the strip.
+           Nothing to press -- see the script for why. #}
+        <p class="seek-slow" id="seek-slow" hidden>
+          Still looking &mdash; nobody is waiting for {{ seeking_label }}
+          just yet.
+        </p>
         <form method="post" action="{{ url_for('game_seek_cancel') }}">
           <button type="submit" class="ghost">Cancel</button>
         </form>
@@ -201,28 +225,20 @@
   (function () {
     if (!document.getElementById("seekbox")) { return; }
 
-    // After a minute, offer a way out without taking one. The row is left
-    // alone: "keep waiting" is the default, not an action.
+    // After a minute, say so. The queue row is left alone, and there is
+    // nothing to press: going on waiting is what happens when you do nothing,
+    // so a button for it was a button for the default. Cancel is the only
+    // choice there is, which is why it is the only button on the card.
+    //
+    // Shown once and left up, rather than dismissed and re-armed.
     var WAIT = 60000;
 
-    function nag() {
+    setTimeout(function () {
       // Looked up when it fires, not captured: a navigation may have replaced
       // the page while this timer was pending.
       var slow = document.getElementById("seek-slow");
       if (slow) { slow.hidden = false; }
-    }
-
-    var timer = setTimeout(nag, WAIT);
-
-    var keep = document.getElementById("seek-keep");
-    if (keep) {
-      keep.addEventListener("click", function () {
-        var slow = document.getElementById("seek-slow");
-        if (slow) { slow.hidden = true; }
-        clearTimeout(timer);
-        timer = setTimeout(nag, WAIT);
-      });
-    }
+    }, WAIT);
 
     Beacon.watch({
       seeking: true,

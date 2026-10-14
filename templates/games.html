@@ -26,10 +26,11 @@
       <h3>Finding a player&hellip;</h3>
       <p>Looking for somebody who wants {{ seeking_label }}. You can leave this
         page open.</p>
-      <div class="seek-slow" id="seek-slow" hidden>
-        <p><b>Still looking.</b> Nobody is waiting for {{ seeking_label }} yet.</p>
-        <button type="button" id="seek-keep">Keep waiting</button>
-      </div>
+      {# A status note, with nothing to press: waiting is what happens when
+         you do not cancel. #}
+      <p class="seek-slow" id="seek-slow" hidden>
+        Still looking &mdash; nobody is waiting for {{ seeking_label }} yet.
+      </p>
       <form method="post" action="{{ url_for('game_seek_cancel') }}">
         <button type="submit">Cancel</button>
       </form>
@@ -135,28 +136,17 @@
   (function () {
     if (!document.getElementById("seekbox")) { return; }
 
-    // After a minute, offer a way out without taking one. The row is left
-    // alone: "keep waiting" is the default, not an action.
+    // After a minute, say so. The queue row is left alone, and there is
+    // nothing to press: going on waiting is what happens when you do nothing,
+    // so a button for it was a button for the default. Shown once, left up.
     var WAIT = 60000;
 
-    function nag() {
+    setTimeout(function () {
       // Looked up when it fires, not captured: a navigation may have replaced
       // the page while this timer was pending.
       var slow = document.getElementById("seek-slow");
       if (slow) { slow.hidden = false; }
-    }
-
-    var timer = setTimeout(nag, WAIT);
-
-    var keep = document.getElementById("seek-keep");
-    if (keep) {
-      keep.addEventListener("click", function () {
-        var slow = document.getElementById("seek-slow");
-        if (slow) { slow.hidden = true; }
-        clearTimeout(timer);
-        timer = setTimeout(nag, WAIT);
-      });
-    }
+    }, WAIT);
 
     Beacon.watch({
       seeking: true,
