@@ -65,7 +65,19 @@
       </form>
     {% endif %}
   {% elif game.status == "declined" %}
-    <p class="why">{{ payload.opponent }} turned this invite down.</p>
+    {# Said to the reader rather than about them: this used to tell whoever
+       declined that the other player had turned it down. #}
+    <p class="why">
+      {%- if payload.ended_by_me is none -%}
+        This invite didn't go ahead.
+      {%- elif payload.withdrawn -%}
+        {{ "You took this invite back." if payload.ended_by_me
+           else payload.opponent ~ " took this invite back." }}
+      {%- else -%}
+        {{ "You turned this invite down." if payload.ended_by_me
+           else payload.opponent ~ " turned this invite down." }}
+      {%- endif -%}
+    </p>
   {% else %}
     {% if game.outcome == "abandoned" %}
       <p class="why">

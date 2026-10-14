@@ -95,7 +95,20 @@
       {% endif %}
     </div>
   {% elif game.status == "declined" %}
-    <div class="empty">{{ payload.opponent }} turned this invite down.</div>
+    {# Said to the reader rather than about them. The panel used to tell
+       whoever declined that the person who invited them had turned it down,
+       which named the one player who certainly had not. #}
+    <div class="empty">
+      {%- if payload.ended_by_me is none -%}
+        This invite didn't go ahead.
+      {%- elif payload.withdrawn -%}
+        {{ "You took this invite back." if payload.ended_by_me
+           else payload.opponent ~ " took this invite back." }}
+      {%- else -%}
+        {{ "You turned this invite down." if payload.ended_by_me
+           else payload.opponent ~ " turned this invite down." }}
+      {%- endif -%}
+    </div>
   {% else %}
     {% if game.outcome == "abandoned" %}
       <div class="empty">

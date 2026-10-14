@@ -566,6 +566,16 @@ class Game(db.Model):
     )
     turn_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
     winner_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    # Who ended it, which is not always who lost and never "the other one".
+    # The panel has to say "You turned this invite down" to one player and
+    # "They turned it down" to the other, and a declined row alone cannot
+    # tell them apart -- an invite is declined by the person invited and
+    # withdrawn by the person who sent it, and both land here as 'declined'.
+    #
+    # Null on every row made before this, and on an invite nobody has
+    # answered. The panel says something neutral rather than guessing.
+    ended_by = db.Column(db.Integer,
+                         db.ForeignKey("user.id", ondelete="SET NULL"))
     outcome = db.Column(db.Text)
     # db.JSON does not notice in-place edits: always reassign a fresh object.
     state = db.Column(db.JSON, nullable=False)
@@ -616,6 +626,13 @@ class Game(db.Model):
             "outcome IS NULL OR outcome IN "
             "('win', 'draw', 'resigned', 'abandoned')",
             name="ck_game_outcome",
+        ),
+        # Somebody outside the game cannot have ended it. Match states the
+        # same rule about requested_by, for the same reason: the column is
+        # read to decide what each player is told.
+        db.CheckConstraint(
+            "ended_by IS NULL OR ended_by IN (player_a, player_b)",
+            name="ck_game_ended_by",
         ),
         db.Index("ix_games_player_a", "player_a"),
         db.Index("ix_games_player_b", "player_b"),

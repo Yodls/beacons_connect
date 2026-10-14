@@ -1692,6 +1692,20 @@ def game_payload(game, seat):
         "opponent_id": other_id,
         "outcome": game.outcome,
         "winner_id": game.winner_id,
+        # Who ended it, as the reader needs it. The same choice event_wording
+        # makes for a message and for the same reason: one row, two people,
+        # two different sentences, and this is where the reader is known.
+        # None where it was never recorded -- every row made before the
+        # column existed -- and the panel then says something neutral rather
+        # than naming somebody who may not have done it.
+        "ended_by_me": (None if game.ended_by is None
+                        else game.ended_by == current_user.id),
+        # An invite is declined by whoever was invited and withdrawn by
+        # whoever sent it. Same status, so this is the only thing that tells
+        # the two apart.
+        "withdrawn": (game.status == "declined"
+                      and game.ended_by is not None
+                      and game.ended_by == game.player_a),
         "you_won": game.winner_id == current_user.id,
         # Rendered into data-token by the pane. Handed over rather than
         # rebuilt in the template, so the two cannot drift apart.
@@ -1976,7 +1990,9 @@ def award_walkover(game, seat):
     winner = db.session.get(User, winner_id)
     label = rules.LABELS.get(game.kind, game.kind)
 
-    finish_game(game, "abandoned", winner_id)
+    # The player who claimed it, not the one who left: this records who
+    # acted, and walking away is not an act.
+    finish_game(game, "abandoned", winner_id, ended_by=winner_id)
     game.updated_at = datetime.utcnow()
     game_event(game, "abandoned", winner_id,
                f"{loser.name if loser else 'They'} did not come back, so "
@@ -2060,10 +2076,11 @@ def game_chat(game, seat):
     return redirect(url_for("chat", kind=kind, target_id=target_id))
 
 
-def finish_game(game, outcome, winner_id=None):
+def finish_game(game, outcome, winner_id=None, ended_by=None):
     game.status = "finished"
     game.outcome = outcome
     game.winner_id = winner_id
+    game.ended_by = ended_by
     game.turn_id = None
 
 
@@ -2303,6 +2320,7 @@ def game_new():
     if fossil is not None:
         fossil.status = "declined"
         fossil.turn_id = None
+        fossil.ended_by = current_user.id
         fossil.updated_at = datetime.utcnow()
         game_event(fossil, "declined", current_user.id,
                    f"{current_user.name} let the "
@@ -2447,6 +2465,9 @@ def game_action(game_id, action):
         else:
             game.status = "declined"
             game.turn_id = None
+            # The sender. Which is what tells a withdrawal apart from a
+            # decline later: the same status, the actors the other way round.
+            game.ended_by = current_user.id
             game.updated_at = datetime.utcnow()
             label = rules.LABELS.get(game.kind, game.kind)
             game_event(game, "declined", current_user.id,
@@ -2481,6 +2502,7 @@ def game_action(game_id, action):
         else:
             game.status = "declined"
             game.turn_id = None
+            game.ended_by = current_user.id
             game.updated_at = datetime.utcnow()
             label = rules.LABELS.get(game.kind, game.kind)
             game_event(game, "declined", current_user.id,
@@ -2496,7 +2518,8 @@ def game_action(game_id, action):
             winner_id = game.user_in_seat(1 - seat)
             winner = db.session.get(User, winner_id)
             label = rules.LABELS.get(game.kind, game.kind)
-            finish_game(game, "resigned", winner_id)
+            finish_game(game, "resigned", winner_id,
+                        ended_by=current_user.id)
             game.updated_at = datetime.utcnow()
             game_event(game, "ended", current_user.id,
                        f"{current_user.name} resigned, so "
