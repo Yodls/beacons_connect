@@ -1,0 +1,33 @@
+{#
+  Who else is in this club.
+
+  A club space had no member list at all until now: chat() only built one for
+  a group chat, so the room you would most want to meet people in showed
+  nobody. This is that list, and the friend action on each row is the point
+  of it.
+
+  Static, unlike the group chat's. That one is swapped live because people
+  join and leave a meetup while you are looking at it; club membership does
+  not move that way, and a second live token on the busiest request would be
+  paid on every poll for something that changes once a term.
+#}
+<div class="group-pane">
+  <div class="groupbar">
+    <span class="why">
+      Everyone in this club
+      &middot; {{ members | length }} member{{ "" if members | length == 1 else "s" }}
+    </span>
+  </div>
+
+  <details class="roster">
+    <summary>Who is in here &middot; {{ members | length }}</summary>
+    <div class="roster-body">
+      {% with people = members,
+              states = friend_states,
+              home_kind = "club",
+              home_id = club_id %}
+        {%- include "_roster.html" -%}
+      {% endwith %}
+    </div>
+  </details>
+</div>

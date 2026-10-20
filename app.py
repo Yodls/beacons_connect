@@ -650,6 +650,29 @@ PRIVATE_MEETUP_CHATS = ("match", "pair")
 # plus the campus room. live_cards walks this.
 CARD_CHATS = (COMMUNITY,) + PRIVATE_MEETUP_CHATS
 
+# Where a friend button can be pressed: the three rooms that draw a list of
+# people, and the pair chat, which has one person and a header to put it in.
+ROSTER_CHATS = ("group", "club", "pair")
+
+
+def chat_home(kinds):
+    """The conversation a button was pressed in, or None.
+
+    Resolved through chat_target rather than trusted, which is the same check
+    the chat page itself passes. That is what stops a posted form reaching a
+    conversation somebody is not in -- club and group ids are small integers,
+    and a redirect into a room you cannot read is a bad answer to give.
+
+    Returns (kind, target_id, parent); `kinds` says which are allowed here,
+    because what a button means differs by surface.
+    """
+    kind = request.form.get("from_kind", "")
+    target_id = request.form.get("from_id", type=int)
+    if kind not in kinds or target_id is None:
+        return None
+    parent, _ = chat_target(kind, target_id)
+    return None if parent is None else (kind, target_id, parent)
+
 
 def card_home():
     """The one-on-one a meetup was posted from or acted on in, or None.
@@ -663,12 +686,7 @@ def card_home():
     Returns (kind, target_id, parent), so the caller has both the id the chat
     URL needs and the row attach_parent needs.
     """
-    kind = request.form.get("from_kind", "")
-    target_id = request.form.get("from_id", type=int)
-    if kind not in PRIVATE_MEETUP_CHATS or target_id is None:
-        return None
-    parent, _ = chat_target(kind, target_id)
-    return None if parent is None else (kind, target_id, parent)
+    return chat_home(PRIVATE_MEETUP_CHATS)
 
 
 def attach_parent(message, kind, parent):
@@ -1137,6 +1155,23 @@ def chat(kind, target_id):
         db.session.commit()
 
     group = parent if kind == "group" else None
+
+    # Who is in the room, and what stands between me and each of them. A club
+    # space had neither until now: chat() only built a list for a group chat,
+    # so the room you would most want to meet people in showed nobody.
+    roster = []
+    if group is not None:
+        roster = chat_members(group.id)
+    elif kind == "club":
+        roster = club_members(target_id)
+
+    # The pair chat has no list, but it has the one person the queue put you
+    # with -- and that is the other place with no way to become friends.
+    people = [person.id for person in roster]
+    if kind == "pair" and opponent_id:
+        people.append(opponent_id)
+    friend_states = friend_state_for(people) if people else {}
+
     invitable = []
     if group is not None:
         inside = {m.id for m in chat_members(group.id)}
@@ -1150,7 +1185,11 @@ def chat(kind, target_id):
         title=title,
         pronouns=pronoun_label(other.pronouns) if other else None,
         group=group,
-        members=chat_members(group.id) if group is not None else [],
+        members=roster,
+        friend_states=friend_states,
+        # The club this page is, when it is one: the roster's buttons carry it
+        # so pressing one comes back here.
+        club_id=target_id,
         is_owner=group is not None and group.owner_id == current_user.id,
         # A meetup's chat: its membership is the RSVP list, so the controls
         # that add and remove people do not belong on it, and the join code
@@ -1171,6 +1210,9 @@ def chat(kind, target_id):
         # has no rematch button. Queue again from the lobby instead.
         can_start=(kind == "match" and live_game_with(target_id) is None),
         other_id=target_id,
+        # The other person, which is not target_id in a pair chat: there the
+        # url carries the pairing's id, not theirs.
+        partner_id=opponent_id,
         messages=chat_rows(kind, parent),
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
@@ -1252,6 +1294,11 @@ def live_group(chat):
         "html": render_template(
             "_grouppane.html", group=chat, group_token=token,
             members=chat_members(chat.id),
+            # The swapped roster draws the same rows as the page does, so it
+            # needs the same answer about each person -- without this the
+            # live copy would come back with every button missing.
+            friend_states=friend_state_for(
+                [m.id for m in chat_members(chat.id)]),
             is_owner=chat.owner_id == current_user.id,
             meetup=chat.post_id is not None,
             # The invite picker is rebuilt with the rest of the bar. It is
@@ -3177,6 +3224,51 @@ def is_member(chat_id, user_id=None):
     return db.session.get(ChatMember, (user_id, chat_id)) is not None
 
 
+# What stands between you and somebody else, as one word. The same four
+# matching.match_state returns, because a second vocabulary for one fact is
+# two places to disagree about it.
+FRIEND_STATES = ("none", "you_asked", "they_asked", "matched", "you")
+
+
+def friend_state_for(user_ids):
+    """What stands between me and each of these students, one word each.
+
+    Three queries for the whole list rather than one per row. match_state
+    answers about a single pair, which is right for a profile and wrong for a
+    club space with two dozen people in it -- that would be two dozen round
+    trips to draw one list.
+
+    "you" is in here rather than left to the template: every surface that
+    draws a roster would otherwise have to remember not to offer you yourself.
+    """
+    mine = {f["user_id"] for f in matching.friend_names(current_user.id)}
+    asked = {r["user_id"] for r in matching.outgoing_requests(current_user.id)}
+    asking = {r["user_id"] for r in matching.incoming_requests(current_user.id)}
+
+    def state(uid):
+        if uid == current_user.id:
+            return "you"
+        if uid in mine:
+            return "matched"
+        if uid in asked:
+            return "you_asked"
+        if uid in asking:
+            return "they_asked"
+        return "none"
+
+    return {uid: state(uid) for uid in user_ids}
+
+
+def club_members(club_id):
+    """Everyone in a club, by name. chat_members' shape, for the other table."""
+    return db.session.scalars(
+        db.select(User)
+        .join(ClubMember, ClubMember.user_id == User.id)
+        .where(ClubMember.club_id == club_id)
+        .order_by(User.name)
+    ).all()
+
+
 def chat_members(chat_id):
     """Everyone in a chat, by name."""
     return db.session.scalars(
@@ -3573,6 +3665,9 @@ def match_ask(other_id):
     # the list afterwards, not at the friends page with their place lost.
     if request.form.get("back") == "welcome":
         return redirect(url_for("welcome"))
+    # The same courtesy for a roster row or a pair chat's header.
+    if (home := chat_home(ROSTER_CHATS)) is not None:
+        return redirect(url_for("chat", kind=home[0], target_id=home[1]))
     if outcome in ("asked", "matched"):
         return redirect(url_for("matches"))
     return back_to_people()
@@ -3603,6 +3698,10 @@ def match_respond(other_id, action):
 
     if (back := dock_back()) is not None:
         return back
+    # Pressed on a roster row or a chat header: back to that conversation,
+    # rather than to the friends page they were not looking at.
+    if (home := chat_home(ROSTER_CHATS)) is not None:
+        return redirect(url_for("chat", kind=home[0], target_id=home[1]))
     if action == "cancel":
         return back_to_people()
     return redirect(url_for("matches"))

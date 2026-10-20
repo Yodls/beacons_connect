@@ -43,22 +43,19 @@
   <details class="roster">
     <summary>Who is in here &middot; {{ members | length }}</summary>
     <div class="roster-body">
-      {% for person in members %}
-        <div class="dock-row">
-          {{ ui.avatar(person.name, person.id) }}
-          <span class="grow">{{ person.name }}
-            {%- if person.id == group.owner_id %}
-              <span class="dock-quiet">made it</span>
-            {% endif -%}
-          </span>
-          {% if is_owner and not meetup and person.id != group.owner_id %}
-            <form method="post"
-                  action="{{ url_for('chat_remove', chat_id=group.id, user_id=person.id) }}">
-              <button type="submit" class="ghost">Remove</button>
-            </form>
-          {% endif %}
-        </div>
-      {% endfor %}
+      {# The rows live in _roster.html now, with the club space's. What made
+         that worth doing is the friend action on each one: four states, and
+         two rooms drawing their own rows is two chances to get the fourth
+         wrong. chat_id is passed only when this viewer may take people out,
+         which is what the row keys its Remove button on. #}
+      {% with people = members,
+              states = friend_states,
+              home_kind = "group",
+              home_id = group.id,
+              owner_id = group.owner_id,
+              chat_id = (group.id if is_owner and not meetup else none) %}
+        {%- include "_roster.html" -%}
+      {% endwith %}
 
       <div class="actions">
         {# A meetup's chat is left by leaving the meetup, which is on the

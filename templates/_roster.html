@@ -1,0 +1,66 @@
+{#
+  The people in a room, one row each, and what you can do about them.
+
+  Rows only -- the caller owns whatever wraps them, because a group chat's
+  roster carries its leave-and-hand-over controls in the same box and a club's
+  does not.
+
+  Drawn here rather than in each room that has a list, because the thing that
+  made this worth extracting is the friend action: four states, and a room
+  drawing its own rows would get three of them right and the fourth wrong.
+
+  Takes:
+    people      the User rows, in the order they should read
+    states      {user_id: one of FRIEND_STATES}, from friend_state_for
+    home_kind   the conversation this list is in, so a button comes back here
+    home_id     and its id -- checked by chat_home, never trusted
+    owner_id    optional: who made the room, marked as such
+    chat_id     optional: present when the viewer may remove people
+
+  "you" draws no action at all, and it is a state rather than something each
+  caller has to remember: otherwise every room with a list has its own chance
+  to offer you yourself.
+#}
+{%- import "_ui.html" as ui -%}
+{% for person in people %}
+  {% set state = states.get(person.id, "none") %}
+  <div class="dock-row">
+    {{ ui.avatar(person.name, person.id) }}
+    <span class="grow">{{ person.name }}
+      {%- if owner_id is defined and person.id == owner_id %}
+        <span class="dock-quiet">made it</span>
+      {% endif -%}
+    </span>
+
+    {# The friend action. Anybody may be sent a request, so this is not a
+       permission question -- only a question of what is true already. #}
+    {% if state == "matched" %}
+      <span class="dock-quiet">Friend</span>
+    {% elif state == "you_asked" %}
+      <span class="dock-quiet">Requested</span>
+    {% elif state == "they_asked" %}
+      <form method="post"
+            action="{{ url_for('match_respond', other_id=person.id, action='accept') }}">
+        <input type="hidden" name="from_kind" value="{{ home_kind }}" />
+        <input type="hidden" name="from_id" value="{{ home_id }}" />
+        <button type="submit">Accept</button>
+      </form>
+    {% elif state == "none" %}
+      <form method="post" action="{{ url_for('match_ask', other_id=person.id) }}">
+        <input type="hidden" name="from_kind" value="{{ home_kind }}" />
+        <input type="hidden" name="from_id" value="{{ home_id }}" />
+        <button type="submit" class="ghost">Add friend</button>
+      </form>
+    {% endif %}
+
+    {% if chat_id is defined and chat_id
+          and (owner_id is not defined or person.id != owner_id) %}
+      <form method="post"
+            action="{{ url_for('chat_remove', chat_id=chat_id, user_id=person.id) }}">
+        <button type="submit" class="ghost">Remove</button>
+      </form>
+    {% endif %}
+  </div>
+{% else %}
+  <p class="dock-quiet">Nobody here yet.</p>
+{% endfor %}

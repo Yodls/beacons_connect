@@ -543,7 +543,37 @@
         {%- if pronouns %} <span class="pronouns">{{ pronouns }}</span>{% endif -%}
       </span>
     </div>
+
+    {# The person a queue put you with. A pair chat is the one one-on-one
+       surface with no way to become friends -- a match chat already is one,
+       and a club or group has the list below. #}
+    {% if kind == "pair" and partner_id %}
+      {% set state = friend_states.get(partner_id, "none") %}
+      {% if state == "matched" %}
+        <span class="dock-quiet">Friend</span>
+      {% elif state == "you_asked" %}
+        <span class="dock-quiet">Requested</span>
+      {% elif state == "they_asked" %}
+        <form method="post"
+              action="{{ url_for('match_respond', other_id=partner_id, action='accept') }}">
+          <input type="hidden" name="from_kind" value="pair" />
+          <input type="hidden" name="from_id" value="{{ target_id }}" />
+          <button type="submit">Accept friend request</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('match_ask', other_id=partner_id) }}">
+          <input type="hidden" name="from_kind" value="pair" />
+          <input type="hidden" name="from_id" value="{{ target_id }}" />
+          <button type="submit" class="ghost">Add friend</button>
+        </form>
+      {% endif %}
+    {% endif %}
   </div>
+
+  {% if kind == "club" %}
+    {# A club's members, which this page used to show nothing of. #}
+    <div id="club-slot">{% include "_clubpane.html" %}</div>
+  {% endif %}
 
   {% if group %}
     {# Swapped by the live channel when somebody joins or
