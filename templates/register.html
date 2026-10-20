@@ -4,7 +4,13 @@
 {% block content %}
   <h1>Create account</h1>
   <form method="post">
-    <label>Your name <input name="name" maxlength="120" required autofocus /></label>
+    {# Two fields: the surname is required, so the form asks for it. #}
+    <label>First name
+      <input name="first_name" maxlength="60" required autofocus
+             autocomplete="given-name" /></label>
+    <label>Last name
+      <input name="last_name" maxlength="60" required
+             autocomplete="family-name" /></label>
     <label>Gender
       <select name="gender" required>
         <option value="">Choose one</option>

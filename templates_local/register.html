@@ -27,10 +27,19 @@
       <p class="lede">Open to UMass Boston students.</p>
 
       <form method="post">
-        <label>Your name
-          <input name="name" maxlength="120" required autofocus
-                 placeholder="Alex Rivera" />
-        </label>
+        {# Two fields, in the row the form already uses for a pair, so the
+           surname is asked for rather than enforced after the fact. They are
+           stored as one name; nothing downstream knows the difference. #}
+        <div class="row">
+          <label>First name
+            <input name="first_name" maxlength="60" required autofocus
+                   autocomplete="given-name" placeholder="Alex" />
+          </label>
+          <label>Last name
+            <input name="last_name" maxlength="60" required
+                   autocomplete="family-name" placeholder="Rivera" />
+          </label>
+        </div>
 
         <div class="row">
           <label>Gender

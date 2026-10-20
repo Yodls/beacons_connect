@@ -165,6 +165,10 @@ def send_verification_email(user, code):
     )
 
 
+# What User.name holds. The two registration fields are joined with a space,
+# so together they have to fit inside it.
+NAME_MAX = 120
+
 ONBOARDING_EXEMPT = {
     "static",
     "onboarding",
@@ -3509,7 +3513,17 @@ def match_respond(other_id, action):
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        name = request.form["name"].strip()
+        # Two fields rather than one box. The surname is now required, and a
+        # form that asks for it by name is a form you can fill in correctly
+        # the first time -- one "Your name" box that rejects "Ada" afterwards
+        # is the same rule taught the hard way.
+        #
+        # They are still stored as the one `name` the rest of the app reads
+        # and displays. Nothing else needs to know this changed, and no
+        # existing account has to be taken apart into pieces nobody recorded.
+        first = request.form.get("first_name", "").strip()
+        last = request.form.get("last_name", "").strip()
+        name = " ".join(f"{first} {last}".split())
         email = request.form["email"].strip().lower()
         password = request.form["password"]
 
@@ -3522,8 +3536,14 @@ def register():
         if pronouns not in PRONOUNS:
             pronouns = "unspecified"
 
-        if not name:
-            flash("Please enter your name.")
+        if not first:
+            flash("Please enter your first name.")
+        elif not last:
+            flash("Please enter your last name.")
+        elif len(name) > NAME_MAX:
+            # Said rather than silently truncated: the column is 120 and a
+            # name cut in half is worse than a name refused.
+            flash(f"Please keep your name under {NAME_MAX} characters.")
         elif gender not in GENDERS:
             flash("Please choose an option for gender.")
         elif not email or not password:
