@@ -1,12 +1,34 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Sign in{% endblock %}
 
 {% block content %}
-  <h1>Sign in</h1>
-  <form method="post">
-    <label>Email <input type="email" name="email" required autofocus /></label>
-    <label>Password <input type="password" name="password" required /></label>
-    <button type="submit">Sign in</button>
-  </form>
-  <p>No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+  <div class="auth">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img class="brand-mark" width="36" height="36"
+             src="{{ url_for('static', filename='logo.webp') }}"
+             alt="Beacons Connect" />
+        <span>
+          <span class="brand-name">Beacons Connect</span>
+          <span class="brand-sub">UMass Boston</span>
+        </span>
+      </div>
+
+      {{ ui.flashes() }}
+
+      <h1>Welcome back</h1>
+      <p class="lede">Sign in to see your friends and chats.</p>
+
+      <form method="post">
+        <label>Email <input type="email" name="email" required autofocus
+                            placeholder="you@umb.edu" /></label>
+        <label>Password <input type="password" name="password" required
+                               placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" /></label>
+        <button type="submit">Sign in</button>
+      </form>
+
+      <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+    </div>
+  </div>
 {% endblock %}

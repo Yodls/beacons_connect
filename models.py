@@ -393,11 +393,24 @@ class GamePost(db.Model):
     when_on = db.Column(db.Date)
     max_players = db.Column(db.Integer, nullable=False, default=2)
     status = db.Column(db.Text, nullable=False, default="open")
+    # Who this meetup is for. 'campus' is the posting /find has always done:
+    # anybody may see it and join it. 'chat' is an arrangement between the
+    # people in one conversation, and /find must not list it.
+    #
+    # A column rather than "look at where its announcing message went", which
+    # would answer the same question most of the time. A message can be
+    # missing -- eight invites on live were committed without theirs -- and a
+    # private meetup whose message had gone would quietly become a public one.
+    # GamePairing.mode is here for the same kind of reason.
+    audience = db.Column(db.Text, nullable=False, default="campus",
+                         server_default="campus")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
         db.CheckConstraint("mode IN ('online', 'inperson')", name="ck_post_mode"),
         db.CheckConstraint("status IN ('open', 'closed')", name="ck_post_status"),
+        db.CheckConstraint("audience IN ('campus', 'chat')",
+                           name="ck_post_audience"),
         db.CheckConstraint("max_players >= 2", name="ck_post_players"),
         db.Index("ix_game_posts_created", "created_at"),
     )

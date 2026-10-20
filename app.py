@@ -642,6 +642,35 @@ def chat_target(kind, target_id):
     return None, None
 
 
+# The conversations a meetup can be arranged in: the one-on-one ones. A club
+# or a group chat has a room full of people, which is what /find is for.
+PRIVATE_MEETUP_CHATS = ("match", "pair")
+
+# And the conversations a meetup card can appear in at all, which is those two
+# plus the campus room. live_cards walks this.
+CARD_CHATS = (COMMUNITY,) + PRIVATE_MEETUP_CHATS
+
+
+def card_home():
+    """The one-on-one a meetup was posted from or acted on in, or None.
+
+    The Meet up form and the card's own buttons carry the conversation in
+    hidden fields. Resolved through chat_target rather than trusted, which is
+    the same check the chat page itself passes: it is what stops a posted form
+    putting a meetup into somebody else's conversation, and it keeps a
+    redirect from landing anybody in a chat they cannot read.
+
+    Returns (kind, target_id, parent), so the caller has both the id the chat
+    URL needs and the row attach_parent needs.
+    """
+    kind = request.form.get("from_kind", "")
+    target_id = request.form.get("from_id", type=int)
+    if kind not in PRIVATE_MEETUP_CHATS or target_id is None:
+        return None
+    parent, _ = chat_target(kind, target_id)
+    return None if parent is None else (kind, target_id, parent)
+
+
 def attach_parent(message, kind, parent):
     """Point a message at exactly one parent, as the check constraint demands.
 
@@ -1151,8 +1180,12 @@ def chat(kind, target_id):
         # Only the community room renders the meetup form, so only it needs
         # the catalogue. Building it unconditionally cost every other chat a
         # pile of queries for a form that was never on the page.
+        # The campus room's form, and now the Meet up button in a
+        # one-on-one. Still not built for a club or a group chat: the comment
+        # this replaces was about not paying for a form that is not there,
+        # and for those two it still is not.
         catalogue=(activity_catalogue(presets_only=True)
-                   if kind == COMMUNITY else []),
+                   if kind in CARD_CHATS else []),
         # What the cards on this page add up to, handed over the way the game
         # pane's and the roster's tokens are: on the markup. Without it the
         # first live round of every visit to the campus room would come back
@@ -1258,7 +1291,7 @@ def live_cards_token():
     return f"{count}:{newest.isoformat() if newest else '-'}:{shut}"
 
 
-def live_cards(kind, token):
+def live_cards(kind, token, parent=None, target_id=None):
     """The meetup cards half of a live answer, for the campus-wide room.
 
     live_pane's and live_group's shape, and for the same reason: the client
@@ -1272,13 +1305,19 @@ def live_cards(kind, token):
     token -- so the client replaces only the one that moved and the rest of
     the room is not touched.
     """
-    if kind != COMMUNITY:
+    if kind not in CARD_CHATS or (kind != COMMUNITY and parent is None):
         return None
 
     rows = db.session.execute(
         db.select(Message.id, GamePost)
         .join(GamePost, GamePost.id == Message.post_id)
-        .where(Message.room == COMMUNITY)
+        # Whichever conversation is being watched. This used to say
+        # Message.room == COMMUNITY, on the stated grounds that a post_id
+        # only ever reached a message there -- a meetup arranged inside a
+        # one-on-one is the case that stopped being true. message_filter is
+        # the same helper chat_rows uses, so there is one answer to "which
+        # messages are in this conversation".
+        .where(message_filter(kind, parent))
         .order_by(Message.id)
     ).all()
     ids = [post.id for _, post in rows]
@@ -1306,7 +1345,13 @@ def live_cards(kind, token):
             "id": message_id,
             "post": post.id,
             "token": card["card_token"],
-            "html": card_markup.render(post=card),
+            # The card's buttons carry the conversation they are in, so
+            # pressing one comes back here. Rendered standalone, this has no
+            # page context to read it from, so it is handed over.
+            "html": card_markup.render(
+                post=card,
+                home_kind=(kind if kind in PRIVATE_MEETUP_CHATS else None),
+                home_id=target_id),
         })
     return {"token": token, "cards": cards}
 
@@ -1489,9 +1534,9 @@ def live_reply(kind, target_id):
             # token: one cheap aggregate, compared rather than rendered.
             crowd = (live_group_token(target_id)
                      if kind == "group" else "none")
-            # Only the campus room has meetup cards in it, so only it pays
-            # for this probe.
-            if kind == COMMUNITY:
+            # Only a conversation that can hold a meetup card pays for
+            # this probe.
+            if kind in CARD_CHATS:
                 deck = live_cards_token()
 
         if (newest > after or fresh != token or bell_now != bell
@@ -1507,7 +1552,7 @@ def live_reply(kind, target_id):
                          if watch_other else None),
                 "group": (live_group(db.session.get(Chat, target_id))
                           if kind == "group" else None),
-                "cards": live_cards(kind, deck),
+                "cards": live_cards(kind, deck, parent, target_id),
                 "notices": notice_slice(
                     me, seen,
                     skip_url=notices.chat_url(kind, target_id) if watching
@@ -2635,7 +2680,11 @@ def find_game():
 
     posts = db.session.scalars(
         db.select(GamePost)
-        .where(GamePost.mode == "inperson", GamePost.status == "open")
+        # Campus-wide only. A meetup arranged inside a conversation belongs to
+        # the two people in it and has no business on a public board -- this
+        # is the filter that makes "private" mean anything.
+        .where(GamePost.mode == "inperson", GamePost.status == "open",
+               GamePost.audience == "campus")
         .order_by(GamePost.created_at.desc())
     ).all()
 
@@ -2802,6 +2851,23 @@ def pairing_close(pairing_id):
 @app.route("/posts/new", methods=["POST"])
 @login_required
 def post_new():
+    # Where this was posted from, if it was posted from a conversation. The
+    # Meet up button in a one-on-one sends these; /find and the campus room
+    # send neither and behave exactly as they always have.
+    #
+    # Resolved through chat_target, which is the same check the chat page
+    # itself passes -- so this cannot be used to put a meetup into somebody
+    # else's conversation.
+    home = card_home()
+    here, from_id, here_parent = home if home else (None, None, None)
+
+    # Named a conversation and did not get one. Refused rather than quietly
+    # posted to the campus room: the difference between those two outcomes is
+    # the difference between a private arrangement and a public announcement.
+    if request.form.get("from_kind") and here is None:
+        flash("That conversation isn't available to you.")
+        return redirect(url_for("find_game"))
+
     game = request.form.get("game", "").strip()
     mode = request.form.get("mode", "online")
     note = request.form.get("note", "").strip()
@@ -2836,6 +2902,14 @@ def post_new():
         game = request.form.get("custom_game", "").strip()
         location = request.form.get("custom_location", "").strip()
         mode = "inperson"
+
+    if here is not None:
+        # In person by definition -- the button exists to arrange meeting --
+        # and between the two people already in the conversation, so neither
+        # is a question the form has to ask. Set before the checks below, so
+        # the location rules are the in-person ones.
+        mode = "inperson"
+        players = 2
 
     activity = None if wrote_in else find_activity(game)
     allowed = [] if activity is None else [loc.name for loc in activity.locations]
@@ -2891,6 +2965,7 @@ def post_new():
             when_text=when_label(on, hour, minute, ampm),
             when_on=on,
             max_players=players,
+            audience="chat" if here else "campus",
         )
         db.session.add(post)
         db.session.flush()
@@ -2898,21 +2973,34 @@ def post_new():
         # Its own chat, so the people going have somewhere to talk that is not
         # the campus-wide room. Membership is this post's RSVP list, and the
         # author is already on it.
-        make_meetup_chat(post)
+        #
+        # Not for one arranged in a conversation: make_meetup_chat exists to
+        # give the people going somewhere to talk, and these two are already
+        # doing exactly that in the chat they posted it from.
+        if here is None:
+            make_meetup_chat(post)
 
-        # The post lives in the room as a message, so one timeline and one
-        # poller cover both chatter and posts.
+        # The post lives in the conversation as a message, so one timeline and
+        # one poller cover both chatter and posts. attach_parent puts it in
+        # whichever conversation that is.
         summary = f"Looking for {post.game}"
         if post.mode == "inperson":
             summary += " in person"
-        db.session.add(Message(
-            user_id=current_user.id, room=COMMUNITY, post_id=post.id, body=summary
-        ))
+        said = Message(user_id=current_user.id, post_id=post.id, body=summary)
+        attach_parent(said, here or COMMUNITY, here_parent)
+        db.session.add(said)
         # The author is the first one going.
         db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
         db.session.commit()
-        flash("Posted to Community Chat.")
+        flash("Asked them to meet up." if here
+              else "Posted to Community Chat.")
+        if here is not None:
+            return redirect(url_for("chat", kind=here, target_id=from_id))
 
+    # A refused post from a conversation goes back to it, so the flash saying
+    # what was wrong lands on the page the form is on.
+    if here is not None:
+        return redirect(url_for("chat", kind=here, target_id=from_id))
     if request.form.get("back") == "find":
         return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
@@ -2978,6 +3066,11 @@ def post_rsvp(post_id):
                 db.session.commit()
                 flash(f"You're in for {post.game}.")
 
+    # Pressed on a card inside a conversation: back to it, rather than to the
+    # campus room they may never have been in.
+    home = card_home()
+    if home is not None:
+        return redirect(url_for("chat", kind=home[0], target_id=home[1]))
     if request.form.get("back") == "find":
         return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))
@@ -2995,6 +3088,11 @@ def post_close(post_id):
         db.session.commit()
         flash(f"{post.game} cancelled.")
 
+    # Pressed on a card inside a conversation: back to it, rather than to the
+    # campus room they may never have been in.
+    home = card_home()
+    if home is not None:
+        return redirect(url_for("chat", kind=home[0], target_id=home[1]))
     if request.form.get("back") == "find":
         return redirect(url_for("find_game"))
     return redirect(url_for("chat", kind=COMMUNITY, target_id=0))

@@ -1,146 +1,238 @@
 {% extends "shell.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Play an online game{% endblock %}
 
 {% block appstyle %}
-      .turn { color: #1a4d80; font-weight: 600; }
-      .start select { width: auto; margin-right: 0.5rem; }
+      .starter {
+        padding: 1.25rem 1.4rem; margin-top: .6rem;
+        background:
+          radial-gradient(120% 140% at 100% 0%, #e8821f 0%, transparent 62%),
+          var(--game);
+        color: #fff; border-radius: 18px;
+        box-shadow: var(--shadow-2);
+      }
+      .starter h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
+      .starter p { color: #fbe4d2; font-size: .86rem; margin: 0 0 .9rem; }
+      .starter form { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .starter select {
+        width: auto; flex: 1 1 9rem; margin: 0;
+        border-color: transparent; background: #fff;
+      }
+      .starter button {
+        margin: 0; background: #fff; color: var(--game);
+        white-space: nowrap;
+      }
+      .starter button:hover { background: #fdf0e6; }
+
+      /* The note that turns up once waiting has gone on a while. Shaped like
+         the chat's .presence strip -- a dot and a sentence -- and coloured
+         like find's .queuebox .waiting, which is the same problem of a badge
+         sitting on a saturated card. It had no rule of its own before, so it
+         came out as loose prose with a second white button under it. */
+      .starter .seek-slow {
+        display: flex; align-items: center; gap: .5rem;
+        margin: 0 0 .9rem; padding: .45rem .75rem;
+        background: rgba(255, 255, 255, .18);
+        border-radius: var(--r-sm);
+        color: #fff; font-size: .82rem;
+      }
+      .starter .seek-slow::before {
+        content: ""; flex: 0 0 auto;
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #ffd27a;
+      }
+      /* The display above beats the browser's own [hidden] rule, so the note
+         would be on screen from the first second rather than after a minute.
+         .bell-count carries the same line for the same reason. */
+      .starter .seek-slow[hidden] { display: none; }
+
+      /* Whose turn it is. Base scopes its own .pill to the friends dock, so
+         these are fully declared here. */
+      .pill {
+        display: inline-flex; align-items: center; gap: .3rem; flex: 0 0 auto;
+        margin-left: auto; padding: .18rem .55rem;
+        border-radius: var(--pill);
+        font-size: .7rem; font-weight: 800;
+        letter-spacing: .04em; text-transform: uppercase;
+      }
+      .pill.you  { background: var(--club-bg);    color: #7d5512; }
+      .pill.them { background: var(--surface-2);  color: var(--muted); }
+      .pill.done { background: var(--place-bg);   color: var(--place); }
+      .pill.dead { background: var(--danger-bg);  color: var(--danger); }
 {% endblock %}
 
+{#
+  class="pill" appears here as well as in the friends dock. That is fine: a
+  test checks the dock's slice of the page for the string, and the dock renders
+  after everything in this block.
+#}
 {% block main %}
   <h1>Play an online game</h1>
-  <p>Turn-based games against your friends.</p>
+  <p class="lede">Turn-based games against your friends &mdash; or whoever is
+    waiting for the same one.</p>
 
-  <h2>Start a game</h2>
+  <section class="sec-game">
+    {{ ui.section("Start a game", "game", "plus") }}
 
-  {% if seeking %}
-    <div class="card" id="seekbox">
-      <h3>Finding a player&hellip;</h3>
-      <p>Looking for somebody who wants {{ seeking_label }}. You can leave this
-        page open.</p>
-      {# A status note, with nothing to press: waiting is what happens when
-         you do not cancel. #}
-      <p class="seek-slow" id="seek-slow" hidden>
-        Still looking &mdash; nobody is waiting for {{ seeking_label }} yet.
-      </p>
-      <form method="post" action="{{ url_for('game_seek_cancel') }}">
-        <button type="submit">Cancel</button>
-      </form>
-    </div>
-  {% else %}
-    <div class="card">
-      <h3>Play a random player</h3>
-      <form class="start" method="post" action="{{ url_for('game_seek') }}">
-        <select name="kind" required>
-          {% for key, label in kinds %}
-            <option value="{{ key }}">{{ label }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Find a player</button>
-      </form>
-    </div>
-  {% endif %}
-
-  {% if opponents %}
-    <div class="card">
-      <form class="start" method="post" action="{{ url_for('game_new') }}">
-        <select name="kind" required>
-          {% for key, label in kinds %}
-            <option value="{{ key }}">{{ label }}</option>
-          {% endfor %}
-        </select>
-        <select name="opponent_id" required>
-          {% for match in opponents %}
-            <option value="{{ match.user_id }}">{{ match.name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Send invite</button>
-      </form>
-    </div>
-  {% else %}
-    <p class="why">
-      No friends yet &mdash; play a random player above, or
-      <a href="{{ url_for('matches') }}">find some friends</a>.
-    </p>
-  {% endif %}
-
-  {# One card, drawn for both lists. `me` is passed in because a Jinja macro
-     does not see the template context, and current_user arrives through a
-     context processor. #}
-  {% macro gamecard(row, me) %}
-    <div class="card">
-      <h3>{{ row.label }} with {{ row.opponent }}</h3>
-      <p class="why">
-        {% if row.game.status == "invited" %}
-          {% if row.expired %}That invite expired.
-          {%- elif row.waiting_on_you %}They invited you.
-          {%- else %}Waiting for them to accept.{% endif %}
-        {% elif row.game.status == "active" %}
-          {% if row.waiting_on_you %}
-            <span class="turn">Your turn.</span>
-          {% elif row.opponent_away %}
-            {{ row.opponent }} left.
-          {% else %}
-            Their turn.
-          {% endif %}
-        {% elif row.game.status == "declined" %}
-          Invite declined.
-        {% elif row.game.outcome == "draw" %}
-          Finished &mdash; a draw.
-        {% elif row.game.winner_id == me %}
-          Finished &mdash; you won.
-        {% else %}
-          Finished &mdash; {{ row.opponent }} won.
-        {% endif %}
-      </p>
-      <div class="actions">
-        {# An invite is answered here as well as in the chat. These read the
-           games row and nothing else -- no message, no notice -- so an invite
-           whose message never got written is still answerable. That is the
-           whole point of them: it is the state four pairs on live were stuck
-           in, with nothing anywhere to press. #}
-        {% if row.game.status == "invited" %}
-          {% if row.waiting_on_you %}
-            <form method="post"
-                  action="{{ url_for('game_action', game_id=row.game.id, action='accept') }}">
-              <input type="hidden" name="back" value="games" />
-              <button type="submit">Accept</button>
-            </form>
-            <form method="post"
-                  action="{{ url_for('game_action', game_id=row.game.id, action='decline') }}">
-              <input type="hidden" name="back" value="games" />
-              <button type="submit" class="ghost">Decline</button>
-            </form>
-          {% else %}
-            {# The way out for whoever sent it, which until now did not exist. #}
-            <form method="post"
-                  action="{{ url_for('game_action', game_id=row.game.id, action='withdraw') }}">
-              <input type="hidden" name="back" value="games" />
-              <button type="submit" class="ghost">Withdraw</button>
-            </form>
-          {% endif %}
-        {% endif %}
-        {# home_kind, not "match": a paired game lives in a pair chat. #}
-        <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
-          <button type="submit">{{ "Continue" if row.resumable else "Open" }}</button>
+    {% if seeking %}
+      {# Waiting for the queue. The live channel swaps this page out the moment
+         somebody is found, so there is no polling here and no refresh. #}
+      <div class="starter" id="seekbox">
+        <h3>Finding a player&hellip;</h3>
+        <p>Looking for somebody who wants {{ seeking_label }}. You can leave
+          this page open.</p>
+        {# One element, not a div around a paragraph: it is a status note, and
+           .starter p would otherwise put its prose margin inside the strip.
+           Nothing to press -- see the script for why. #}
+        <p class="seek-slow" id="seek-slow" hidden>
+          Still looking &mdash; nobody is waiting for {{ seeking_label }}
+          just yet.
+        </p>
+        <form method="post" action="{{ url_for('game_seek_cancel') }}">
+          <button type="submit" class="ghost">Cancel</button>
         </form>
       </div>
+    {% else %}
+      <div class="starter">
+        <h3>Play a random player</h3>
+        <p>We'll put you in a queue and pair you with whoever else is waiting
+          for the same game.</p>
+        <form method="post" action="{{ url_for('game_seek') }}">
+          <select name="kind" required>
+            {% for key, label in kinds %}
+              <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Find a player</button>
+        </form>
+      </div>
+    {% endif %}
+
+    {% if opponents %}
+      <div class="starter">
+        <h3>Challenge a friend</h3>
+        <p>They'll get an invite and the board opens as soon as they accept.</p>
+        <form method="post" action="{{ url_for('game_new') }}">
+          <select name="kind" required>
+            {% for key, label in kinds %}
+              <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="opponent_id" required>
+            {% for match in opponents %}
+              <option value="{{ match.user_id }}">{{ match.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Send invite</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="empty">
+        <b>No friends yet.</b> Play a random player above, or
+        <a href="{{ url_for('matches') }}">find some friends &rarr;</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="sec-game">
+    {# One card, drawn twice: once for games still going and once for games
+       that are over. `me` is passed in because a Jinja macro does not see the
+       template context, and current_user arrives through a context
+       processor. #}
+    {% macro gamecard(row, me) %}
+      <div class="card">
+        <div class="card-top">
+          {{ ui.avatar(row.opponent, row.game.id, square=true) }}
+          <div class="grow">
+            <h3>{{ row.label }}</h3>
+            <span class="why">with {{ row.opponent }}</span>
+          </div>
+          {% if row.game.status == "invited" %}
+            {# Expired means it no longer stands between these two -- the row
+               is still here and the buttons below still clear it. #}
+            <span class="pill {% if row.expired %}dead
+                              {%- elif row.waiting_on_you %}you{% else %}them{% endif %}">
+              {%- if row.expired %}Expired
+              {%- elif row.waiting_on_you %}Invited you
+              {%- else %}Invite sent{% endif -%}
+            </span>
+          {% elif row.game.status == "active" %}
+            {% if row.waiting_on_you %}
+              <span class="pill you">Your turn</span>
+            {% elif row.opponent_away %}
+              {# "Their turn" would be true and useless: they are not there to
+                 take it. #}
+              <span class="pill dead">They left</span>
+            {% else %}
+              <span class="pill them">Their turn</span>
+            {% endif %}
+          {% elif row.game.status == "declined" %}
+            <span class="pill dead">Declined</span>
+          {% elif row.game.outcome == "draw" %}
+            <span class="pill done">Draw</span>
+          {% elif row.game.winner_id == me %}
+            <span class="pill done">You won</span>
+          {% else %}
+            <span class="pill dead">You lost</span>
+          {% endif %}
+        </div>
+        <div class="actions">
+          {# An invite is answered here as well as in the chat. These read the
+             games row and nothing else -- no message, no notice -- so an invite
+             whose message never got written is still answerable. That is the
+             whole point of them: it is the state four pairs on live were stuck
+             in, with nothing anywhere to press. #}
+          {% if row.game.status == "invited" %}
+            {% if row.waiting_on_you %}
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='accept') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit">Accept</button>
+              </form>
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='decline') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit" class="ghost">Decline</button>
+              </form>
+            {% else %}
+              {# The way out for whoever sent it, which until now did not exist. #}
+              <form method="post"
+                    action="{{ url_for('game_action', game_id=row.game.id, action='withdraw') }}">
+                <input type="hidden" name="back" value="games" />
+                <button type="submit" class="ghost">Withdraw</button>
+              </form>
+            {% endif %}
+          {% endif %}
+          {# home_kind, not "match": a game against somebody you were paired
+             with lives in a pair conversation, because you are not friends. #}
+          <form method="get" action="{{ url_for('chat', kind=row.home_kind, target_id=row.home_id) }}">
+            <button type="submit">{{ "Continue" if row.resumable else "Open" }}</button>
+          </form>
+        </div>
+      </div>
+    {% endmacro %}
+
+    {{ ui.section("Continue playing", "game", "game", resumable | length) }}
+    <div class="grid two">
+      {% for row in resumable %}
+        {{ gamecard(row, current_user.id) }}
+      {% else %}
+        <div class="empty">Nothing in progress. Start one above.</div>
+      {% endfor %}
     </div>
-  {% endmacro %}
+  </section>
 
-  <h2>Continue playing</h2>
-  {% for row in resumable %}
-    {{ gamecard(row, current_user.id) }}
-  {% else %}
-    <p class="why">Nothing in progress. Start one above.</p>
-  {% endfor %}
-
-  {# Apart from the list above, so a game that is over never looks like one
-     you can go back to. #}
+  {# Kept apart from the list above, so a game that is over never looks like
+     one you can go back to. #}
   {% if done %}
-    <h2>Finished</h2>
-    {% for row in done %}
-      {{ gamecard(row, current_user.id) }}
-    {% endfor %}
+    <section class="sec-game">
+      {{ ui.section("Finished", "game", "check", done | length) }}
+      <div class="grid two">
+        {% for row in done %}
+          {{ gamecard(row, current_user.id) }}
+        {% endfor %}
+      </div>
+    </section>
   {% endif %}
 {% endblock %}
 
@@ -157,7 +249,10 @@
 
     // After a minute, say so. The queue row is left alone, and there is
     // nothing to press: going on waiting is what happens when you do nothing,
-    // so a button for it was a button for the default. Shown once, left up.
+    // so a button for it was a button for the default. Cancel is the only
+    // choice there is, which is why it is the only button on the card.
+    //
+    // Shown once and left up, rather than dismissed and re-armed.
     var WAIT = 60000;
 
     setTimeout(function () {

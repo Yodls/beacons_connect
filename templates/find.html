@@ -1,239 +1,415 @@
 {% extends "shell.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Meet up in person{% endblock %}
 
 {% block appstyle %}
-      /* Leaving a meetup asks first. A <details>, so it needs no JavaScript. */
-      .confirm { margin: 0; }
-      .confirm > summary { cursor: pointer; font-weight: bold; }
-      .confirm-body {
-        display: block; margin-top: 0.4rem; padding: 0.4rem 0.5rem;
-        border: 1px solid #a3281f;
+      .queuebox {
+        padding: 1.25rem 1.4rem; margin-top: .6rem;
+        background:
+          radial-gradient(120% 140% at 100% 0%, #24996a 0%, transparent 62%),
+          var(--place);
+        color: #fff; border-radius: 18px;
+        box-shadow: var(--shadow-2);
       }
-      .confirm-ask { display: block; margin-bottom: 0.4rem; font-size: 0.9rem; }
-      .confirm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-      .confirm-row form { display: inline; margin: 0; }
-      .queue { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-      .queue select { width: auto; margin: 0; }
-      .queue button { margin: 0; }
-      .newpost { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-      .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 8rem; }
-      /* The day and the time as one control. */
-      .whenrow { display: inline-flex; flex-wrap: wrap; align-items: center;
-                 gap: 0.3rem; }
-      /* One group rather than three loose boxes, so wrapping cannot split a
-         single time across two lines. */
-      .timeset { display: inline-flex; align-items: stretch; flex: 0 0 auto; }
-      .timeset select { flex: 0 0 auto; width: auto; margin: 0; }
-      .newpost input[type="number"] { flex: 0 0 4rem; }
-      .newpost button { margin: 0; }
-      .going { color: #555; font-size: 0.85rem; }
+      .queuebox h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
+      .queuebox p { color: #d8f0e4; font-size: .86rem; margin: 0 0 .9rem; }
+      .queuebox form { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .queuebox select {
+        width: auto; flex: 1 1 11rem; margin: 0;
+        border-color: transparent; background: #fff;
+      }
+      /* Sized like the select beside it, or the global full-width input rule
+         gives it a line of its own and pushes the button onto a third one. */
+      .queuebox .custom {
+        width: auto; flex: 1 1 11rem; margin: 0;
+        border-color: transparent; background: #fff;
+      }
+      .queuebox button {
+        margin: 0; background: #fff; color: var(--place);
+        white-space: nowrap;
+      }
+      .queuebox button:hover { background: #eaf6f0; }
+
+      /* Scoped: base's .waiting is the friend-request banner on home. */
+      /* The write-in queues other people are sitting in. One row of pills, so
+         three of them do not become three lines inside the green box: each is
+         its own little form, and a form is a block by default. */
+      .alsowaiting {
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: .4rem; margin-top: .9rem;
+      }
+      .alsowaiting .lead {
+        margin: 0 .2rem 0 0; color: #d8f0e4; font-size: .82rem;
+      }
+      .alsowaiting form { display: inline-flex; }
+      .alsowaiting .n { opacity: .7; }
+      .queuebox .waiting {
+        display: inline-flex; align-items: center; gap: .4rem;
+        padding: .2rem .6rem; border-radius: var(--pill);
+        background: rgba(255, 255, 255, .18);
+        border: 0; box-shadow: none; color: #fff;
+        font-size: .8rem; font-weight: 700;
+      }
+      .queuebox .waiting::before {
+        content: ""; width: 7px; height: 7px;
+        border-radius: 50%; background: #ffd27a;
+      }
+
+      /* Leaving a meetup carries the palette's warning colour, and asks
+         first. Qualified with the element and with :hover spelled out,
+         because base.html paints every submit button solid blue -- the same
+         reason button.ghost is written that way. */
+      .confirm { margin: 0; }
+      .confirm > summary {
+        display: inline-block; list-style: none; cursor: pointer;
+        padding: .4rem .8rem; border-radius: var(--r-sm);
+        background: var(--danger-bg); color: var(--danger);
+        border: 1px solid var(--danger);
+        font-size: .82rem; font-weight: 600;
+      }
+      .confirm > summary::-webkit-details-marker { display: none; }
+      .confirm > summary:hover,
+      .confirm[open] > summary { background: #fbdcd8; }
+      .confirm-body {
+        display: block; margin-top: .45rem; padding: .55rem .7rem;
+        background: var(--surface); border: 1px solid var(--danger);
+        border-radius: var(--r-sm);
+      }
+      .confirm-ask {
+        display: block; margin-bottom: .45rem;
+        font-size: .84rem; line-height: 1.35; color: var(--ink);
+      }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .confirm-row form { margin: 0; }
+      button.leave-yes, button.leave-yes:hover {
+        border: 1px solid var(--danger); color: #fff;
+      }
+      button.leave-yes { background: var(--danger); }
+      button.leave-yes:hover { background: #8a2119; }
+      button.confirm-no {
+        background: var(--surface); color: var(--ink);
+        border: 1px solid var(--line-2);
+      }
+      button.confirm-no:hover { background: var(--surface-2); }
+
+      .newpost { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+      .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
+      .newpost select { margin: 0; flex: 1 1 7rem; width: auto; }
+      /* The day and the time read as one control rather than four loose
+         boxes. After the .newpost rules above on purpose: these tie them on
+         specificity, so order is what decides. */
+      /* nowrap on purpose: if the row runs out of room the whole when-group
+         moves to the next line together, rather than leaving the day on one
+         line and its time on the next -- which is what looked broken. */
+      /* The optional meetup date. Sized with the rest of the row, or the
+         global full-width input rule gives it a line to itself. */
+      /* No shrink: the meetup row is already crowded, and a date
+         input squeezed below its own content renders as a bare
+         "mm" with a calendar glyph. The row wraps instead. */
+      /* .newpost .ondate, not .ondate: the rule above it is
+         `.newpost input`, which is an element plus a class and so
+         outranks a bare class however they are ordered. A plain
+         .ondate lost the flex-basis and the box rendered as a
+         naked "mm" with a calendar glyph. */
+      .newpost .ondate { width: auto; flex: 0 0 9.5rem; margin: 0; }
+      /* What stands where the composer was once a meetup is over. */
+      .chat-ended {
+        margin: 0; padding: .7rem .9rem;
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        color: var(--muted); font-size: .85rem; text-align: center;
+      }
+      .whenrow {
+        display: inline-flex; flex-wrap: nowrap; align-items: center;
+        gap: .25rem; flex: 1 1 21rem; min-width: 0;
+      }
+      .whenrow input { flex: 1 1 5.5rem; min-width: 4.5rem; }
+
+      /* The three time selects as one control: one border around the set,
+         hairlines between, and no rounding or border on the parts. The group
+         is a single flex item, so wrapping can move it but never break it in
+         half the way three loose selects did. */
+      .timeset {
+        display: inline-flex; align-items: stretch; flex: 0 0 auto;
+        background: var(--surface);
+        border: 1px solid var(--line-2); border-radius: var(--r-sm);
+        overflow: hidden;
+      }
+      .timeset select {
+        flex: 0 0 auto; width: auto; margin: 0;
+        padding: .6rem .35rem .6rem .5rem;
+        background: none; border: 0; border-radius: 0;
+      }
+      .timeset select + select { border-left: 1px solid var(--line); }
+      /* The ring belongs to the whole group; a per-segment one would draw a
+         box inside a box. */
+      .timeset select:focus { box-shadow: none; }
+      .timeset:focus-within {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(0, 90, 139, .13);
+      }
+
+      /* A count of players is two digits, not a sentence. */
+      .newpost input[type="number"] { flex: 0 0 4.5rem; text-align: center; }
+      .newpost button { margin: 0; white-space: nowrap; }
+
+      .meta { display: block; color: var(--muted); font-size: .82rem; }
+      .going {
+        display: inline-flex; align-items: center; gap: .3rem;
+        margin-top: .4rem; padding: .16rem .55rem;
+        border-radius: var(--pill);
+        background: var(--surface-2); color: var(--muted);
+        font-size: .76rem; font-weight: 700;
+      }
+      .going.full { background: var(--danger-bg); color: var(--danger); }
 
       {% include "_community_map.css" %}
 {% endblock %}
 
+{#
+  Three positions on this page are asserted rather than chosen:
+
+  - the queue form must be the first <form> after <h2>Matchmaking</h2>;
+  - the post form must sit between "Post a meetup" and "Open meetups";
+  - "{count} of {max} going" must keep single spaces with no markup between the
+    two numbers, so the attendance line stays one text node.
+
+  <select name="game" keeps that attribute order too.
+#}
 {% block main %}
   <h1>Meet up in person!</h1>
-  <p>Meet up in person. Join the queue to be paired, or answer someone's post.</p>
+  <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
 
-  <h2>Matchmaking</h2>
-  <div class="card">
-    {% if waiting %}
-      {# Counted by the folded name: a different case is the same queue. #}
-      <p>You're waiting for <b>{{ waiting.game }}</b>.
-        {% if counts.get(waiting.game | lower) %}
-          {{ counts[waiting.game | lower] }} other student(s) waiting for it too.
-        {% else %}
-          Nobody else is waiting for it yet.
-        {% endif %}
-      </p>
-      <div class="actions">
+  <section class="sec-place">
+    {{ ui.section("Matchmaking", "place", "meet") }}
+    <div class="queuebox">
+      {% if waiting %}
+        <h3>Waiting for {{ waiting.game }}</h3>
+        <p>
+          {# Counted by the folded name, so somebody who typed it in a
+             different case is counted as waiting for the same thing. #}
+          {% if counts.get(waiting.game | lower) %}
+            <span class="waiting">{{ counts[waiting.game | lower] }} other student(s) waiting</span>
+          {% else %}
+            Nobody else has picked it yet &mdash; you're first in line.
+          {% endif %}
+        </p>
         <form method="post" action="{{ url_for('find_leave') }}">
           <button type="submit">Leave the queue</button>
         </form>
-      </div>
-    {% else %}
-      <form class="queue" method="post" action="{{ url_for('find_queue') }}">
-        <select name="game" required class="act">
-          {% for game in games %}
-            <option value="{{ game }}">
-              {{ game }}{% if counts.get(game | lower) %} ({{ counts[game | lower] }} waiting){% endif %}
-            </option>
+      {% else %}
+        <h3>Get paired with someone</h3>
+        <p>You'll be matched with the next student who picks the same game.
+          Capitals don't matter.</p>
+        <form method="post" action="{{ url_for('find_queue') }}">
+          <select name="game" required class="act">
+            {% for game in games %}
+              <option value="{{ game }}">
+                {{ game }}{% if counts.get(game | lower) %} &mdash; {{ counts[game | lower] }} waiting{% endif %}
+              </option>
+            {% endfor %}
+            {# The write-in. Safe to offer now that pairing folds the name
+               before comparing it; before that it would have made a queue
+               only its author could ever be in. #}
+            <option value="{{ other }}">Something else&hellip;</option>
+          </select>
+          {# Shown only for a write-in, and rendered plainly so the form still
+             works with no JavaScript. #}
+          <input name="custom_game" class="custom" maxlength="{{ custom_max }}"
+                 placeholder="What do you want to play?" aria-label="Activity" />
+          <button type="submit">Find me someone</button>
+        </form>
+      {% endif %}
+
+      {# What people have actually typed in. Without this a write-in only ever
+         pairs by coincidence -- two strangers reaching for the same word. #}
+      {% if elsewhere %}
+        <div class="alsowaiting">
+          <p class="lead">Others are waiting for:</p>
+          {% for row in elsewhere %}
+            <form method="post" action="{{ url_for('find_queue') }}">
+              <input type="hidden" name="game" value="{{ other }}" />
+              <input type="hidden" name="custom_game" value="{{ row.name }}" />
+              {# The count only when there is more than one. Whoever arrives
+                 second is paired on the spot, so this is one almost always --
+                 printing it on every chip would say nothing and look like it
+                 was saying something. #}
+              <button type="submit">{{ row.name
+                }}{% if row.count > 1 %} <span class="n">{{ row.count }}</span>{% endif %}</button>
+            </form>
           {% endfor %}
-          {# The write-in. Pairing folds the name before comparing, so this
-             no longer makes a queue only its author can be in. #}
-          <option value="{{ other }}">Something else&hellip;</option>
-        </select>
-        {# Plain markup, so the form still works with no JavaScript. #}
-        <input name="custom_game" class="custom" maxlength="{{ custom_max }}"
-               placeholder="What do you want to play?" aria-label="Activity" />
-        <button type="submit">Find me someone</button>
-      </form>
-      <p class="why">You'll be paired with the next person who picks the same
-        game. Capitals don't matter.</p>
-    {% endif %}
-
-    {% if elsewhere %}
-      <p class="why">Others are waiting for:</p>
-      <div class="actions">
-        {% for row in elsewhere %}
-          <form method="post" action="{{ url_for('find_queue') }}">
-            <input type="hidden" name="game" value="{{ other }}" />
-            <input type="hidden" name="custom_game" value="{{ row.name }}" />
-            {# The count only when there is more than one: whoever arrives
-               second is paired on the spot, so it is one almost always. #}
-            <button type="submit">{{ row.name
-              }}{% if row.count > 1 %} ({{ row.count }}){% endif %}</button>
-          </form>
-        {% endfor %}
-      </div>
-    {% endif %}
-  </div>
-
-  <h2>Your pairings</h2>
-  {% for pairing in pairings %}
-    <div class="card">
-      <h3>{{ pairing.game }} with {{ pairing.other }}</h3>
-      <div class="actions">
-        <form method="get"
-              action="{{ url_for('chat', kind='pair', target_id=pairing.id) }}">
-          <button type="submit">Open chat</button>
-        </form>
-        <form method="post"
-              action="{{ url_for('pairing_close', pairing_id=pairing.id) }}">
-          <button type="submit">Close</button>
-        </form>
-      </div>
+        </div>
+      {% endif %}
     </div>
-  {% else %}
-    <p class="why">No pairings yet.</p>
-  {% endfor %}
+  </section>
 
-  <h2>Post a meetup</h2>
-  <div class="card">
-    <form class="newpost" method="post" action="{{ url_for('post_new') }}">
-      <input type="hidden" name="mode" value="inperson" />
-      <input type="hidden" name="back" value="find" />
-      <select name="game" class="act" required>
-        {% for a in catalogue %}
-          {% if a.in_person %}
-            <option value="{{ a.name }}"
-                    data-online="{{ 1 if a.online else 0 }}"
-                    data-inperson="1">{{ a.name }}</option>
-          {% endif %}
-        {% endfor %}
-        {# The write-in. See the chat form for why it carries no
-           location of its own until it is chosen. #}
-        <option value="other" data-online="0"
-                data-inperson="1">Other&hellip;</option>
-      </select>
-      <select name="location" class="loc" required>
-        <option value="">Where</option>
-        {% for a in catalogue %}
-          {% if a.locations %}
-            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
-              {% for loc in a.locations %}
-                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
-              {% endfor %}
-            </optgroup>
-          {% endif %}
-        {% endfor %}
-      </select>
-      {# Shown only for a write-in, and rendered plainly so the form still
-         works with no JavaScript. #}
-      <input name="custom_game" class="custom" maxlength="60"
-             placeholder="What are you playing?" aria-label="Activity" />
-      <input name="custom_location" class="custom" maxlength="120"
-             placeholder="Where?" aria-label="Meetup location" />
-      <input name="max_players" type="number" min="2" max="50" value="4"
+  <section class="sec-place">
+    {{ ui.section("Your pairings", "place", "people", pairings | length) }}
+    <div class="grid two">
+      {% for pairing in pairings %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(pairing.other, pairing.id) }}
+            <div class="grow">
+              <h3>{{ pairing.game }}</h3>
+              <span class="meta">with {{ pairing.other }}</span>
+            </div>
+          </div>
+          <div class="actions">
+            <form method="get"
+                  action="{{ url_for('chat', kind='pair', target_id=pairing.id) }}">
+              <button type="submit">Open chat</button>
+            </form>
+            <form method="post"
+                  action="{{ url_for('pairing_close', pairing_id=pairing.id) }}">
+              <button type="submit" class="ghost">Close</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">No pairings yet. Join the queue above.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="sec-place">
+    {{ ui.section("Post a meetup", "place", "plus") }}
+    <div class="card">
+      <form class="newpost" method="post" action="{{ url_for('post_new') }}">
+        <input type="hidden" name="mode" value="inperson" />
+        <input type="hidden" name="back" value="find" />
+        <select name="game" class="act" required>
+          {% for a in catalogue %}
+            {% if a.in_person %}
+              <option value="{{ a.name }}"
+                      data-online="{{ 1 if a.online else 0 }}"
+                      data-inperson="1">{{ a.name }}</option>
+            {% endif %}
+          {% endfor %}
+          {# The write-in. See the chat form for why it carries no
+             location of its own until it is chosen. #}
+          <option value="other" data-online="0"
+                  data-inperson="1">Other&hellip;</option>
+        </select>
+        <select name="location" class="loc" required>
+          <option value="">Where</option>
+          {% for a in catalogue %}
+            {% if a.locations %}
+              <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
+                {% for loc in a.locations %}
+                  <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endif %}
+          {% endfor %}
+        </select>
+        {# Shown only for a write-in, and rendered plainly so the form still
+           works with no JavaScript. #}
+        <input name="custom_game" class="custom" maxlength="60"
+               placeholder="What are you playing?" aria-label="Activity" />
+        <input name="custom_location" class="custom" maxlength="120"
+               placeholder="Where?" aria-label="Meetup location" />
+        <input name="max_players" type="number" min="2" max="50" value="4"
              aria-label="How many players" title="How many players" />
-      {# The day in words, and the time as three choices. AM/PM starts blank
-         on purpose -- a preselected one is exactly the guess that makes a
-         meetup's time ambiguous -- and the server refuses an hour without it.
-         The day stays free text so "Tonight" and "Now" are still sayable. #}
-        {# Required: the meetup's chat ends after this date, and a meetup
+        {# The day in words, and the time as three choices. AM/PM starts blank
+           on purpose -- a preselected one is exactly the guess that makes a
+           meetup's time ambiguous -- and the server refuses an hour without it.
+           The day stays free text so "Tonight" and "Now" are still sayable. #}
+          {# Required: the meetup's chat ends after this date, and a meetup
              whose "when" is a sentence has no day to end after.
              The time beside it stays optional. #}
-        <input name="when_on" type="date" class="ondate" required
-             aria-label="Date" title="Date" />
-      <span class="whenrow">
-        {# One group, not three boxes: a single border with hairlines between,
-           so the hour, the minutes and the half of the day read as one time
-           and cannot be split across two lines by wrapping. #}
-        <span class="timeset">
-          <select name="when_hour" aria-label="Hour">
-            <option value="">Hour</option>
-            {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-          </select>
-          <select name="when_minute" aria-label="Minutes">
-            {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
-          </select>
-          <select name="when_ampm" aria-label="AM or PM">
-            <option value="">AM/PM</option>
-            {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-          </select>
+          <input name="when_on" type="date" class="ondate" required
+                 aria-label="Date" title="Date" />
+        <span class="whenrow">
+          {# One group, not three boxes: a single border with hairlines between,
+             so the hour, the minutes and the half of the day read as one time
+             and cannot be split across two lines by wrapping. #}
+          <span class="timeset">
+            <select name="when_hour" aria-label="Hour">
+              <option value="">Hour</option>
+              {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+            </select>
+            <select name="when_minute" aria-label="Minutes">
+              {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
+            </select>
+            <select name="when_ampm" aria-label="AM or PM">
+              <option value="">AM/PM</option>
+              {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+            </select>
+          </span>
         </span>
-      </span>
-      <input name="note" maxlength="300" placeholder="Note (optional)" />
-      <button type="submit">Post it</button>
-    </form>
-  </div>
+        <input name="note" maxlength="300" placeholder="Note (optional)" />
+        <button type="submit">Post it</button>
+      </form>
+    </div>
+  </section>
 
-  <h2>Open meetups</h2>
-  {% for post in posts %}
-    <div class="card">
-      <h3>{{ post.game }}</h3>
-      <p class="why">
-        {{ post.location or "Somewhere on campus" }}
-        {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
-      </p>
-      {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
-      <p class="going">
-        {{ post.count }} of {{ post.max_players }} going{% if post.going %}:
-        {{ post.going | join(", ") }}{% endif %}
-      </p>
-      <div class="actions">
-        {% if post.im_going %}
-          {# A <details>, so the confirmation needs no JavaScript. #}
-          <details class="confirm">
-            <summary class="leave">Leave Meetup</summary>
-            <div class="confirm-body">
-              <span class="confirm-ask">Are you sure you want to leave this
-                meetup?</span>
-              <span class="confirm-row">
-                <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-                  <input type="hidden" name="back" value="find" />
-                  <button type="submit" class="leave-yes">Yes, leave</button>
-                </form>
-                <button type="button" class="confirm-no">Keep my spot</button>
+  <section class="sec-place">
+    {{ ui.section("Open meetups", "place", "star", posts | length) }}
+    <div class="grid two">
+      {% for post in posts %}
+        <div class="card">
+          <div class="card-top">
+            {{ ui.avatar(post.game, post.id, square=true) }}
+            <div class="grow">
+              <h3>{{ post.game }}</h3>
+              <span class="meta">
+                {{ post.location or "Somewhere on campus" }}
+                {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
               </span>
             </div>
-          </details>
-        {% else %}
-          <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-            <input type="hidden" name="back" value="find" />
-            <button type="submit"
-                    {% if post.full %}disabled{% endif %}>I'm in</button>
-          </form>
-        {% endif %}
-        {# Only for somebody going: the chat refuses anybody else, so
-           offering it to them would be a door that does not open. #}
-        {% if post.im_going and post.chat_id %}
-          <form method="get"
-                action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
-            <button type="submit" class="ghost">Open chat</button>
-          </form>
-        {% endif %}
-        {% if post.mine %}
-          <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
-            <input type="hidden" name="back" value="find" />
-            <button type="submit">Cancel meetup</button>
-          </form>
-        {% endif %}
-      </div>
+          </div>
+          {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
+          <span class="going {% if post.full %}full{% endif %}">
+            {{ post.count }} of {{ post.max_players }} going{% if post.going %}
+            &middot; {{ post.going | join(", ") }}{% endif %}
+          </span>
+          <div class="actions">
+            {% if post.im_going %}
+              {# Asked before you give up your place, the same as in the chat.
+                 A <details>, so it needs no JavaScript. #}
+              <details class="confirm">
+                <summary class="leave">Leave Meetup</summary>
+                <div class="confirm-body">
+                  <span class="confirm-ask">Are you sure you want to leave this
+                    meetup?</span>
+                  <span class="confirm-row">
+                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                      <input type="hidden" name="back" value="find" />
+                      <button type="submit" class="leave-yes">Yes, leave</button>
+                    </form>
+                    <button type="button" class="confirm-no">Keep my spot</button>
+                  </span>
+                </div>
+              </details>
+            {% else %}
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                <input type="hidden" name="back" value="find" />
+                <button type="submit"
+                        {% if post.full %}disabled{% endif %}>I'm in</button>
+              </form>
+            {% endif %}
+            {# Only for somebody going: the chat refuses anybody else, so
+               offering it to them would be a door that does not open. #}
+            {% if post.im_going and post.chat_id %}
+              <form method="get"
+                    action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+                <button type="submit" class="ghost">Open chat</button>
+              </form>
+            {% endif %}
+            {% if post.mine %}
+              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
+                <input type="hidden" name="back" value="find" />
+                <button type="submit" class="ghost">Cancel meetup</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">No in-person meetups posted yet. Add one above.</div>
+      {% endfor %}
     </div>
-  {% else %}
-    <p class="why">No in-person meetups posted yet. Add one above.</p>
-  {% endfor %}
+  </section>
 
   {% include "_community_map.html" %}
 {% endblock %}
@@ -257,13 +433,15 @@
           el.hidden = !writing;
           el.disabled = !writing;
         });
-        // The queue form has a write-in but nowhere to be. Everything below
-        // narrows the location list, so it stops here. This used to return
-        // above the reveal, leaving the queue's box permanently hidden.
+        // The queue form has a write-in but nowhere to be: it is a queue, not
+        // a meetup. Everything below here is about narrowing the location
+        // list, so it stops at the reveal. This used to return before the
+        // reveal instead, which left the queue's box permanently hidden.
         if (!loc) { return; }
-        // This form marks the location select `required`, so hiding it is not
-        // enough -- a required control that cannot be filled would refuse to
-        // submit. Disabled is neither submitted nor validated.
+
+        // The meetup form marks the location select `required`, so hiding it
+        // is not enough -- a required control that cannot be filled would
+        // refuse to submit. Disabled is neither submitted nor validated.
         loc.hidden = writing;
         loc.disabled = writing;
         if (writing) { return; }

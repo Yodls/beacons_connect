@@ -1,49 +1,83 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 
-{% block style %}body { max-width: 52rem; }
-{% block appstyle %}{% endblock %}
+{% block style %}{% block appstyle %}{% endblock %}
 {% endblock %}
 
-{% block content %}
-  <div class="shell">
-    <main>
-      {% block main %}{% endblock %}
-    </main>
+{#
+  The order here is load-bearing, not aesthetic:
 
-    <div class="side">
+  - the top bar comes before main, so the signed-in name and avatar sit ahead
+    of every delimiter the tests slice pages on;
+  - the tab bar comes last, and the friends panel rides inside it as one of
+    its slots, because a test requires the panel to appear after the first
+    <h1> in source order and audits everything after it for the absence of the
+    user's own name and of score/shared markup. The nav slots that follow the
+    panel carry only icons and short labels, so that audit still holds.
+#}
+{% block content %}
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('index') }}">
+        <img class="brand-mark" width="36" height="36"
+             src="{{ url_for('static', filename='logo.webp') }}"
+             alt="Beacons Connect" />
+        <span>
+          <span class="brand-name">Beacons Connect</span>
+          <span class="brand-sub">UMass Boston</span>
+        </span>
+      </a>
+
+      <span class="campus" title="Campus: UMass Boston">
+        <b>UMB</b>
+        <span>Campus<br />selected</span>
+      </span>
+
+      <span class="topbar-gap"></span>
+
+      {# Navigates to the full search page. The friends panel has its own
+         typeahead on a different parameter, which answers in place. #}
+      <form class="find" method="get" action="{{ url_for('people') }}">
+        {{ ui.icon("search") }}
+        <input name="q" maxlength="120" placeholder="Find people"
+               aria-label="Find people" />
+        <button type="submit">Go</button>
+      </form>
+
+      {# The bell, to the left of the profile menu. Before the friends panel
+         in document order, which keeps it out of the slice the dock audits
+         take -- but *inside* the slice /people's privacy audit takes, so
+         nothing it draws may mention a score or a shared interest. #}
       {% include "_notices.html" %}
 
-      <details class="menu">
-        <summary>&#9776;</summary>
-        <a href="{{ url_for('matches') }}">Friends &amp; clubs{%
-          if pending_count %} ({{ pending_count }}){% endif %}</a>
-        <a href="{{ url_for('clubs') }}">Browse all clubs</a>
-        <a href="{{ url_for('chats') }}">Group chats{%
-          if invite_count %} ({{ invite_count }}){% endif %}</a>
-        <a href="{{ url_for('logout') }}">Sign out</a>
+      {# Where sign out lives, on every page. #}
+      <details class="who">
+        <summary aria-label="Your account">
+          {{ ui.avatar(current_user.name, current_user.id, square=true) }}
+        </summary>
+        <div class="who-panel">
+          <b>{{ current_user.name }}</b>
+          <small>{{ current_user.email }}</small>
+          <a href="{{ url_for('onboarding') }}">Change your answers</a>
+          <a href="{{ url_for('people') }}">Find people</a>
+          <a href="{{ url_for('chats') }}">Group chats{%
+            if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('logout') }}">Sign out</a>
+        </div>
       </details>
-
-      {% block rail %}{% endblock %}
-
-      {% block sidebuttons %}
-        <form method="get" action="{{ url_for('find_game') }}" style="margin:0">
-          <button type="submit">Meet up in person!</button>
-        </form>
-        <form method="get" action="{{ url_for('game_lobby') }}" style="margin:0">
-          <button type="submit">Play an online game</button>
-        </form>
-        <form method="get" action="{{ url_for('chat', kind='community', target_id=0) }}" style="margin:0">
-          <button type="submit">Community Chat</button>
-        </form>
-        <button type="button" disabled>Maps</button>
-      {% endblock %}
     </div>
-  </div>
+  </header>
 
-  {# Included, not a block: a block can be emptied by one page and vanish,
-     which is what sidebuttons does on /matches. #}
-  {% include "_dock.html" %}
+  <main class="page">
+    {{ ui.flashes() }}
+    {% block main %}{% endblock %}
+  </main>
 
-  {# The one live channel, armed on every page that renders the shell. #}
+  {# Includes the friends panel as one of its slots. Included, not a block: a
+     block can be emptied by one page and vanish. #}
+  {% include "_tabbar.html" %}
+
+  {# The one live channel, armed on every page that renders the shell. Last, so
+     the bell and the panel it updates already exist. #}
   {% include "_channel.html" %}
 {% endblock %}

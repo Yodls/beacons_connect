@@ -1,5 +1,5 @@
 {# Board + status for one game. Shared by game.html in both template sets. #}
-{% set marks = ["X", "O"] %}
+{% set marks = ["✕", "●"] %}
 {% set state = payload.state %}
 
 {% if game.kind == "tictactoe" %}
@@ -59,7 +59,7 @@
   </form>
 {% endif %}
 
-<p class="status">
+<p class="status {% if payload.your_turn %}yours{% endif %}">
   {% if game.status == "finished" %}
     {% if payload.outcome == "draw" %}
       A draw.

@@ -3,12 +3,25 @@
 
   Rendered two ways from this one file, exactly as _grouppane.html is:
   included by chat.html on first load, and returned on its own by the live
-  channel when an RSVP moves what it says -- so the number somebody watches
-  change cannot drift from the number they would get by reloading.
+  channel when an RSVP moves what it says. That is the point of it being a
+  partial -- the card has one source, so the number somebody watches change
+  cannot drift from the number they would get by reloading.
 
-  data-token (post_card_token) is a digest of everything below, and the
-  client replaces this card only when it moves.
+  data-token is how the client decides whether to replace this card at all.
+  It is a digest of everything below (post_card_token), and it is per card
+  rather than per room on purpose: a reader halfway through the "are you
+  sure" here should not have it shut because somebody RSVPed to the meetup
+  underneath.
 #}
+{#- Where this card is being shown, when that is a one-on-one. The buttons
+    carry it so pressing one comes back here rather than to the campus room,
+    and so post_rsvp can check it is a conversation you are actually in. -#}
+{% macro home_fields() -%}
+  {%- if home_kind %}
+    <input type="hidden" name="from_kind" value="{{ home_kind }}" />
+    <input type="hidden" name="from_id" value="{{ home_id }}" />
+  {% endif -%}
+{%- endmacro %}
 <div class="post" data-post="{{ post.id }}" data-token="{{ post.card_token }}">
   <b>{{ post.game }}</b>
   <span class="meta">{{ post.mode_label }}
@@ -20,22 +33,26 @@
     {{ post.count }} of {{ post.max_players }} going{% if post.going %}:
     {{ post.going | join(", ") }}{% endif %}
   </span>
-  {# One action row at the foot of the card. Both labels name the meetup:
-     "Leave" alone was read as leaving the conversation and "Close" as
-     shutting the window. #}
+  {# One action row at the foot of the card, divided off from the details
+     above it, so these never read as chat-window controls. Both labels name
+     the meetup: "Leave" alone was taken for leaving the conversation, and
+     "Close" for shutting the window. "Cancel meetup" is the word /find
+     already uses for this. #}
   <div class="post-actions">
     {% if post.status != "open" %}
       <span class="meta">Closed</span>
     {% else %}
       {% if post.im_going %}
-        {# A <details>, so the confirmation needs no JavaScript. #}
+        {# Asked before you give up your place. A <details>, like the bell and
+           the game picker, so it needs no JavaScript -- clicking the summary
+           again puts it away. #}
         <details class="confirm">
           <summary class="leave">Leave Meetup</summary>
           <div class="confirm-body">
             <span class="confirm-ask">Are you sure you want to leave
               this meetup?</span>
             <span class="confirm-row">
-              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
                 <button type="submit" class="leave-yes">Yes, leave</button>
               </form>
               <button type="button" class="confirm-no">Keep my spot</button>
@@ -43,7 +60,7 @@
           </div>
         </details>
       {% else %}
-        <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+        <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
           <button type="submit"
                   {% if post.full %}disabled{% endif %}>I'm in</button>
         </form>
@@ -57,8 +74,8 @@
         </form>
       {% endif %}
       {% if post.mine %}
-        <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
-          <button type="submit">Cancel meetup</button>
+        <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
+          <button type="submit" class="ghost">Cancel meetup</button>
         </form>
       {% endif %}
     {% endif %}

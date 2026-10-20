@@ -1,58 +1,109 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Tell us about you{% endblock %}
 
-{% block style %}body { max-width: 34rem; }{% endblock %}
+{% block style %}
+      .opt-note {
+        margin-left: auto; padding: .1rem .45rem;
+        background: var(--surface-2); border-radius: var(--pill);
+        font-size: .64rem; font-weight: 800;
+        letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+      }
+      legend { width: 100%; }
+      /* The pronouns fieldset is marked with an icon instead of a number,
+         because it is not one of the numbered questions. */
+      .qnum .icon { width: 13px; height: 13px; }
+      .pronoun-pick { display: block; margin: 0; }
+      .pronoun-pick select { margin-top: .25rem; max-width: 18rem; }
+      .pronoun-pick .hint { margin-top: .3rem; }
+{% endblock %}
 
+{#
+  The form markup below is pinned by tests, down to attribute order: the
+  selects must read `<select name="qN"` with name first, the inputs
+  `type="radio" name="qN"` and `type="checkbox" name="qN"`, and `checked`
+  must stay a bare attribute. Restyle freely; do not reorder attributes.
+#}
 {% block content %}
-  <h1>Tell us about you</h1>
-  <p>This is how we find students you'd actually get along with. You can change your answers later.</p>
+  <div class="auth">
+    <div class="auth-card wide">
+      <div class="auth-brand">
+        <img class="brand-mark" width="36" height="36"
+             src="{{ url_for('static', filename='logo.webp') }}"
+             alt="Beacons Connect" />
+        <span>
+          <span class="brand-name">Beacons Connect</span>
+          <span class="brand-sub">About you &middot; one time only</span>
+        </span>
+      </div>
 
-  <form method="post">
-    {# A column on the account rather than one of the questionnaire's
-       questions, so it sits outside the numbered run. The route writes it
-       only when it comes back in the POST. #}
-    <fieldset>
-      <legend>Your pronouns</legend>
-      <label>
-        <select name="pronouns">
-          {% for slug, label in pronoun_options.items() %}
-            <option value="{{ slug }}"
-                    {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <p class="why">Shown next to your name to other students.</p>
-    </fieldset>
+      {{ ui.flashes() }}
 
-    {% for question in questions %}
-      <fieldset>
-        <legend>{{ question.prompt }}</legend>
-        {% if question.allows_multiple %}
-          {% for option in question.options %}
-            <label>
-              <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
-                {% if option.id in selected %}checked{% endif %} />
-              {{ option.label }}
-            </label>
-          {% endfor %}
-        {% elif question.options | length > 12 %}
-          <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
-            <option value="">Choose one</option>
-            {% for option in question.options %}
-              <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
-            {% endfor %}
-          </select>
-        {% else %}
-          {% for option in question.options %}
-            <label>
-              <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
-                {% if option.id in selected %}checked{% endif %} required />
-              {{ option.label }}
-            </label>
-          {% endfor %}
-        {% endif %}
-      </fieldset>
-    {% endfor %}
-    <button type="submit">Save and continue</button>
-  </form>
+      <h1>Tell us about you</h1>
+      <p class="lede">
+        This is how we find students you'd actually get along with.
+        You can change any of it later.
+      </p>
+
+      <form method="post">
+        {# Not one of the questionnaire's questions -- it is a column on the
+           account, so it sits above them and outside the numbered run. The
+           route only writes it when it comes back in the POST. #}
+        <fieldset>
+          <legend><span class="qnum">{{ ui.icon("user") }}</span>Your pronouns</legend>
+          <label class="pronoun-pick">
+            <select name="pronouns">
+              {% for slug, label in pronoun_options.items() %}
+                <option value="{{ slug }}"
+                        {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <span class="hint">Shown next to your name to other students.</span>
+          </label>
+        </fieldset>
+
+        {% for question in questions %}
+          <fieldset>
+            <legend>
+              <span class="qnum">{{ loop.index }}</span>{{ question.prompt }}
+              {%- if question.key in optional %}<span class="opt-note">Optional</span>{% endif -%}
+            </legend>
+
+            {% if question.allows_multiple %}
+              <div class="chips">
+                {% for option in question.options %}
+                  <label>
+                    <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
+                      {% if option.id in selected %}checked{% endif %} />
+                    {{ option.label }}
+                  </label>
+                {% endfor %}
+              </div>
+            {% elif question.options | length > 12 %}
+              <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
+                <option value="">Choose one</option>
+                {% for option in question.options %}
+                  <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+            {% else %}
+              <div class="opts">
+                {% for option in question.options %}
+                  <label>
+                    <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
+                      {% if option.id in selected %}checked{% endif %} required />
+                    {{ option.label }}
+                  </label>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </fieldset>
+        {% endfor %}
+
+        <div class="submit-bar">
+          <button type="submit">Save and continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
 {% endblock %}

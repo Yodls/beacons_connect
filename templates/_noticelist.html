@@ -1,14 +1,24 @@
 {#
   The rows inside the bell. Its own file because two things draw it: the shell,
   on every page render, and the live channel, which replaces this list in place
-  when something arrives. Only the list is replaced, never the <details> around
-  it, so refreshing the rows cannot shut an open bell.
+  when something arrives.
 
-  `notice_back` is passed in rather than read off `request`: when the channel
-  renders this, the request is /live, and sending somebody there would be a bug.
+  Only the list is replaced, never the <details> around it, so refreshing the
+  rows cannot shut an open bell -- the same lesson the friends panel taught.
 
-  Self-contained on purpose. This set has no _ui.html, so no macro is used here.
+  `notice_back` is where the small forms here return to. It is passed in rather
+  than read off `request`, because when the channel renders this the request is
+  /live and sending somebody there would be a bug.
+
+  No class, word or id here may contain card, pill, score, shared, waiting or
+  dock, and nothing may say "in common": the privacy suite audits everything
+  above the clubs heading on /people, which includes the top bar. Hence the
+  bell- prefix on all of it -- `note` is also taken, by the game notices in
+  chat.html.
 #}
+{# Imported here and not inherited: the channel renders this file on its own,
+   with no parent template to have done it. #}
+{% import "_ui.html" as ui %}
 <ul class="bell-list" id="bell-list">
   {% if not notice_rows %}
     <li class="bell-empty">Nothing new. Anything that involves you turns up here.</li>
@@ -16,7 +26,9 @@
 
   {% for n in notice_rows %}
     <li class="bell-item{% if not n.read_at %} unseen{% endif %}">
-      {# A POST, not a link: reading something is never a side effect of a GET. #}
+      {# The body is a POST, not a link: reading something should never be a
+         side effect of a GET. The enhancer swaps the redirect in place, so it
+         still behaves exactly like following a link. #}
       <form method="post" action="{{ url_for('notice_open', notice_id=n.id) }}">
         <input type="hidden" name="back" value="{{ notice_back }}" />
         <button type="submit" class="bell-open">
@@ -40,9 +52,11 @@
              url_for("chat_invite_respond", chat_id=n.chat_id, action="decline")] %}
       {% endif %}
 
-      {# Each carries the notice id so the route retires it. They post to the
-         app's own routes, so accepting from here behaves identically to
-         accepting from the page, flash and destination included. #}
+      {# Answerable where there is something to answer, and answered right
+         here. Each form carries the notice id so the route retires it, which
+         is why these post to the app's own routes rather than anything the
+         bell owns: accepting from here behaves identically to accepting from
+         the page, flash and destination included. #}
       {% if answer and not n.read_at %}
         <span class="bell-answer">
           <form method="post" action="{{ answer[0] }}">
@@ -59,7 +73,8 @@
       {% if not n.read_at %}
         <form method="post" action="{{ url_for('notice_read', notice_id=n.id) }}">
           <input type="hidden" name="back" value="{{ notice_back }}" />
-          <button type="submit" class="bell-seen">Mark read</button>
+          <button type="submit" class="bell-seen" title="Mark as read"
+                  aria-label="Mark as read">{{ ui.icon("check") }}</button>
         </form>
       {% endif %}
     </li>
