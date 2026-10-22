@@ -149,6 +149,10 @@ _CANDIDATES_SQL = f"""
       -- either. Saying so here keeps recommendations and the name search
       -- honest about the same set of people.
       AND them.email_verified
+      -- An unlisted account is never suggested. There is no "unless we are
+      -- friends" to add here: the NOT EXISTS above has already excluded
+      -- everybody this student has any match row with, friends included.
+      AND them.discoverable
     ORDER BY rank_score DESC, (me.gender = them.gender) DESC, s.other_id
     LIMIT :limit
 """
@@ -228,6 +232,10 @@ _SEARCH_SQL = f"""
      AND m.user_hi = GREATEST(:user_id, u.id)
     WHERE u.id <> :user_id
       AND u.email_verified
+      -- Unlike the suggestions above, a search can turn up somebody you are
+      -- already friends with -- and should, or a friend would become
+      -- unfindable by name the moment they went unlisted.
+      AND (u.discoverable OR m.status = 'active')
       AND u.name ILIKE :term
       AND EXISTS (SELECT 1 FROM user_answers a WHERE a.user_id = u.id)
     ORDER BY u.name, u.id

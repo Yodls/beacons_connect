@@ -1242,6 +1242,8 @@ def chat(kind, target_id):
     if kind == "pair" and opponent_id:
         people.append(opponent_id)
     friend_states = friend_state_for(people) if people else {}
+    # Drawn after the states, because who may be shown depends on them.
+    roster = visible_people(roster, friend_states)
 
     invitable = []
     if group is not None:
@@ -1360,23 +1362,28 @@ def live_group(chat):
     if chat is None:
         return None
     token = live_group_token(chat.id)
+    # Resolved once and used three times below: who is in the room, what
+    # stands between the viewer and each of them, and which of those rows the
+    # viewer may actually be shown.
+    members = chat_members(chat.id)
+    states = friend_state_for([m.id for m in members])
     return {
         "token": token,
         "html": render_template(
             "_grouppane.html", group=chat, group_token=token,
-            members=chat_members(chat.id),
-            # The swapped roster draws the same rows as the page does, so it
-            # needs the same answer about each person -- without this the
-            # live copy would come back with every button missing.
-            friend_states=friend_state_for(
-                [m.id for m in chat_members(chat.id)]),
+            # Resolved once: the roster, who may see whom, and the rows
+            # that survive it. The live copy draws the same list the page
+            # does, so an unlisted member left in here would be revealed by
+            # the next swap even though the page itself hid them.
+            members=visible_people(members, states),
+            friend_states=states,
             is_owner=chat.owner_id == current_user.id,
             meetup=chat.post_id is not None,
             # The invite picker is rebuilt with the rest of the bar. It is
             # only ever offered on an ordinary chat.
             invitable=[] if chat.post_id is not None else [
                 f for f in matching.friend_names(current_user.id)
-                if f["user_id"] not in {m.id for m in chat_members(chat.id)}],
+                if f["user_id"] not in {m.id for m in members}],
         ),
     }
 
@@ -3310,6 +3317,20 @@ def is_member(chat_id, user_id=None):
 # matching.match_state returns, because a second vocabulary for one fact is
 # two places to disagree about it.
 FRIEND_STATES = ("none", "you_asked", "they_asked", "matched", "you")
+
+
+def visible_people(people, states):
+    """The ones this viewer may be shown on a list.
+
+    An unlisted account is in the room but not on the roster, unless the
+    viewer is already friends with them -- and they can always see
+    themselves. Every list this filters is counted by its own length, so the
+    count follows the rows: "5 members" above four of them is the same leak
+    said a different way.
+    """
+    return [person for person in people
+            if person.discoverable
+            or states.get(person.id) in ("matched", "you")]
 
 
 def friend_state_for(user_ids):

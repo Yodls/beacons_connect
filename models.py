@@ -48,6 +48,21 @@ class User(UserMixin, db.Model):
     verification_code_hash = db.Column(db.String(255))
     verification_expires_at = db.Column(db.DateTime)
     verification_attempts = db.Column(db.Integer, nullable=False, default=0)
+    # Whether this account is listed to people who are not already friends
+    # with it. False is for accounts that have to exist on a live database
+    # without turning up in anybody's suggestions, searches or member lists --
+    # a QA login on production, which is the case this was added for.
+    #
+    # A column rather than a special-cased email address: a second test
+    # account then needs no code change, and nothing has to read an address
+    # to decide whether somebody is a real student.
+    #
+    # Defaults to true, and server_default earns its place the way pronouns'
+    # does -- it backfills every existing account as listed, which is what
+    # they were, and lets the suites keep building User(...) without naming
+    # this field.
+    discoverable = db.Column(db.Boolean, nullable=False, default=True,
+                             server_default="true")
 
     __table_args__ = (
         db.CheckConstraint(
