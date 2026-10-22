@@ -34,6 +34,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import club_catalog
 import club_icons
+import emails
 import games as rules
 import matching
 import notices
@@ -201,14 +202,21 @@ def issue_verification_code(user):
 
 
 def send_verification_email(user, code):
+    """Send the code, as text and as the harbour.
+
+    Both parts, always: `body` is what a client with HTML turned off shows,
+    and a message with only `html` reads as empty to it. The wording of both
+    lives in emails.py, so they cannot drift apart.
+    """
+    subject, text, html = emails.verification(
+        user.name, code, int(CODE_TTL.total_seconds() // 60)
+    )
     mail.send(
         MailMessage(
-            subject="Verify your Beacons Connect account",
+            subject=subject,
             recipients=[user.email],
-            body=(
-                f"Your Beacons Connect verification code is {code}\n\n"
-                f"It expires in {int(CODE_TTL.total_seconds() // 60)} minutes."
-            ),
+            body=text,
+            html=html,
         )
     )
 
