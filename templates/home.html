@@ -133,28 +133,8 @@
       /* ---------- My chats: rows inside the window ---------- */
       .home .sec-chat > .grid { margin: 0; gap: 0; }
       .home .sec-chat > .grid > .empty { margin: 14px; }
-      .chatrow {
-        display: flex; align-items: center; gap: 12px;
-        min-height: 68px; padding: 10px 14px;
-        border-top: 2px dashed var(--line);
-        color: var(--navy); font-weight: 400;
-      }
-      .chatrow:first-child { border-top: 0; }
-      .chatrow:hover { background: var(--paper); text-decoration: none; }
-      .chatrow .mid { flex: 1 1 auto; min-width: 0; display: block; }
-      .chatrow .name { display: block; font-size: 1rem; font-weight: 700; }
-      .chatrow .last {
-        display: block; margin-top: 2px;
-        color: var(--muted); font-size: .88rem;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      }
-      .chev { flex: none; color: var(--navy); font-size: 1.4rem; line-height: 1; }
-      /* each kind of chat wears its own colour */
-      .tag.community { background: var(--beacon); color: #fff; }
-      .tag.match     { background: var(--sky);    color: var(--navy); }
-      .tag.pair      { background: var(--orange); color: var(--navy); }
-      .tag.club      { background: var(--gold);   color: var(--navy); }
-      .tag.group     { background: #fff;          color: var(--navy); }
+      /* .chatrow and its parts moved to base.html when /chats/all began
+         drawing the same rows -- a selector two pages use belongs there. */
 {% endblock %}
 
 {#
@@ -191,7 +171,11 @@
         <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
         <p class="lede">
           {% if chats %}
-            {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }} open.
+            {# The total, like the band below. This counted the rows on the
+               page, which was the same number until the page started showing
+               only the five most recent -- and then greeted somebody with
+               163 conversations by telling them they had five. #}
+            {{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }} open.
           {% else %}
             Your conversations will live here.
           {% endif %}
@@ -224,19 +208,13 @@
   </div>
 
   <section class="sec-chat">
-    {{ ui.section("My chats", "chat", "talk", chats | length) }}
+    {# The count is the real total, not the number of rows below it: this
+       page draws the five most recent, and an account with seventy
+       conversations learns nothing from a band that says 5. #}
+    {{ ui.section("My chats", "chat", "talk", chat_total) }}
     <div class="grid">
       {% for chat in chats %}
-        <a class="chatrow"
-           href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
-          {% if chat.kind == "club" %}{{ ui.club_badge(chat.title) }}{% else %}{{ ui.avatar(chat.title, chat.target_id) }}{% endif %}
-          <span class="mid">
-            <span class="name">{{ chat.title }}</span>
-            <span class="last">{{ chat.subtitle }}</span>
-          </span>
-          <span class="tag {{ chat.kind }}">{{ chat.tag }}</span>
-          <span class="chev">&rsaquo;</span>
-        </a>
+        {% include "_chatrow.html" %}
       {% else %}
         <div class="empty">
           <b>No chats yet.</b> Send someone a friend request or join a club and
@@ -244,6 +222,13 @@
         </div>
       {% endfor %}
     </div>
+    {# Only when there are more. "View all 3" above three rows is noise. #}
+    {% if chat_total > chats | length %}
+      <p class="nav">
+        <a class="viewall" href="{{ url_for('all_chats') }}">
+          View all {{ chat_total }} chats &rarr;</a>
+      </p>
+    {% endif %}
   </section>
 
   <section class="sec-friend">

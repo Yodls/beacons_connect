@@ -1,0 +1,25 @@
+{#
+  One conversation, as a row in a list of them.
+
+  Drawn here rather than in each page that lists chats: home shows the five
+  most recent and /chats/all shows every one, and two copies of this markup
+  would be two chances for the two pages to disagree about what a
+  conversation looks like.
+
+  Takes `chat`, one entry from chat_list().
+#}
+{%- import "_ui.html" as ui -%}
+<a class="chatrow"
+   href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
+  {% if chat.kind == "club" %}
+    {{ ui.club_badge(chat.title) }}
+  {% else %}
+    {{ ui.avatar(chat.title, chat.target_id) }}
+  {% endif %}
+  <span class="mid">
+    <span class="name">{{ chat.title }}</span>
+    <span class="last">{{ chat.subtitle }}</span>
+  </span>
+  <span class="tag {{ chat.kind }}">{{ chat.tag }}</span>
+  <span class="chev">&rsaquo;</span>
+</a>

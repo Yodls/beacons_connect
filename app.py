@@ -1024,6 +1024,30 @@ def chat_list():
     for chat in joined_chats(current_user.id):
         entries.append(chat_entry("group", chat.id, chat.name))
 
+    # Which row each conversation's messages are filed under. A friend chat
+    # is addressed by the other person's id but its messages carry the match's,
+    # so that mapping is built once here -- it used to be a query per friend.
+    match_for = {
+        (hi if lo == current_user.id else lo): match_id
+        for match_id, lo, hi in db.session.execute(
+            db.select(Match.id, Match.user_lo, Match.user_hi)
+            .where(db.or_(Match.user_lo == current_user.id,
+                          Match.user_hi == current_user.id),
+                   Match.status == "active")
+        )
+    }
+
+    wanted = {kind: set() for kind in MESSAGE_PARENTS}
+    for entry in entries:
+        kind = entry["kind"]
+        if kind == COMMUNITY:
+            continue
+        filed_under = (match_for.get(entry["target_id"]) if kind == "match"
+                       else entry["target_id"])
+        entry["_filed"] = filed_under
+        if filed_under is not None:
+            wanted[kind].add(filed_under)
+
     last = {}
     newest = db.session.execute(
         db.select(Message.body, Message.created_at)
@@ -1033,36 +1057,59 @@ def chat_list():
     if newest:
         last[(COMMUNITY, 0)] = (newest[0], newest[1])
 
+    # The newest message in each of THIS student's conversations. It used to
+    # read every message in the table, once per parent kind, and keep the
+    # first of each -- four unbounded scans to answer a question about the
+    # dozen or so rows in front of them. DISTINCT ON asks the database for
+    # the newest per conversation instead, over the ids collected above.
     for kind, column in MESSAGE_PARENTS.items():
+        ids = sorted(wanted[kind])
+        if not ids:
+            continue
         for parent_id, body, when in db.session.execute(
             db.select(column, Message.body, Message.created_at)
-            .where(column.is_not(None))
-            .order_by(Message.id.desc())
-        ).all():
-            last.setdefault((kind, parent_id), (body, when))
+            .where(column.in_(ids))
+            .distinct(column)
+            .order_by(column, Message.id.desc())
+        ):
+            last[(kind, parent_id)] = (body, when)
 
     for entry in entries:
-        key = (entry["kind"], entry["target_id"])
-        if entry["kind"] == "match":
-            lo, hi = pair(current_user.id, entry["target_id"])
-            match = db.session.scalar(
-                db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
-            )
-            key = ("match", match.id if match else 0)
+        kind = entry["kind"]
+        key = ((COMMUNITY, 0) if kind == COMMUNITY
+               else (kind, entry.pop("_filed", None)))
         preview, when = last.get(key, (None, None))
         entry["preview"] = preview
         entry["when"] = when
 
+    # Sorted here and sliced by the caller, never the other way round: the
+    # five most recent is a different answer from the first five found.
     entries.sort(key=lambda e: (e["when"] is not None, e["when"]), reverse=True)
     return entries
+
+
+# How many conversations the home page shows before it stops. Every chat a
+# student has was burying everything below it -- 72 rows on one account here.
+HOME_CHATS = 5
+
+
+@app.route("/chats/all")
+@login_required
+def all_chats():
+    """Every conversation, for when five is not the one you wanted."""
+    return render_template("allchats.html", chats=chat_list())
 
 
 @app.route("/")
 @login_required
 def index():
+    everything = chat_list()
     return render_template(
         "home.html",
-        chats=chat_list(),
+        chats=everything[:HOME_CHATS],
+        # The real number, not the number drawn. A band that says 5 above
+        # five rows tells a student with seventy conversations nothing.
+        chat_total=len(everything),
         recs=matching.recommend_people(
             current_user.id, limit=RECOMMEND_LIMIT, gender_bonus=GENDER_BONUS
         ),

@@ -991,6 +991,34 @@
           transition-duration: .01ms !important;
         }
       }
+
+      /* ---------- a conversation, as a row in a list of them ----------
+         Home draws the five most recent and /chats/all draws every one,
+         from the same partial -- so the rules live here rather than on
+         either page. No Jinja in them, which is what keeps this stylesheet
+         byte-identical across pages. */
+      .chatrow {
+        display: flex; align-items: center; gap: 12px;
+        min-height: 68px; padding: 10px 14px;
+        border-top: 2px dashed var(--line);
+        color: var(--navy); font-weight: 400;
+      }
+      .chatrow:first-child { border-top: 0; }
+      .chatrow:hover { background: var(--paper); text-decoration: none; }
+      .chatrow .mid { flex: 1 1 auto; min-width: 0; display: block; }
+      .chatrow .name { display: block; font-size: 1rem; font-weight: 700; }
+      .chatrow .last {
+        display: block; margin-top: 2px;
+        color: var(--muted); font-size: .88rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .chev { flex: none; color: var(--navy); font-size: 1.4rem; line-height: 1; }
+      /* each kind of chat wears its own colour */
+      .tag.community { background: var(--beacon); color: #fff; }
+      .tag.match     { background: var(--sky);    color: var(--navy); }
+      .tag.pair      { background: var(--orange); color: var(--navy); }
+      .tag.club      { background: var(--gold);   color: var(--navy); }
+      .tag.group     { background: #fff;          color: var(--navy); }
     </style>
   </head>
   <body>

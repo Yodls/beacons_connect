@@ -1,0 +1,39 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}All chats{% endblock %}
+
+{% block appstyle %}
+      /* The rows are home's, and so is their styling -- this page only needs
+         to say how the list itself sits on a page of its own. */
+      .allchats .grid { display: grid; gap: .5rem; margin-top: .9rem; }
+{% endblock %}
+
+{#
+  Every conversation, newest first.
+
+  Home shows the five most recent so the page below them is reachable; this
+  is where the rest live. The rows come from _chatrow.html, the same partial
+  home uses, so the two lists cannot drift apart.
+#}
+{% block main %}
+  <h1>All chats</h1>
+  <p class="lede">
+    {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }},
+    most recently active first.
+  </p>
+
+  <section class="sec-chat allchats">
+    <div class="grid">
+      {% for chat in chats %}
+        {% include "_chatrow.html" %}
+      {% else %}
+        <div class="empty">
+          <b>No chats yet.</b> Send someone a friend request or join a club and
+          the conversation shows up here.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <p class="nav"><a href="{{ url_for('index') }}">&larr; Back to home</a></p>
+{% endblock %}
