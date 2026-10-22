@@ -2,33 +2,35 @@
 {% import "_ui.html" as ui %}
 {% block title %}Sign in{% endblock %}
 
+{#
+  Sign in. Layout (Beacon OS): the brand panel and yellow tagline from
+  _brandpanel.html, then the form in a window whose title bar carries the
+  page's <h1>. The form itself is unchanged: same fields, names and order.
+#}
 {% block content %}
   <div class="auth">
-    <div class="auth-card">
-      <div class="auth-brand">
-        <img class="brand-mark" width="36" height="36"
-             src="{{ url_for('static', filename='logo.webp') }}"
-             alt="Beacons Connect" />
-        <span>
-          <span class="brand-name">Beacons Connect</span>
-          <span class="brand-sub">UMass Boston</span>
-        </span>
+    <div class="auth-stack">
+      {% include "_brandpanel.html" %}
+
+      <div class="auth-card">
+        <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Welcome back</h1><span class="grip"></span></div>
+
+        <div class="auth-body">
+          {{ ui.flashes() }}
+
+          <p class="lede">Sign in to see your friends and chats.</p>
+
+          <form method="post">
+            <label>Email <input type="email" name="email" required autofocus
+                                placeholder="you@umb.edu" /></label>
+            <label>Password <input type="password" name="password" required
+                                   placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" /></label>
+            <button type="submit">Sign in</button>
+          </form>
+        </div>
+
+        <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
       </div>
-
-      {{ ui.flashes() }}
-
-      <h1>Welcome back</h1>
-      <p class="lede">Sign in to see your friends and chats.</p>
-
-      <form method="post">
-        <label>Email <input type="email" name="email" required autofocus
-                            placeholder="you@umb.edu" /></label>
-        <label>Password <input type="password" name="password" required
-                               placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" /></label>
-        <button type="submit">Sign in</button>
-      </form>
-
-      <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
     </div>
   </div>
 {% endblock %}

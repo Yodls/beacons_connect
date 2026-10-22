@@ -823,7 +823,15 @@
         display: block; width: 104px; height: 104px;
         filter: drop-shadow(4px 4px 0 var(--navy));
       }
+      .brandpanel > div {
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+      }
       .brandpanel-name { font: 400 52px/.9 var(--px); }
+      /* the shorter, side-by-side version (onboarding) */
+      .brandpanel.compact { flex-direction: row; justify-content: center; gap: 16px; padding: 14px 16px; }
+      .brandpanel.compact > div { align-items: flex-start; gap: 8px; }
+      .brandpanel.compact .brandpanel-logo { width: 72px; height: 72px; }
+      .brandpanel.compact .brandpanel-name { font-size: 40px; }
       .brandpanel-umb {
         display: flex; align-items: center; justify-content: center; gap: 8px;
         color: var(--muted); font: 700 16px/1 var(--sans);

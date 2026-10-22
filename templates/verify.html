@@ -3,50 +3,63 @@
 {% block title %}Verify your email{% endblock %}
 
 {% block style %}
-      .code { text-align: center; font-size: 1.7rem; font-weight: 800;
-        letter-spacing: .5em; text-indent: .5em; padding: .8rem .5rem;
-        font-variant-numeric: tabular-nums; }
-      .sent { display: inline-block; padding: .2rem .6rem; border-radius: var(--pill);
-        background: var(--friend-bg); color: var(--friend);
-        font-size: .82rem; font-weight: 700; }
-      .resend { margin-top: 1rem; padding-top: 1rem;
-        border-top: 1px solid var(--line); text-align: center; }
+      /* the six-digit code, in the pixel face so each digit reads clearly */
+      .code {
+        padding: .5rem;
+        text-align: center; text-indent: .45em;
+        font: 400 40px/1 var(--px); letter-spacing: .45em;
+        font-variant-numeric: tabular-nums;
+      }
+      /* the address the code went to */
+      .sent {
+        display: inline-block; padding: 1px 8px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
+        font-size: .92rem; font-weight: 700;
+      }
+      .resend {
+        margin-top: 18px; padding-top: 16px;
+        border-top: 2px dashed var(--line); text-align: center;
+      }
       .resend button { margin: 0; }
 {% endblock %}
 
+{#
+  Verify: the brand panel, then the code form in a window (see login.html).
+  Field names and the resend form are unchanged.
+#}
+
 {% block content %}
   <div class="auth">
-    <div class="auth-card">
-      <div class="auth-brand">
-        <img class="brand-mark" width="36" height="36"
-             src="{{ url_for('static', filename='logo.webp') }}"
-             alt="Beacons Connect" />
-        <span>
-          <span class="brand-name">Beacons Connect</span>
-          <span class="brand-sub">UMass Boston</span>
-        </span>
-      </div>
+    <div class="auth-stack">
+      {% set tagline = "One quick check that it's really you." %}
+      {% include "_brandpanel.html" %}
 
-      {{ ui.flashes() }}
+      <div class="auth-card">
+        <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Check your email</h1><span class="grip"></span></div>
 
-      <h1>Check your email</h1>
-      <p class="lede">
-        We sent a 6-digit code to <span class="sent">{{ email }}</span><br />
-        It expires in 10 minutes.
-      </p>
+        <div class="auth-body">
+          {{ ui.flashes() }}
 
-      <form method="post">
-        <label>Verification code
-          <input class="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
-                 maxlength="6" required autofocus placeholder="000000" />
-        </label>
-        <button type="submit">Verify</button>
-      </form>
+          <p class="lede">
+            We sent a 6-digit code to <span class="sent">{{ email }}</span><br />
+            It expires in 10 minutes.
+          </p>
 
-      <div class="resend">
-        <form method="post" action="{{ url_for('resend_code') }}">
-          <button type="submit" class="ghost">Send a new code</button>
-        </form>
+          <form method="post">
+            <label>Verification code
+              <input class="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
+                     maxlength="6" required autofocus placeholder="000000" />
+            </label>
+            <button type="submit">Verify</button>
+          </form>
+
+          <div class="resend">
+            <form method="post" action="{{ url_for('resend_code') }}">
+              <button type="submit" class="ghost">Send a new code</button>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>
