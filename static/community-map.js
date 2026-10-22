@@ -11,7 +11,8 @@
     7. friends ......... the "My friend(s)" picker
     8. saving .......... create (POST), edit or move (PATCH), take down (DELETE)
     9. loading ......... the flag list, refreshed every 20 seconds
-   10. start ........... wiring the buttons, "See on map" links, ?flag=<id>
+   10. start ........... wiring the buttons, "See on map" links, ?flag=<id>,
+                         and window.BeaconMap for other scripts
 
   Who can do what is decided by the server (app.py, "Campus map"); this file
   only offers the buttons. Your own flags can be dragged on the map and
@@ -890,6 +891,19 @@
     root.scrollIntoView({ behavior: "smooth", block: "start" });
     select(flag.id, true);
   });
+
+  // A small handle for other scripts on the page: refresh the flags, open
+  // one by id, or re-measure the map after it was hidden.
+  window.BeaconMap = {
+    refresh: function () { return loadFlags(true); },
+    focus: function (id) {
+      if (!findFlag(id)) { return false; }
+      if (mode !== "idle") { cancelDraft(); }
+      select(id, true);
+      return true;
+    },
+    resize: function () { if (map) { map.invalidateSize(); } }
+  };
 
   loadLeaflet().then(function () {
     initMap();
