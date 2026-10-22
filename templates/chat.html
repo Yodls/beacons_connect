@@ -3,535 +3,533 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block appstyle %}
+      /* =================================================================
+         The chat screen (Beacon OS). One page for every kind of chat:
+         community room, friend (match), pair, club and group, with an
+         optional game board alongside. Sections below:
+           back link and header . the log and bubbles . the composer row
+           meetup forms and cards . game pane and boards . group and club bars
+         ================================================================= */
+
+      /* ---------- back link and header ---------- */
+      .backlink { margin: 0 0 12px; }
+      /* The conversation's title bar: Beacon Blue, white text. */
       .chathead {
-        display: flex; align-items: center; gap: .75rem;
-        padding: .8rem 1rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-bottom: 0;
-        border-top: 3px solid var(--chat);
-        border-radius: var(--r) var(--r) 0 0;
+        display: flex; align-items: center; gap: 12px;
+        min-height: 72px; padding: 10px 12px;
+        background: var(--beacon); color: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
       .chathead .grow { flex: 1 1 auto; min-width: 0; }
-      .chathead h1 { font-size: 1.05rem; margin: 0; }
-      .chathead .status { font-size: .76rem; color: var(--muted); font-weight: 600; }
+      .chathead h1 {
+        margin: 0; color: #fff; font: 400 30px/1 var(--px);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      /* text-align and margin spelled out: the game's .status rule further
+         down would otherwise centre this line too */
+      .chathead .status {
+        display: block; margin: 3px 0 0; text-align: left;
+        color: var(--on-navy); font-size: .9rem; font-weight: 700;
+      }
       .chathead .status::before {
         content: ""; display: inline-block;
-        width: 7px; height: 7px; border-radius: 50%;
-        background: var(--place);
-        margin-right: .35rem; vertical-align: middle;
+        width: 8px; height: 8px; margin-right: 6px; vertical-align: 1px;
+        background: var(--gold); border: 1px solid var(--navy);
       }
+      .chathead .pronouns { background: rgba(255, 255, 255, .15); color: #fff; border-color: rgba(255, 255, 255, .4); }
+      .chathead .avatar { border-color: #fff; }
+      /* friend actions on a pair chat: yellow keys on the blue bar */
+      .chathead form { margin: 0; flex: none; }
+      .chathead button[type="submit"], .chathead button.ghost {
+        min-height: 40px; padding: 0 12px;
+        background: var(--gold); color: var(--navy); font-size: .9rem;
+      }
+      .chathead button[type="submit"]:hover { background: #fff2a8; }
+      .chathead .dock-quiet {
+        flex: none; padding: 3px 8px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      /* When nothing sits between the header and the log, the two join into
+         one window: title bar on top, conversation underneath. */
+      .chathead:has(+ .gamewrap:not(.playing)) {
+        border-radius: var(--r) var(--r) 0 0; box-shadow: 4px 0 0 var(--navy);
+      }
+      .chathead + .gamewrap:not(.playing) #log { margin-top: 0; border-top: 0; border-radius: 0 0 var(--r) var(--r); }
 
-      /* #log, .msg* and .composer are asserted to live in this page's own
+      /* ---------- the log ----------
+         #log, .msg* and .composer are asserted to live in this page's own
          stylesheet rather than the shared one: a test reads the CSSOM and
          requires these rules to arrive with the chat and leave with it. */
       #log {
-        height: 26rem; padding: 1.1rem; overflow-y: auto;
+        height: 26rem; margin-top: 14px; padding: 16px; overflow-y: auto;
         display: flex; flex-direction: column;
-        background: var(--surface-2);
-        border: 1px solid var(--line);
-        border-radius: 0 0 var(--r) var(--r);
+        /* paper with a faint pixel grid */
+        background-color: var(--paper);
+        background-image:
+          linear-gradient(rgba(120, 175, 233, .18) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(120, 175, 233, .18) 1px, transparent 1px);
+        background-size: 16px 16px;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
 
-      .msg { display: flex; flex-direction: column; max-width: 74%; margin: 0 0 .7rem; }
-      .msg .who {
-        margin-bottom: .2rem; padding: 0 .2rem;
-        font-size: .72rem; font-weight: 700; color: var(--muted);
-      }
+      /* speech bubbles: white with a hard shadow; yours are Beacon Blue */
+      .msg { display: flex; flex-direction: column; max-width: 78%; margin: 0 0 14px; }
+      .msg .who { margin-bottom: 3px; padding: 0 2px; color: var(--navy); font-size: .82rem; font-weight: 700; }
       .msg .body {
-        display: block; padding: .55rem .8rem;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 14px 14px 14px 4px;
-        box-shadow: var(--shadow);
-        white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem;
+        display: block; padding: 9px 12px 8px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy);
+        border-radius: 12px 12px 12px 3px;
+        box-shadow: 3px 3px 0 var(--navy);
+        white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1rem; line-height: 1.4;
       }
       .msg .at {
-        margin-top: .18rem; padding: 0 .2rem;
-        font-size: .68rem; color: #93a2b3;
+        margin-top: 5px; padding: 0 2px;
+        color: var(--muted); font-size: .76rem;
         font-variant-numeric: tabular-nums;
       }
       .msg.mine { margin-left: auto; align-items: flex-end; }
-      .msg.mine .body {
-        background: var(--chat); color: #fff;
-        border-color: transparent; border-radius: 14px 14px 4px 14px;
+      .msg.mine .body { background: var(--beacon); color: #fff; border-radius: 12px 12px 3px 12px; }
+
+      #empty {
+        margin: auto; padding: 12px 16px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
+        text-align: center; font-size: .95rem; font-weight: 700;
       }
 
-      #empty { margin: auto; text-align: center; color: var(--muted); font-size: .88rem; }
+      /* A game moment in the log: centred, quieter than speech, and never
+         aligned to a side, because it is not something anybody said. */
+      .msg.note { max-width: 100%; align-items: center; margin: 6px auto 14px; text-align: center; }
+      .msg.note .body {
+        background: var(--navy); color: #fff;
+        border-color: var(--navy); border-radius: var(--r-sm);
+        box-shadow: none; font-size: .88rem; font-weight: 700;
+      }
+      .note-act { display: flex; gap: 8px; margin-top: 8px; }
+      .note-act form { margin: 0; }
+      .note-act button { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
 
-      .composer { display: flex; gap: .5rem; margin-top: .8rem; }
-      .composer input { margin: 0; border-radius: var(--pill); padding: .7rem 1.1rem; }
-      .composer input:focus { border-color: var(--chat); }
-      .composer button {
-        margin: 0; border-radius: var(--pill); padding: .7rem 1.3rem;
-        background: var(--chat); white-space: nowrap;
+      /* ---------- the composer row ---------- */
+      /* The composer and the game and meetup menus share a row. */
+      .sendrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 14px; }
+      .composer { display: flex; gap: 8px; margin-top: 14px; }
+      .sendrow .composer { flex: 1 1 auto; margin-top: 0; min-width: 0; }
+      .composer input { margin: 0; min-height: 48px; }
+      .composer button { margin: 0; min-height: 48px; padding: 0 18px; white-space: nowrap; }
+
+      /* "Play" and "Meet up": raised keys the height of the composer, with
+         their menus opening upward as small windows. */
+      .pickgame, .newmeet { position: relative; flex: none; }
+      .pickgame > summary, .newmeet > summary {
+        display: flex; align-items: center; gap: 6px;
+        height: 48px; padding: 0 12px;
+        list-style: none; cursor: pointer; white-space: nowrap;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 4px 0 var(--navy);
+        font-size: .95rem; font-weight: 700;
+      }
+      .pickgame > summary::-webkit-details-marker,
+      .newmeet > summary::-webkit-details-marker { display: none; }
+      /* Filled and labelled: the point of this button is that somebody who
+         has never used the app notices it. Orange for games. */
+      .pickgame > summary { background: var(--orange); color: var(--navy); }
+      /* Navy for meeting in person, the colour of the Meet up page. */
+      .newmeet > summary { background: var(--navy); color: #fff; }
+      .pickgame > summary:active, .newmeet > summary:active,
+      .pickgame[open] > summary, .newmeet[open] > summary { transform: translateY(4px); box-shadow: none; }
+      .pickgame-menu, .newmeet-menu {
+        position: absolute; z-index: 30; bottom: calc(100% + 10px);
+        padding: 10px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
+      }
+      .pickgame-menu b, .newmeet-menu b {
+        color: var(--muted); font-size: .76rem; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase;
+      }
+      .pickgame-menu {
+        left: 0; display: flex; flex-direction: column; gap: 8px;
+        width: max-content; min-width: 12rem;
+      }
+      .pickgame-menu button[type="submit"] {
+        justify-content: flex-start; min-height: 40px; margin: 0;
+        background: #fff; color: var(--navy); box-shadow: 0 3px 0 var(--navy);
+      }
+      .pickgame-menu button[type="submit"]:hover { background: var(--game-bg); }
+      /* Anchored to its right edge: from a left anchor this form ran off the
+         right of the window. */
+      .newmeet-menu { right: 0; width: min(24rem, calc(100vw - 2rem)); }
+      /* A form is wider than a list of buttons, so on a phone it is pinned
+         to the viewport instead. */
+      @media (max-width: 560px) {
+        .newmeet-menu {
+          position: fixed; left: 8px; right: 8px; width: auto;
+          bottom: calc(var(--tabbar-h) + 5rem);
+        }
+      }
+      /* On a phone the game menu would run off the right edge from a left
+         anchor, and the labels cost width the message field needs. */
+      @media (max-width: 480px) {
+        .pickgame-menu { left: auto; right: 0; }
+        .pickgame > summary, .newmeet > summary { width: 48px; padding: 0; justify-content: center; }
+        .pickgame > summary span, .newmeet > summary span { display: none; }
       }
 
+      /* Beside a board the conversation column is narrow, so the two keys
+         drop their labels there too and leave the width to the message. */
+      .gamewrap.playing .pickgame > summary, .gamewrap.playing .newmeet > summary {
+        width: 48px; padding: 0; justify-content: center;
+      }
+      .gamewrap.playing .pickgame > summary span, .gamewrap.playing .newmeet > summary span { display: none; }
+
+      /* ---------- meetup forms ---------- */
       .launch, .newpost {
-        margin: .8rem 0 0; padding: .7rem .8rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r);
-        box-shadow: var(--shadow);
+        margin: 14px 0 0; padding: 12px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
-      .launch { display: flex; align-items: center; gap: .5rem; padding: .6rem .75rem; }
+      .launch { display: flex; align-items: center; gap: 8px; }
       .launch-label, .newpost b {
-        font-size: .76rem; font-weight: 800;
-        letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+        color: var(--muted); font-size: .8rem; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase;
       }
       .launch select { width: auto; margin: 0; flex: 1 1 auto; }
-      .launch button {
-        margin: 0; white-space: nowrap;
-        padding: .45rem .9rem; font-size: .82rem;
-      }
-
-      .newpost { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+      .launch button { margin: 0; white-space: nowrap; }
+      .newpost { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
       .newpost b { flex: 1 1 100%; }
       .newpost input, .newpost select { width: auto; margin: 0; flex: 1 1 7rem; }
-      /* The day and the time read as one control rather than four loose
-         boxes. After the .newpost rules above on purpose: these tie them on
-         specificity, so order is what decides. */
-      /* nowrap on purpose: if the row runs out of room the whole when-group
-         moves to the next line together, rather than leaving the day on one
-         line and its time on the next -- which is what looked broken. */
-      /* The optional meetup date. Sized with the rest of the row, or the
-         global full-width input rule gives it a line to itself. */
-      /* No shrink: the meetup row is already crowded, and a date
-         input squeezed below its own content renders as a bare
-         "mm" with a calendar glyph. The row wraps instead. */
-      /* .newpost .ondate, not .ondate: the rule above it is
-         `.newpost input`, which is an element plus a class and so
-         outranks a bare class however they are ordered. A plain
-         .ondate lost the flex-basis and the box rendered as a
-         naked "mm" with a calendar glyph. */
-      .newpost .ondate { width: auto; flex: 0 0 9.5rem; margin: 0; }
+      /* The optional meetup date. No shrink: a date input squeezed below its
+         own content renders as a bare "mm" with a calendar glyph, so the row
+         wraps instead. .newpost .ondate rather than .ondate, because
+         `.newpost input` (element plus class) outranks a bare class. */
+      .newpost .ondate { width: auto; flex: 0 0 10rem; margin: 0; }
       /* What stands where the composer was once a meetup is over. */
       .chat-ended {
-        margin: 0; padding: .7rem .9rem;
-        background: var(--surface-2); border: 1px solid var(--line);
-        border-radius: var(--r-sm);
-        color: var(--muted); font-size: .85rem; text-align: center;
+        margin: 14px 0 0; padding: 12px 14px;
+        background: #fff; color: var(--muted);
+        border: 2px dashed var(--navy); border-radius: var(--r);
+        font-size: .95rem; font-weight: 700; text-align: center;
       }
+      /* nowrap on purpose: if the row runs out of room the whole time group
+         moves to the next line together. */
       .whenrow {
         display: inline-flex; flex-wrap: nowrap; align-items: center;
-        gap: .25rem; flex: 1 1 21rem; min-width: 0;
+        gap: 4px; flex: 1 1 21rem; min-width: 0;
       }
       .whenrow input { flex: 1 1 5.5rem; min-width: 4.5rem; }
-
-      /* The three time selects as one control: one border around the set,
-         hairlines between, and no rounding or border on the parts. The group
-         is a single flex item, so wrapping can move it but never break it in
-         half the way three loose selects did. */
+      /* The three time selects as one control: one frame around the set,
+         dividers between, no frame on the parts. */
       .timeset {
         display: inline-flex; align-items: stretch; flex: 0 0 auto;
-        background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r-sm);
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: inset 3px 3px 0 var(--paper);
         overflow: hidden;
       }
       .timeset select {
-        flex: 0 0 auto; width: auto; margin: 0;
-        padding: .6rem .35rem .6rem .5rem;
-        background: none; border: 0; border-radius: 0;
+        flex: 0 0 auto; width: auto; min-height: 42px; margin: 0;
+        padding: 0 1.9rem 0 .6rem;
+        background-color: transparent; background-position: right 8px center;
+        border: 0; border-radius: 0; box-shadow: none;
       }
-      .timeset select + select { border-left: 1px solid var(--line); }
-      /* The ring belongs to the whole group; a per-segment one would draw a
-         box inside a box. */
-      .timeset select:focus { box-shadow: none; }
-      .timeset:focus-within {
-        border-color: var(--blue);
-        box-shadow: 0 0 0 3px rgba(0, 90, 139, .13);
-      }
-
+      .timeset select + select { border-left: 2px solid var(--line); }
+      /* The ring belongs to the whole group; a per-part one would draw a box
+         inside a box. */
+      .timeset select:focus { outline: none; }
+      .timeset:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
       /* A count of players is two digits, not a sentence. */
-      .newpost input[type="number"] { flex: 0 0 4.5rem; text-align: center; }
-      .newpost button { margin: 0; padding: .45rem .9rem; font-size: .82rem; }
+      .newpost input[type="number"] { flex: 0 0 5rem; text-align: center; }
+      .newpost button { margin: 0; }
 
-      /* A meetup posted into the room, rendered inside the message bubble. */
+      /* ---------- a meetup card inside a message ---------- */
       .post {
-        display: block; margin-top: .35rem; padding: .6rem .8rem;
-        background: var(--club-bg); border: 1px solid #f0d9a8;
-        border-radius: 12px;
+        display: block; margin-top: 6px; padding: 10px 12px;
+        background: var(--club-bg); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
+        text-align: left;
       }
-      .post b { display: block; font-size: .95rem; }
-      .post .meta { display: block; color: #7d5512; font-size: .76rem; font-weight: 600; }
-      .post .note {
-        display: block; margin-top: .25rem;
-        font-size: .85rem; color: var(--ink);
-      }
-      /* The action row. Divided off and pushed to the end, so it reads as
-         the card's own controls rather than text that happens to have
-         buttons under it. Wraps rather than colliding on a narrow screen. */
+      .post b { display: block; font: 400 22px/1.05 var(--px); }
+      .post .meta { display: block; color: var(--muted); font-size: .86rem; font-weight: 700; }
+      .post .note { display: block; margin-top: 4px; color: var(--navy); font-size: .92rem; }
+      /* The action row: divided off and pushed to the end, so it reads as the
+         card's own controls. Wraps rather than colliding on a narrow screen. */
       .post-actions {
         display: flex; flex-wrap: wrap; justify-content: flex-end;
-        align-items: center; gap: .4rem;
-        margin-top: .55rem; padding-top: .5rem;
-        border-top: 1px solid #f0d9a8;
+        align-items: center; gap: 8px;
+        margin-top: 10px; padding-top: 10px;
+        border-top: 2px dashed var(--line-2);
       }
       .post-actions form { margin: 0; }
       .post-actions .meta { margin-right: auto; }
-
-      /* Qualified with the element and with :hover spelled out, because
-         base.html paints every submit button solid blue and a bare class
-         loses to it. Same trick as button.ghost there. */
       .post-actions button[type="submit"],
-      .post-actions .confirm > summary {
-        margin: 0; padding: .3rem .75rem; font-size: .78rem; font-weight: 600;
-        border-radius: var(--r-sm); width: auto;
-      }
+      .post-actions .confirm > summary { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
 
       /* Leaving is the one action here you cannot undo in a click, so it
-         carries the palette's warning colour rather than looking like the
-         neutral button beside it. Outlined, not solid: it is a way out, not
-         the thing the card is for. */
-      .post-actions .confirm > summary {
-        display: inline-block; list-style: none; cursor: pointer;
-        background: var(--danger-bg); color: var(--danger);
-        border: 1px solid var(--danger);
-      }
-      .post-actions .confirm > summary::-webkit-details-marker { display: none; }
-      .post-actions .confirm > summary:hover { background: #fbdcd8; }
-      .post-actions .confirm[open] > summary { background: #fbdcd8; }
-
+         carries the warning colour and asks first. Qualified with the element
+         and with :hover spelled out, because base draws every submit button
+         as a raised blue key: tie on specificity, win on order. */
       .confirm { margin: 0; }
+      .confirm > summary {
+        display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;
+        list-style: none; cursor: pointer;
+        background: var(--danger-bg); color: var(--danger);
+        border: 2px solid var(--danger); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--danger);
+        font-size: .88rem; font-weight: 700;
+      }
+      .confirm > summary::-webkit-details-marker { display: none; }
+      .confirm > summary:hover { background: #fbdcd8; }
+      .confirm[open] > summary { transform: translateY(3px); box-shadow: none; }
       .confirm-body {
-        display: block; width: 100%; margin-top: .45rem;
-        padding: .55rem .7rem;
-        background: var(--surface); border: 1px solid var(--danger);
-        border-radius: var(--r-sm);
+        display: block; width: 100%; margin-top: 8px; padding: 10px 12px;
+        background: #fff;
+        border: 2px solid var(--danger); border-radius: var(--r);
       }
-      .confirm-ask {
-        display: block; margin-bottom: .45rem;
-        font-size: .8rem; line-height: 1.35; color: var(--ink);
-      }
-      .confirm-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .confirm-ask { display: block; margin-bottom: 8px; color: var(--navy); font-size: .9rem; line-height: 1.35; }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .confirm-row form { margin: 0; }
-      .confirm-row button {
-        margin: 0; padding: .3rem .75rem; font-size: .78rem; font-weight: 600;
-        border-radius: var(--r-sm); width: auto; cursor: pointer;
-      }
-      button.leave-yes, button.leave-yes:hover {
-        background: var(--danger); color: #fff; border: 1px solid var(--danger);
-      }
+      .confirm-row button { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      button.leave-yes, button.leave-yes:hover { background: var(--danger); color: #fff; border-color: var(--navy); }
       button.leave-yes:hover { background: #8a2119; }
       button.confirm-no {
-        background: var(--surface); color: var(--ink);
-        border: 1px solid var(--line-2);
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-weight: 700; cursor: pointer;
       }
-      button.confirm-no:hover { background: var(--surface-2); }
+      button.confirm-no:hover { background: var(--paper); }
 
       /* ---------- a game, alongside the conversation ---------- */
       /* Without a game this is a plain block and the conversation has the
          full width; .playing is added by the server on load and by the poller
          when an invite arrives. */
       .gamewrap { display: block; }
-      .gamewrap.playing { display: grid; gap: .8rem; align-items: start; }
+      .gamewrap.playing { display: grid; gap: 16px; align-items: start; margin-top: 14px; }
       @media (min-width: 900px) {
-        .gamewrap.playing { grid-template-columns: minmax(0, 1fr) 20rem; }
+        .gamewrap.playing { grid-template-columns: minmax(0, 1fr) 21rem; }
       }
       .talkcol { min-width: 0; }
-      /* Shorter in the side column, and shorter again on a phone, so the
-         composer stays on screen under the board. */
+      .gamewrap.playing #log { margin-top: 0; }
+      /* Shorter beside a board, and shorter again on a phone, so the composer
+         stays on screen under the board. */
       .gamewrap.playing #log { height: 20rem; }
       @media (max-width: 899px) {
         .gamewrap.playing #log { height: 14rem; }
       }
 
-      .gamepane { min-width: 0; }
-      /* The two buttons under an invite shown in the panel. Here rather than
-         in base.html because the panel only ever appears on this page, which
-         is the rule base.html states for its shared stylesheet. */
-      .invite-row {
-        display: flex; gap: 8px; justify-content: center;
-        margin-top: 10px;
+      /* The game is one window: orange title bar, then who is at the
+         board, then the board (or the invite, or the result). */
+      .gamepane {
+        min-width: 0; overflow: hidden;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
+      .gamepane > .presence, .gamepane > .empty { margin: 12px; }
+      /* The two buttons under an invite shown in the panel. Here rather than
+         in base.html because the panel only ever appears on this page. */
+      .invite-row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
       .invite-row form { margin: 0; }
       /* Who is at the board. Quiet when they are here, and only loud enough
          to be noticed when they are not. */
       .presence {
-        display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
-        margin: 0 0 .6rem; padding: .45rem .7rem;
-        background: var(--surface-2); border-radius: var(--r-sm);
-        font-size: .82rem; color: var(--muted);
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+        margin: 0 0 10px; padding: 8px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        font-size: .88rem; font-weight: 700;
       }
-      .presence .dot {
-        width: .5rem; height: .5rem; border-radius: var(--pill);
-        background: var(--place); flex: 0 0 auto;
-      }
-      .presence.gone { background: var(--danger-bg); color: var(--danger); }
+      .presence .dot { width: 10px; height: 10px; flex: 0 0 auto; background: var(--beacon); border: 2px solid var(--navy); }
+      .presence.gone { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
       .presence.gone .dot { background: var(--danger); }
       .presence form { margin: 0 0 0 auto; }
       .presence .hint { margin-left: auto; }
-      button.claim, button.claim:hover {
-        border: 1px solid var(--danger); color: #fff;
-      }
-      button.claim { background: var(--danger); }
+      .presence button { min-height: 34px; margin: 0; padding: 0 10px; font-size: .85rem; }
+      button.claim, button.claim:hover { background: var(--danger); color: #fff; }
       button.claim:hover { background: #8a2119; }
-      .presence button {
-        margin: 0; padding: .25rem .7rem; width: auto;
-        border-radius: var(--r-sm); font-size: .78rem; font-weight: 600;
-      }
 
+      /* the game's title bar: orange, like every game window */
       .gamehead {
-        display: flex; align-items: center; gap: .6rem;
-        padding: .6rem .8rem;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-top: 3px solid var(--game);
-        border-radius: var(--r);
-        box-shadow: var(--shadow);
+        display: flex; align-items: center; gap: 10px;
+        min-height: 52px; padding: 6px 10px;
+        background: var(--orange); color: var(--navy);
+        border-bottom: 2px solid var(--navy);
       }
       .gamehead .grow { flex: 1 1 auto; min-width: 0; }
-      .gamehead h3 { font-size: .97rem; margin: 0; }
-      .gamehead .vs { font-size: .78rem; color: var(--muted); font-weight: 600; }
+      .gamehead h3 { margin: 0; font: 400 24px/1 var(--px); }
+      .gamehead .vs { color: var(--navy); font-size: .85rem; font-weight: 700; }
       .gamehead form { margin: 0; }
-      .gamehead button { margin: 0; padding: .3rem .7rem; font-size: .78rem; }
+      .gamehead button { min-height: 34px; margin: 0; padding: 0 10px; font-size: .85rem; }
 
       .boardwrap {
         display: grid; place-items: center;
-        margin-top: .6rem; padding: 1rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r);
-        box-shadow: var(--shadow);
+        padding: 16px;
+        background: #fff;
         overflow-x: auto;
       }
-      .board { display: grid; gap: .4rem; }
+      .board { display: grid; gap: 6px; }
       .board form { margin: 0; display: contents; }
-      .cell {
-        margin: 0; padding: 0; width: 100%; font-weight: 800;
-        border: 1px solid var(--line-2);
-        background: var(--surface-2);
-        color: var(--ink); box-shadow: none; border-radius: 10px;
-        transition: background .12s, transform .06s;
+      /* every square is a key; base's raised-button look is reset here */
+      .board .cell, .board .cell:hover, .board .cell:active {
+        min-height: 0; margin: 0; padding: 0; width: 100%;
+        display: grid; place-items: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 0 3px 0 var(--navy); transform: none;
+        font-weight: 700; transition: background .12s;
       }
-      .cell:hover:not([disabled]) {
-        background: var(--game-bg); border-color: var(--game);
-      }
-      .cell[disabled] { cursor: default; }
-      .cell.p0 { color: var(--blue); }
-      .cell.p1 { color: #b3471e; }
+      .board .cell:hover:not([disabled]) { background: var(--game-bg); }
+      .board .cell[disabled] { cursor: default; box-shadow: none; border-color: var(--line-2); }
+      .cell.p0 { color: var(--beacon); }
+      .cell.p1 { color: #c4520c; }
 
       .board.ttt { grid-template-columns: repeat(3, 4.6rem); }
-      .board.ttt .cell { height: 4.6rem; font-size: 1.7rem; }
+      .board.ttt .cell { height: 4.6rem; font-size: 2rem; }
+      .board.ttt .cell.p0, .board.ttt .cell.p1 { border-color: var(--navy); }
 
+      /* Connect four: a Beacon Blue frame with round holes; yellow and
+         orange counters. */
       .board.c4 {
-        grid-template-columns: repeat(7, 2.9rem); gap: .35rem;
-        padding: .5rem; background: var(--blue); border-radius: 12px;
+        grid-template-columns: repeat(7, 2.9rem); gap: 6px;
+        padding: 8px; background: var(--beacon);
+        border: 2px solid var(--navy); border-radius: var(--r);
       }
-      .board.c4 .cell {
+      .board.c4 .cell, .board.c4 .cell:hover, .board.c4 .cell:active {
         height: 2.9rem; font-size: 1.1rem; border-radius: 50%;
-        border-color: transparent; background: #e8eef6;
+        background: var(--paper); color: var(--paper);
+        border: 2px solid var(--navy); box-shadow: inset 2px 2px 0 rgba(19, 34, 69, .25);
       }
-      .board.c4 .cell.p0 { background: var(--sky);  color: var(--sky); }
-      .board.c4 .cell.p1 { background: #e0a13a; color: #e0a13a; }
+      .board.c4 .cell:hover:not([disabled]) { background: #fff; }
+      .board.c4 .cell.p0 { background: var(--gold); color: var(--gold); }
+      .board.c4 .cell.p1 { background: var(--orange); color: var(--orange); }
 
       .board.bs {
-        grid-template-columns: repeat(10, 1.75rem); gap: .18rem;
-        padding: .35rem; background: #d7e3f1; border-radius: 10px;
+        grid-template-columns: repeat(10, 1.75rem); gap: 3px;
+        padding: 6px; background: var(--sky);
+        border: 2px solid var(--navy); border-radius: var(--r);
       }
-      .board.bs .cell {
-        height: 1.75rem; font-size: .75rem; border-radius: 4px;
-        border-color: transparent; background: #f4f8fc;
-        display: grid; place-items: center;
+      .board.bs .cell, .board.bs .cell:hover, .board.bs .cell:active {
+        height: 1.75rem; font-size: .75rem; border-radius: 3px;
+        background: var(--paper); border-width: 1px; box-shadow: none;
       }
-      .board.bs .cell.ship { background: #94a9bd; }
+      .board.bs .cell.ship { background: var(--line-2); }
       .board.bs .cell.hit  { background: var(--danger); color: #fff; }
-      .board.bs .cell.miss { background: #cfd9e4; color: var(--muted); }
+      .board.bs .cell.miss { background: var(--line); color: var(--muted); }
 
       .boardwrap h3 {
-        margin: 1rem 0 .4rem; font-size: .8rem; font-weight: 800;
-        letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+        margin: 16px 0 6px; color: var(--muted); font-size: .8rem; font-weight: 700;
+        letter-spacing: .08em; text-transform: uppercase;
       }
       .boardwrap h3:first-child { margin-top: 0; }
 
+      /* Chess: a paper and sky board in a navy frame. */
       .board.chess {
         grid-template-columns: repeat(8, 2.7rem); gap: 0;
-        border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-2);
+        border: 2px solid var(--navy); border-radius: var(--r-sm); overflow: hidden;
       }
-      .board.chess .cell {
+      .board.chess .cell, .board.chess .cell:hover, .board.chess .cell:active {
         height: 2.7rem; font-size: 1.6rem; line-height: 1;
-        border: 0; border-radius: 0; background: #eadfc8;
+        background: var(--paper); border: 0; border-radius: 0; box-shadow: none;
       }
-      .board.chess .cell.dark { background: #9c7b56; }
-      .board.chess .cell:hover:not([disabled]) { background: #cfe0f2; }
-      .board.chess .cell.last { box-shadow: inset 0 0 0 3px #e0a13a; }
-      .board.chess .cell.pick { box-shadow: inset 0 0 0 3px var(--game); }
-      #chessform label { font-size: .8rem; }
+      .board.chess .cell.dark { background: var(--sky); }
+      .board.chess .cell:hover:not([disabled]) { background: var(--gold); }
+      .board.chess .cell.last { box-shadow: inset 0 0 0 3px var(--gold); }
+      .board.chess .cell.pick { box-shadow: inset 0 0 0 3px var(--orange); }
+      #chessform { width: 100%; }
+      #chessform label { margin-top: 12px; font-size: .9rem; }
       #chessform input { max-width: 9rem; }
+      #chessform button { margin-top: 8px; }
 
       /* The boards are fixed-width grids, and chess at 8 x 2.7rem is wider
          than the side column and wider than a 375px phone. Everything scales
          down together so the proportions survive. */
       @media (max-width: 1100px) {
         .board.chess { grid-template-columns: repeat(8, 2.2rem); }
-        .board.chess .cell { height: 2.2rem; font-size: 1.3rem; }
+        .board.chess .cell, .board.chess .cell:hover { height: 2.2rem; font-size: 1.3rem; }
         .board.bs { grid-template-columns: repeat(10, 1.5rem); }
-        .board.bs .cell { height: 1.5rem; font-size: .68rem; }
+        .board.bs .cell, .board.bs .cell:hover { height: 1.5rem; font-size: .68rem; }
         .board.c4 { grid-template-columns: repeat(7, 2.4rem); }
-        .board.c4 .cell { height: 2.4rem; }
+        .board.c4 .cell, .board.c4 .cell:hover { height: 2.4rem; }
       }
       @media (max-width: 420px) {
-        .boardwrap { padding: .6rem; }
+        .boardwrap { padding: 10px; }
         .board.chess { grid-template-columns: repeat(8, 1.95rem); }
-        .board.chess .cell { height: 1.95rem; font-size: 1.15rem; }
+        .board.chess .cell, .board.chess .cell:hover { height: 1.95rem; font-size: 1.15rem; }
         .board.ttt { grid-template-columns: repeat(3, 3.8rem); }
-        .board.ttt .cell { height: 3.8rem; font-size: 1.4rem; }
+        .board.ttt .cell, .board.ttt .cell:hover { height: 3.8rem; font-size: 1.6rem; }
       }
 
-      /* A game moment in the log: centred, quieter than speech, and never
-         aligned to a side, because it is not something anybody said. */
-      .msg.note {
-        max-width: 100%; align-items: center; margin: .5rem auto .7rem;
-        text-align: center;
-      }
-      .msg.note .body {
-        background: var(--surface-2); color: var(--muted);
-        border: 1px dashed var(--line-2); border-radius: var(--pill);
-        box-shadow: none; font-size: .82rem; font-weight: 600;
-      }
-      .note-act { display: flex; gap: .4rem; margin-top: .4rem; }
-      .note-act form { margin: 0; }
-      .note-act button { margin: 0; padding: .28rem .7rem; font-size: .78rem; }
-
-      /* The composer and the game menu share a row. */
-      .sendrow { display: flex; align-items: flex-end; gap: .5rem; }
-      .sendrow .composer { flex: 1 1 auto; margin-top: 0; min-width: 0; }
-      .newmeet { position: relative; flex: none; }
-      /* The place accent, not the game one: this is the in-person kind, which
-         is what /find's band is coloured with. Same height as the composer
-         and the Play button so the row stays one piece. */
-      .newmeet > summary {
-        display: flex; align-items: center; gap: .35rem;
-        height: 2.8rem; padding: 0 .9rem;
-        list-style: none; cursor: pointer; white-space: nowrap;
-        background: var(--place); color: #fff;
-        border: 1px solid transparent; border-radius: var(--pill);
-        font-size: .88rem; font-weight: 700;
-      }
-      .newmeet > summary::-webkit-details-marker { display: none; }
-      .newmeet > summary .icon { width: 18px; height: 18px; }
-      .newmeet > summary:hover,
-      .newmeet[open] > summary { filter: brightness(.9); }
-      /* Opens upward, for the reason the game menu does: it sits on the
-         bottom edge of the page. */
-      .newmeet-menu {
-        position: absolute; z-index: 30;
-        /* Anchored to its right edge, not its left. The game menu beside it
-           is 11rem and fits either way; this is a form, and from a left
-           anchor it ran off the right of the window -- the Ask them button
-           and half the Where picker were outside the page. */
-        bottom: calc(100% + .4rem); right: 0;
-        width: min(24rem, calc(100vw - 2rem));
-        padding: .6rem;
-        background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r);
-        box-shadow: var(--shadow-3);
-      }
-      .newmeet-menu b {
-        font-size: .68rem; font-weight: 800; color: var(--muted);
-        letter-spacing: .06em; text-transform: uppercase;
-      }
-      /* A form is wider than a list of buttons, so a left anchor runs off a
-         narrow screen sooner than the game menu's does. */
-      @media (max-width: 560px) {
-        .newmeet-menu {
-          position: fixed; left: 8px; right: 8px; width: auto;
-          bottom: calc(var(--tabbar-h) + 4.6rem);
-        }
+      /* whose turn: plain text, or a yellow tag when it is yours */
+      .status { margin: 14px 0 0; color: var(--muted); font-size: .98rem; font-weight: 700; text-align: center; }
+      .status.yours {
+        display: table; margin: 14px auto 0; padding: 5px 12px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
       }
 
-      .pickgame { position: relative; flex: none; }
-      /* Filled rather than outlined, and labelled: the point of this button
-         is that somebody who has never used the app notices it. Sized to the
-         composer's own height so the row reads as one piece. */
-      .pickgame > summary {
-        display: flex; align-items: center; gap: .35rem;
-        height: 2.8rem; padding: 0 .9rem;
-        list-style: none; cursor: pointer; white-space: nowrap;
-        background: var(--game); color: #fff;
-        border: 1px solid transparent; border-radius: var(--pill);
-        font-size: .88rem; font-weight: 700;
-      }
-      .pickgame > summary::-webkit-details-marker { display: none; }
-      .pickgame > summary .icon { width: 18px; height: 18px; }
-      .pickgame > summary:hover,
-      .pickgame[open] > summary { background: #b8520c; }
-      /* Opens upward: it sits on the bottom edge of the page. */
-      .pickgame-menu {
-        position: absolute; z-index: 30;
-        bottom: calc(100% + .4rem); left: 0;
-        display: flex; flex-direction: column; gap: .25rem;
-        width: max-content; min-width: 11rem; padding: .5rem;
-        background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r);
-        box-shadow: var(--shadow-3);
-      }
-      .pickgame-menu b {
-        font-size: .68rem; font-weight: 800; color: var(--muted);
-        letter-spacing: .06em; text-transform: uppercase;
-      }
-      .pickgame-menu button {
-        margin: 0; padding: .4rem .7rem; font-size: .85rem;
-        background: var(--surface-2); color: var(--ink); text-align: left;
-      }
-      .pickgame-menu button:hover { background: var(--game-bg); }
-      /* On a phone the menu would run off the right edge from a left anchor. */
-      @media (max-width: 480px) {
-        .pickgame-menu { left: auto; right: 0; }
-        /* The label costs about 40px the message field needs more. */
-        .pickgame > summary {
-          width: 2.8rem; padding: 0;
-          justify-content: center;
-        }
-        .pickgame > summary span { display: none; }
-      }
+      /* The Revolutionary War battleship board brings its own stylesheet
+         (static/naval-battleship.css); keep base's raised-key look off its
+         buttons so its own styling stands. */
+      .naval-game button, .naval-practice button { box-shadow: none; }
+      .naval-game button:active, .naval-practice button:active { transform: none; }
 
-      .status { margin: .9rem 0 0; text-align: center; font-weight: 700;
-        font-size: .95rem; color: var(--muted); }
-      .status.yours { color: var(--game); }
-      /* The group-chat strip under the header: code, visibility, invite. */
+      /* ---------- group and club bars ---------- */
+      /* The strip under the header: code, visibility, invite. */
       .groupbar {
-        display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
-        margin-top: .7rem; padding: .6rem .8rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r);
-        box-shadow: var(--shadow);
+        display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+        margin-top: 14px; padding: 10px 12px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
-      .groupbar form { display: flex; gap: .4rem; margin: 0 0 0 auto; }
-      .groupbar select { width: auto; margin: 0; max-width: 11rem; }
-      .groupbar button { margin: 0; padding: .35rem .8rem; font-size: .8rem; }
+      .groupbar form { display: flex; gap: 8px; margin: 0 0 0 auto; }
+      .groupbar select { width: auto; margin: 0; max-width: 12rem; }
+      .groupbar button { min-height: 40px; margin: 0; padding: 0 12px; font-size: .9rem; }
       .code {
-        display: inline-block; padding: .05rem .4rem;
-        background: var(--surface-2); border: 1px solid var(--line);
-        border-radius: var(--r-sm);
+        display: inline-block; padding: 1px 7px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-weight: 700; letter-spacing: .08em;
         user-select: all;
       }
       .vis {
-        display: inline-block; padding: .05rem .4rem;
-        border-radius: var(--pill);
-        font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
+        display: inline-flex; align-items: center; height: 24px; padding: 0 7px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .78rem/1 var(--sans);
       }
-      .vis.open { background: var(--place-bg); color: var(--place); }
-      .vis.shut { background: var(--surface-2); color: var(--muted); }
-      .roster { margin-top: .5rem; }
+      .vis.open { background: var(--beacon); color: #fff; }
+      .vis.shut { background: var(--paper); color: var(--muted); border-color: var(--line-2); }
+      /* the member list: a key that opens a small window */
+      .roster { margin-top: 10px; }
       .roster > summary {
-        padding: .45rem .8rem; cursor: pointer; list-style: none;
-        background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r);
-        font-size: .82rem; font-weight: 700; color: var(--muted);
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px;
+        list-style: none; cursor: pointer;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font-size: .92rem; font-weight: 700;
       }
       .roster > summary::-webkit-details-marker { display: none; }
+      .roster[open] > summary { transform: translateY(3px); box-shadow: none; }
       .roster-body {
-        padding: .3rem .8rem .6rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-top: 0;
-        border-radius: 0 0 var(--r) var(--r);
+        margin-top: 10px; padding: 4px 12px 10px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
 {% endblock %}
 
 {% block main %}
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
-  <p style="margin:0 0 .7rem"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
+  <p class="nav backlink"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
 
   <div class="chathead">
     {{ ui.avatar(title, target_id, square=(kind == "club")) }}
