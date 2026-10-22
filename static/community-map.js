@@ -326,7 +326,7 @@
         interactive: mode === "idle",
         zIndexOffset: flag.id === selected ? 1000 : 500
       }).addTo(flagLayer);
-      marker.on("click", function () { select(flag.id); });
+      marker.on("click", function () { announce(""); select(flag.id); });
       if (mine) {
         marker.on("dragstart", function () { dragging = true; select(flag.id, false, true); });
         marker.on("dragend", function () {
@@ -888,6 +888,7 @@
     if (!flag) { return; }   // not loaded yet: let the link reload the page
     event.preventDefault();
     if (mode !== "idle") { cancelDraft(); }
+    announce("");
     root.scrollIntoView({ behavior: "smooth", block: "start" });
     select(flag.id, true);
   });
@@ -899,6 +900,7 @@
     focus: function (id) {
       if (!findFlag(id)) { return false; }
       if (mode !== "idle") { cancelDraft(); }
+      announce("");
       select(id, true);
       return true;
     },
