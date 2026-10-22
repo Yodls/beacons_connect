@@ -1,12 +1,11 @@
       /* =================================================================
-         Community map: Beacon OS styles
-         Included into find.html's page style. The pins themselves are
-         built by static/community-map.js; their classes are styled at the
-         bottom of this file.
+         Campus map: Beacon OS styles
+         Included into find.html's page style. The pins are built by
+         static/community-map.js; their classes are styled near the end.
 
          Pin colours by flag type (UMass Boston palette):
            game = Orange   study = Beacon Blue   social = Sky
-           club = Yellow   event = Navy
+           club = Yellow   event = Navy          U-Find = its own navy
          ================================================================= */
 
       /* ---------- the window ---------- */
@@ -18,38 +17,22 @@
         box-shadow: var(--drop);
       }
       .campus-map-bar h2 { font: 400 25px/1 var(--px); }
-      .campus-map-head {
-        display: flex; align-items: center; justify-content: space-between; gap: 12px;
-        padding: 12px 14px;
+
+      /* ---------- the map ---------- */
+      .campus-map-stage {
+        position: relative;
+        background: var(--paper);
         border-bottom: 2px solid var(--navy);
       }
-      .campus-map-head p { color: var(--muted); font-size: .95rem; }
-      .campus-map-kicker {
-        display: block; margin-bottom: 2px;
-        color: var(--navy); font: 700 .74rem/1.2 var(--sans);
-        letter-spacing: .08em; text-transform: uppercase;
-      }
-      .campus-map-actions { display: flex; align-items: center; gap: 10px; flex: none; }
-      /* "1 / 3 flags used" */
-      .flag-count {
-        display: inline-flex; align-items: center; height: 30px; padding: 0 9px;
-        background: var(--gold); color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 700 .82rem/1 var(--sans); white-space: nowrap;
-      }
-
-      /* ---------- map + draft form, side by side on wide screens ---------- */
-      .campus-map-grid {
-        display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(17rem, .8fr);
-        min-height: 31rem;
-      }
-      .campus-map-stage { position: relative; min-width: 0; background: var(--paper); }
       #beaconCampusMap {
-        width: 100%; height: 100%; min-height: 31rem; z-index: 1;
+        height: 22rem; z-index: 1;
         background: var(--paper); font-family: var(--sans);
       }
       /* calmer map tiles, so the pins carry the colour */
       #beaconCampusMap .leaflet-tile-pane { filter: saturate(.55) contrast(1.06) brightness(1.04); }
+      /* placing a flag: an orange dashed frame and a crosshair */
+      .campus-map-card.placing #beaconCampusMap { outline: 4px dashed var(--orange); outline-offset: -6px; }
+      .campus-map-card.placing .leaflet-container { cursor: crosshair; }
       /* zoom buttons as raised keys */
       #beaconCampusMap .leaflet-bar {
         border: 2px solid var(--navy); border-radius: var(--r);
@@ -64,49 +47,159 @@
         background: rgba(255, 255, 255, .9); color: var(--navy);
         font: 400 11px/1.4 var(--sans);
       }
-      #beaconCampusMap .leaflet-control-attribution a { color: var(--beacon); font-size: inherit; }
+      #beaconCampusMap .leaflet-control-attribution a { color: var(--beacon); }
       #beaconCampusMap .leaflet-tooltip {
         padding: 4px 8px; color: var(--navy); font: 700 13px/1.2 var(--sans);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
       }
       #beaconCampusMap .leaflet-tooltip-top::before { border-top-color: var(--navy); }
-      /* a flag's popup is a small window */
-      #beaconCampusMap .leaflet-popup-content-wrapper {
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: var(--drop);
-      }
-      #beaconCampusMap .leaflet-popup-tip { border: 2px solid var(--navy); }
-      #beaconCampusMap .leaflet-popup-content { margin: 12px 14px; min-width: 13rem; font-family: var(--sans); }
-      /* the status line floating over the map */
+      /* "Show where I am", floating top right */
+      .map-locate { position: absolute; z-index: 1000; top: 10px; right: 10px; }
+      /* the status line floating bottom left */
       .map-status {
-        position: absolute; left: 10px; bottom: 10px; z-index: 500;
-        max-width: calc(100% - 20px); margin: 0; padding: 8px 11px;
+        position: absolute; z-index: 1000; left: 10px; bottom: 10px;
+        max-width: calc(100% - 20px); margin: 0; padding: 7px 10px;
         background: var(--navy); color: #fff;
         border: 2px solid #fff; border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
         font: 700 .85rem/1.3 var(--sans);
+        pointer-events: none;
       }
       .map-status.error { background: var(--danger); }
       .map-status.success { background: var(--beacon); }
+      .map-status:empty { display: none; }
 
-      /* ---------- the draft flag form ---------- */
-      .flag-panel { padding: 14px; background: #fff; border-left: 2px solid var(--navy); }
-      .flag-panel-title {
-        display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
-        margin-bottom: 12px;
+      /* ---------- under the map ---------- */
+      .campus-map-pane { display: grid; gap: 14px; padding: 14px; }
+      .map-legend {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+        margin: 0; padding: 0; list-style: none;
       }
-      .flag-panel-title h3 { font: 400 26px/1 var(--px); }
-      .flag-limit { color: var(--muted); font-size: .8rem; font-weight: 700; }
-      #mapFlagForm { display: grid; gap: 12px; }
-      #mapFlagForm label { color: var(--navy); font-size: .9rem; }
-      #mapFlagForm input, #mapFlagForm select, #mapFlagForm textarea { margin-top: 6px; font-size: .95rem; }
-      #mapFlagForm textarea { min-height: 5rem; }
-      /* where the flag will go: a dashed box, like the draft pin itself */
-      .map-point-picker {
-        padding: 10px 12px;
+      .map-legend:empty { display: none; }
+      .map-key { display: inline-flex; align-items: center; gap: 7px; font: 700 .88rem/1 var(--sans); }
+      .map-key-swatch {
+        width: 20px; height: 20px; flex: none;
+        background: var(--flag-color);
+        border: 2px solid var(--navy); border-radius: 4px;
+      }
+      .map-key-ufind {
+        display: block; height: 16px; width: auto; padding: 4px 7px; box-sizing: content-box;
+        background: #0b3159; border: 2px solid var(--navy); border-radius: 4px;
+      }
+
+      /* the flag you tapped */
+      .flag-detail {
+        display: grid; gap: 10px; padding: 12px;
+        background: var(--paper);
+        border: 2px solid var(--navy); border-radius: var(--r);
+      }
+      .fd-top { display: flex; align-items: flex-start; gap: 10px; }
+      .fd-top .grow { flex: 1 1 auto; min-width: 0; }
+      .fd-title { display: block; font-size: 1.05rem; font-weight: 700; }
+      .fd-sub { display: block; margin-top: 2px; color: var(--muted); font-size: .9rem; }
+      .fd-note { color: var(--navy); font-size: .95rem; }
+      .fd-close, .fd-close:hover, .fd-close:active {
+        flex: none; width: 36px; height: 36px; min-height: 0; padding: 0;
+        display: grid; place-items: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: none; transform: none;
+      }
+      .fd-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+      .fd-tags .tag { background: #fff; color: var(--navy); }
+      .fd-tags .tag.kind { background: var(--flag-color); color: var(--flag-ink, #fff); }
+      .fd-tags .tag.ufind { padding: 0 6px; background: #0b3159; }
+      .fd-tags .tag.ufind img { display: block; height: 14px; width: auto; }
+      .fd-tags .tag.price { background: var(--gold); }
+      .fd-event {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+        padding: 8px 10px; background: #fff;
+        border: 2px dashed var(--line-2); border-radius: var(--r-sm);
+        font-size: .92rem; font-weight: 700;
+      }
+      .fd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      .fd-actions form { margin: 0; }
+      .fd-actions button, .fd-actions .key {
+        min-height: 40px; padding: 0 12px; font-size: .92rem;
+      }
+      .fd-hint { color: var(--muted); font-size: .85rem; }
+      /* a link drawn as a white key */
+      .key {
+        display: inline-flex; align-items: center; justify-content: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-weight: 700;
+      }
+      .key:hover { background: var(--paper); text-decoration: none; }
+      .key:active { transform: translateY(3px); box-shadow: none; }
+
+      /* the map's own secondary buttons (type="button", so base leaves them) */
+      .map-button {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        min-height: 44px; margin: 0; padding: 0 14px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font: 700 .95rem/1 var(--sans); cursor: pointer;
+      }
+      .map-button:hover { background: var(--paper); }
+      .map-button:active { transform: translateY(3px); box-shadow: none; }
+      .map-button.warn { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); box-shadow: 0 3px 0 var(--danger); }
+      .map-button[disabled] { opacity: .6; cursor: not-allowed; }
+
+      /* ---------- the draft editor ---------- */
+      .draftbox {
+        display: grid; gap: 12px; padding: 14px;
         background: var(--paper);
         border: 2px dashed var(--navy); border-radius: var(--r);
+      }
+      .draft-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .draft-head h3 { font: 400 26px/1 var(--px); }
+      .draft-head .tag { background: #fff; color: var(--navy); }
+      .draft-note { margin-top: -4px; color: var(--muted); font-size: .9rem; }
+      .draftbox label { color: var(--navy); font-size: .92rem; }
+      .draftbox label > input, .draftbox label > select, .draftbox label > textarea,
+      .draftbox .price-field { margin-top: 6px; }
+      .draftbox textarea { min-height: 5rem; }
+      /* the type chips: radios drawn as keys */
+      .draftbox .draft-kinds { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+      .draft-kinds legend { padding: 0; margin-bottom: 6px; font-size: .92rem; font-weight: 700; }
+      .kind-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .kind-chip { position: relative; display: inline-flex; margin: 0; }
+      .kind-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
+      .kind-chip span {
+        display: inline-flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font: 700 .92rem/1 var(--sans); cursor: pointer;
+      }
+      .kind-chip i {
+        width: 16px; height: 16px; flex: none;
+        background: var(--flag-color); border: 2px solid var(--navy); border-radius: 4px;
+      }
+      .kind-chip img { display: block; height: 15px; width: auto; padding: 3px 5px; box-sizing: content-box; background: #0b3159; border-radius: 3px; }
+      .kind-chip input:checked + span { background: var(--navy); color: #fff; box-shadow: none; transform: translateY(3px); }
+      .kind-chip input:checked + span i { border-color: #fff; }
+      .kind-chip input:focus-visible + span { outline: 3px solid var(--orange); outline-offset: 2px; }
+      .kind-chip input:disabled + span { opacity: .45; cursor: not-allowed; }
+      /* the U-Find price, with a $ in front */
+      .price-field {
+        display: flex; align-items: center; gap: 6px;
+        min-height: 46px; padding: 0 12px;
+        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: inset 3px 3px 0 var(--paper);
+        font-weight: 700;
+      }
+      .price-field:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
+      .price-field input { min-height: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+      .price-field input:focus { outline: none; }
+      /* where the draft is: dashed, like the draft flag itself */
+      .map-point-picker {
+        padding: 10px 12px; background: #fff;
+        border: 2px dashed var(--line-2); border-radius: var(--r);
       }
       .map-field-label {
         display: block; margin-bottom: 2px;
@@ -114,120 +207,104 @@
         letter-spacing: .06em; text-transform: uppercase;
       }
       .map-point-picker strong { display: block; color: var(--navy); font-size: .92rem; }
-      .map-point-picker small { display: block; margin-top: 2px; color: var(--muted); font-size: .8rem; }
       .flag-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      /* The club picker only shows for club-only flags. Spelled out because
-         base's label { display: block } beats the hidden attribute. */
-      #mapFlagClubWrap[hidden] { display: none; }
       .optional { color: var(--muted); font-weight: 400; }
-      /* The map's own buttons. type="button" ones (Locate me) are drawn
-         here in full; the submit button already gets base's raised look
-         and only needs its width. */
-      .map-button {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: auto; min-height: 44px; margin: 0; padding: 0 14px;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 0 3px 0 var(--navy);
-        font: 700 .92rem/1 var(--sans); cursor: pointer;
-      }
-      .map-button:active { transform: translateY(3px); box-shadow: none; }
-      .map-button-ghost:hover { background: var(--paper); }
-      button.map-button-primary { width: 100%; min-height: 48px; }
-      .map-button[disabled] { opacity: .6; cursor: not-allowed; }
-      .map-privacy { margin-top: 12px; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+      /* Anything the script hides. Spelled out because display rules here
+         (and base's label { display: block }) beat the hidden attribute. */
+      .campus-map-card [hidden] { display: none !important; }
 
-      /* ---------- the key ---------- */
-      .map-legend {
-        display: flex; flex-wrap: wrap; gap: 8px 16px;
-        margin: 0; padding: 12px 14px; list-style: none;
-        border-top: 2px solid var(--navy);
+      /* the friend picker */
+      .fpick {
+        display: grid; gap: 10px; padding: 12px;
+        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
       }
-      .map-legend:empty { display: none; }
-      .map-key { display: inline-flex; align-items: center; gap: 7px; font: 700 .88rem/1 var(--sans); }
-      .map-key-swatch {
-        width: 26px; height: 26px; flex: none;
-        display: grid; place-items: center;
-        background: var(--flag-color); color: var(--flag-ink);
-        border: 2px solid var(--navy); border-radius: 4px;
-      }
-      .map-key-swatch .icon { width: 12px; height: 12px; }
-      .map-key-swatch.place { background: var(--gold); }
-      .map-key-swatch.place .icon { width: 12px; height: 18px; }
-
-      /* ---------- active flags list ---------- */
-      .flag-feed { padding: 12px 14px 14px; border-top: 2px solid var(--navy); }
-      .flag-feed-head { display: flex; align-items: center; justify-content: space-between; }
-      .flag-feed-head h3 { font: 400 22px/1 var(--px); }
-      .map-text-button {
-        min-height: 36px; padding: 0 4px;
-        background: none; color: var(--beacon); border: 0;
-        font: 700 .9rem/1 var(--sans); text-decoration: underline; text-underline-offset: 3px;
-        cursor: pointer;
-      }
-      .flag-list {
-        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px; margin-top: 10px;
-      }
-      .flag-list-empty {
-        grid-column: 1 / -1; padding: 16px;
-        background: var(--paper); color: var(--muted);
-        border: 2px dashed var(--line-2); border-radius: var(--r);
-        text-align: center; font-size: .92rem;
-      }
-      .flag-item {
-        min-width: 0; padding: 10px 12px;
-        background: #fff;
-        border: 2px solid var(--line); border-radius: var(--r);
-        cursor: pointer;
-      }
-      .flag-item:hover { border-color: var(--navy); background: var(--paper); }
-      .flag-item-top { display: flex; align-items: center; gap: 8px; }
-      .flag-item b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
-      .flag-item small { display: block; margin-top: 4px; color: var(--muted); font-size: .82rem; }
-      .flag-chip {
-        flex: none; padding: 3px 7px;
-        background: var(--flag-color); color: var(--flag-ink, #fff);
-        border: 2px solid var(--navy); border-radius: 4px;
-        font: 700 .72rem/1 var(--sans);
-      }
-
-      /* ---------- a flag's popup ---------- */
-      .flag-popup-title { margin: 0 0 4px; color: var(--navy); font: 400 24px/1 var(--px); }
-      .flag-popup-meta { margin: 3px 0; color: var(--muted); font-size: .85rem; }
-      .flag-popup-note { margin: 8px 0; color: var(--navy); font-size: .92rem; }
-      .flag-popup-id { color: var(--muted); font: 600 .7rem/1.3 ui-monospace, monospace; }
-      .flag-popup-delete {
-        width: 100%; min-height: 40px; margin-top: 10px; padding: 0 10px;
-        background: var(--danger-bg); color: var(--danger);
-        border: 2px solid var(--danger); border-radius: var(--r-sm);
-        box-shadow: 0 3px 0 var(--danger);
+      .fpick-label { font-size: .92rem; font-weight: 700; }
+      .fchips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .fchips .none { color: var(--muted); font-size: .88rem; }
+      .fchip, .fchip:hover, .fchip:active {
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 34px; padding: 0 6px 0 10px;
+        background: var(--sky); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: none; transform: none;
         font: 700 .88rem/1 var(--sans); cursor: pointer;
       }
-      .flag-popup-delete:active { transform: translateY(3px); box-shadow: none; }
+      .fchip .icon { width: 12px; height: 12px; }
+      .flist { border: 2px solid var(--line); border-radius: var(--r-sm); }
+      .flist:empty { display: none; }
+      .pickrow {
+        position: relative; display: flex; align-items: center; gap: 10px;
+        min-height: 48px; margin: 0; padding: 4px 10px;
+        border-top: 2px dashed var(--line); cursor: pointer;
+        font-size: .95rem; font-weight: 700;
+      }
+      .pickrow:first-child { border-top: 0; }
+      .pickrow:hover { background: var(--paper); }
+      .pickrow input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
+      .cbox {
+        width: 24px; height: 24px; flex: none;
+        display: grid; place-items: center;
+        background: #fff; color: transparent;
+        border: 2px solid var(--navy); border-radius: 4px;
+        box-shadow: inset 2px 2px 0 var(--paper);
+      }
+      .cbox .icon { width: 12px; height: 12px; }
+      .pickrow input:checked + .cbox { background: var(--beacon); color: #fff; box-shadow: none; }
+      .pickrow input:focus-visible + .cbox { outline: 3px solid var(--orange); outline-offset: 2px; }
+      .pickrow .avatar { width: 30px; height: 30px; font-size: 15px; }
+      .fmore { color: var(--muted); font-size: .86rem; }
+
+      .safe {
+        padding: 10px 12px; background: var(--gold); color: #000;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .9rem; font-weight: 700; line-height: 1.35;
+      }
+      .draft-error { color: var(--danger); font-size: .92rem; font-weight: 700; }
+      .draft-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+      .draft-actions > * { flex: 1 1 8rem; }
+
+      /* "Drop a flag": a yellow key across the pane */
+      .map-drop-row { display: grid; gap: 6px; }
+      .map-drop, .map-drop:hover {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        width: 100%; min-height: 50px; margin: 0;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 4px 0 var(--navy);
+        font: 700 1rem/1 var(--sans); cursor: pointer;
+      }
+      .map-drop:hover { background: #fff2a8; }
+      .map-drop:active { transform: translateY(4px); box-shadow: none; }
+      .map-drop.cancel { background: #fff; }
+      .map-drop[disabled] { opacity: .6; cursor: not-allowed; transform: none; box-shadow: none; }
+      .flag-count { color: var(--muted); font-size: .86rem; text-align: center; }
+      .map-privacy { color: var(--muted); font-size: .8rem; line-height: 1.45; }
 
       /* ---------- the pins (built in community-map.js) ---------- */
       .beacon-flag-icon, .approved-place-icon, .user-position-icon,
       .draft-position-icon { background: transparent; border: 0; }
       /* a flag: a square pixel head on a pole */
       .beacon-flag-pin {
-        display: flex; flex-direction: column; align-items: center;
-        width: 36px; height: 52px; justify-content: flex-end;
+        display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+        width: 36px; height: 52px;
       }
+      .beacon-flag-pin.ufind { width: 80px; }
       .flag-head {
-        width: 32px; height: 32px;
+        min-width: 32px; height: 32px; padding: 0 2px;
         display: grid; place-items: center;
         background: var(--flag-color); color: var(--flag-ink, #fff);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
       }
       .flag-head .icon { width: 24px; height: 24px; }
+      .flag-head img { display: block; width: 60px; height: 16px; margin: 0 4px; }
       .flag-pole { width: 4px; height: 16px; background: var(--navy); }
+      /* the selected flag */
+      .beacon-flag-pin.on .flag-head { outline: 3px solid #fff; box-shadow: 0 0 0 5px var(--navy); }
+      /* your own flags can be dragged */
+      .beacon-flag-icon.leaflet-marker-draggable { cursor: grab; }
       /* the draft flag: dashed and bobbing until it is submitted */
-      .draft-position-pin { --flag-color: #fff; --flag-ink: var(--navy); }
-      .draft-position-pin .flag-head {
-        border-style: dashed; animation: flag-bob 1.2s steps(2) infinite;
-      }
+      .beacon-flag-pin.draft .flag-head { border-style: dashed; animation: flag-bob 1.2s steps(2) infinite; }
       @keyframes flag-bob { 50% { transform: translateY(-3px); } }
       /* landmarks: a pixel lighthouse on a yellow tile */
       .campus-lighthouse-pin {
@@ -236,7 +313,6 @@
         background: var(--gold);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
-        transform-origin: 50% 100%; transition: transform .14s ease;
       }
       .campus-lighthouse-pin .icon { width: 16px; height: 24px; }
       /* the Campus Center: the UMass Boston logo on a white tile */
@@ -246,13 +322,8 @@
         background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
-        transform-origin: 50% 100%; transition: transform .14s ease;
       }
       .campus-umb-pin img { display: block; width: 46px; height: auto; }
-      .approved-place-icon:hover .campus-lighthouse-pin,
-      .approved-place-icon:focus .campus-lighthouse-pin,
-      .approved-place-icon:hover .campus-umb-pin,
-      .approved-place-icon:focus .campus-umb-pin { transform: translateY(-2px); }
       /* you are here: an orange pixel with a white rim */
       .user-position-dot {
         display: block; width: 18px; height: 18px;
@@ -260,23 +331,16 @@
         border: 3px solid #fff; box-shadow: 0 0 0 2px var(--navy);
       }
       @media (prefers-reduced-motion: reduce) {
-        .draft-position-pin .flag-head { animation: none; }
+        .beacon-flag-pin.draft .flag-head { animation: none; }
       }
 
-      /* ---------- smaller screens ---------- */
-      @media (max-width: 850px) {
-        .campus-map-grid { grid-template-columns: 1fr; }
-        #beaconCampusMap { height: 24rem; min-height: 24rem; }
-        .flag-panel { border-left: 0; border-top: 2px solid var(--navy); }
-        .flag-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* ---------- sizes ---------- */
+      @media (min-width: 1000px) {
+        #beaconCampusMap { height: 28rem; }
       }
       @media (max-width: 560px) {
-        .campus-map-head { align-items: stretch; flex-direction: column; gap: 10px; }
-        .campus-map-actions { justify-content: space-between; }
-        #beaconCampusMap { height: 21rem; min-height: 21rem; }
         #beaconCampusMap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
         /* 16px keeps iOS from zooming the page when a field is focused */
-        #mapFlagForm input, #mapFlagForm select, #mapFlagForm textarea { font-size: 16px; }
-        .flag-list, .flag-form-row { grid-template-columns: 1fr; }
-        .flag-item { min-height: 64px; }
+        .draftbox input, .draftbox select, .draftbox textarea { font-size: 16px; }
+        .flag-form-row { grid-template-columns: 1fr; }
       }

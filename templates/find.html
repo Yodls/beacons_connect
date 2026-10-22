@@ -145,7 +145,21 @@
       }
       .going.full { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 
-      /* ---------- the community map ---------- */
+      /* ---------- layout: map left, everything else right ---------- */
+      .meetcol { min-width: 0; }
+      @media (min-width: 1000px) {
+        .meetgrid {
+          display: grid; gap: 0 24px; align-items: start;
+          grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        }
+      }
+      /* the right-hand column is narrow, so its cards stack */
+      @media (min-width: 1000px) {
+        .meetcol .grid.two { grid-template-columns: minmax(0, 1fr); }
+      }
+      .actions .maplink { min-height: 40px; padding: 0 12px; font-size: .92rem; }
+
+      /* ---------- the campus map ---------- */
       {% include "_community_map.css" %}
 {% endblock %}
 
@@ -165,10 +179,15 @@
     <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
   </div>
 
-  {# The community map leads the page, as in the Beacon OS mockup. It sits
-     before the Matchmaking heading, so the queue form is still the first
-     <form> after <h2>Matchmaking</h2>. #}
-  {% include "_community_map.html" %}
+  {# Two columns on wide screens, as in the Beacon OS mockup: the campus map
+     on the left, matchmaking and meetups on the right. One column on phones,
+     map first. The map comes before the Matchmaking heading, so the queue
+     form is still the first <form> after <h2>Matchmaking</h2>. #}
+  <div class="meetgrid">
+  <div class="meetcol">
+    {% include "_community_map.html" %}
+  </div>
+  <div class="meetcol">
 
   <section class="sec-place">
     {{ ui.section("Matchmaking", "place", "meet") }}
@@ -387,6 +406,11 @@
                 <button type="submit" class="ghost">Open chat</button>
               </form>
             {% endif %}
+            {# Its flag on the map above, when this student may see it. #}
+            {% if post.flag %}
+              <a class="key maplink" data-flag="{{ post.flag }}"
+                 href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
+            {% endif %}
             {% if post.mine %}
               <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
                 <input type="hidden" name="back" value="find" />
@@ -400,6 +424,8 @@
       {% endfor %}
     </div>
   </section>
+  </div>
+  </div>
 {% endblock %}
 
 {% block script %}

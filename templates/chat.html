@@ -269,6 +269,14 @@
       }
       .post-actions form { margin: 0; }
       .post-actions .meta { margin-right: auto; }
+      /* "See on map": a white key that goes to the meetup's flag on Meet up */
+      .post-actions .maplink {
+        display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-size: .88rem;
+      }
+      .post-actions .maplink:hover { background: var(--paper); text-decoration: none; }
       .post-actions button[type="submit"],
       .post-actions .confirm > summary { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
 

@@ -143,3 +143,42 @@ Next** (everything you read), both from Google Fonts.
   waiting, dock or "in common".
 - `#log`, `.msg` and `.composer` rules stay in `chat.html`.
 - Each club on `/clubs` is exactly one `class="card"` element.
+
+## Campus map flags
+
+The Meet up page's map (Leaflet with OpenStreetMap tiles) shows short-lived
+flags inside the campus area.
+
+**Two kinds of flag**
+
+| | Hand-dropped flag | Event flag |
+| --- | --- | --- |
+| Made by | "Drop a flag" on the map | Posting an in-person meetup (Community Chat, Meet up, or Meet up in a friend chat) |
+| How long | 30 minutes to 8 hours, picked when dropped | Until the end of the meetup's day |
+| Who sees it | Everyone, picked friends, or one of your clubs | Only people who said they're in, until the author makes it public |
+| Counts toward the 3-flag limit | Yes | No |
+| Cancelling the meetup | n/a | Takes the flag down |
+
+Flag types: Game, Study, Social, Club, Event and **U-Find** (selling
+something on campus, with an optional price). Owners can drag their flags to
+a new spot, edit them, or take them down; nobody else can. Meetup cards in
+chats and on Meet up get a "See on map" link for anyone who can see the flag.
+
+**API** (all JSON, signed in, writes need `X-Requested-With: XMLHttpRequest`):
+`GET /api/map-flags`, `POST /api/map-flags`, `PATCH /api/map-flags/<id>`
+(send only what changed, e.g. a new `latitude`/`longitude` after a drag) and
+`DELETE /api/map-flags/<id>`.
+
+**Database.** Event flags add three columns to `map_flags` (`price`,
+`post_id`, `updated_at`), widen its CHECK constraints, and add a
+`map_flag_viewers` table for "My friend(s)". An existing database is upgraded
+automatically the first time the app serves a request, and flags are added for
+meetups that are still to come. To run the upgrade by hand (safe to repeat):
+
+```bash
+flask --app app upgrade-map-flags
+```
+
+**Map tiles.** OpenStreetMap only serves its tiles to pages opened from a web
+address, so the map is blank (with a note saying so) if a page is opened as a
+file. Running the app (`python app.py`) and visiting it in the browser works.

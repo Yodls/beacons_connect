@@ -65,6 +65,12 @@
                   {% if post.full %}disabled{% endif %}>I'm in</button>
         </form>
       {% endif %}
+      {# The meetup's flag on the campus map, for whoever may see it (the
+         people who are in, or everyone once its author made it public). #}
+      {% if post.flag %}
+        <a class="maplink" data-flag="{{ post.flag }}"
+           href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
+      {% endif %}
       {# Only for somebody going: the chat refuses anybody else, so offering
          it to them would be a door that does not open. #}
       {% if post.im_going and post.chat_id %}
