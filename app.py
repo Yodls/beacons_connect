@@ -4,6 +4,7 @@ import os
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 from uuid import uuid4
 from urllib.parse import urlsplit
@@ -52,7 +53,9 @@ from models import (
     GameQueue,
     GAME_EVENTS,
     Match,
+    MAP_FLAG_KINDS,
     MapFlag,
+    MapFlagViewer,
     MESSAGE_PARENTS,
     Message,
     PRONOUNS,
@@ -759,12 +762,14 @@ def chat_rows(kind, parent, after=0):
     going = {}
     attending = set()
     rooms = {}
+    pins = {}
     post_ids = [m.post_id for m, _ in rows if m.post_id]
     if post_ids:
         posts = {p.id: p for p in db.session.scalars(
             db.select(GamePost).where(GamePost.id.in_(post_ids)))}
         going, attending = rsvps_for(post_ids)
         rooms = chats_for(post_ids)
+        pins = flags_for(post_ids)
 
     # One query for every game mentioned, rather than one per message.
     events = {}
@@ -786,7 +791,7 @@ def chat_rows(kind, parent, after=0):
         post = posts.get(m.post_id)
         if post is not None:
             entry["post"] = post_payload(
-                post, going.get(post.id, []), post.id in attending, rooms)
+                post, going.get(post.id, []), post.id in attending, rooms, pins)
 
         if m.event:
             game = events.get(m.game_id)
@@ -860,7 +865,7 @@ def chats_for(post_ids):
 # and the card would then sit stale under somebody watching it.
 CARD_SHOWS = ("id", "game", "mode_label", "location", "when_text", "note",
               "max_players", "status", "count", "full", "im_going", "mine",
-              "chat_id")
+              "chat_id", "flag")
 
 
 def post_card_token(payload):
@@ -879,13 +884,35 @@ def post_card_token(payload):
     return f"{payload['id']}:{digest}"
 
 
-def post_payload(post, going=None, im_going=None, chats=None):
+def flags_for(post_ids):
+    """Each meetup's map flag, for a whole page in one query.
+
+    chats_for's shape: {post_id: (public_id, visibility)}. Meetups with no
+    flag (online ones, or ones whose owner took the flag down) are absent.
+    """
+    if not post_ids:
+        return {}
+    return {post_id: (public_id, visibility) for post_id, public_id, visibility
+            in db.session.execute(
+                db.select(MapFlag.post_id, MapFlag.public_id, MapFlag.visibility)
+                .where(MapFlag.post_id.in_(post_ids),
+                       MapFlag.expires_at > datetime.utcnow()))}
+
+
+def post_payload(post, going=None, im_going=None, chats=None, flags=None):
     if going is None:
         going, mine = rsvps_for([post.id])
         going = going.get(post.id, [])
         im_going = post.id in mine
     if chats is None:
         chats = chats_for([post.id])
+    if flags is None:
+        flags = flags_for([post.id])
+    # The meetup's flag, but only for someone allowed to see it: everyone
+    # once its owner made it public, otherwise the people who are in.
+    flag_id, flag_audience = flags.get(post.id, (None, None))
+    can_see_flag = flag_id is not None and (
+        flag_audience == "public" or im_going or post.author_id == current_user.id)
     data = {
         "id": post.id,
         "game": post.game,
@@ -905,6 +932,8 @@ def post_payload(post, going=None, im_going=None, chats=None):
         # than sending people round by the chats hub. None for meetups posted
         # before meetups had chats.
         "chat_id": chats.get(post.id),
+        # Its flag on the campus map, when this reader may see it.
+        "flag": flag_id if can_see_flag else None,
     }
     # Last, and from the finished dict: the card's own token is a digest of
     # what is in here, so it has to be built after the rest of it.
@@ -1372,6 +1401,7 @@ def live_cards(kind, token, parent=None, target_id=None):
     # rsvps_for and chats_for taking lists.
     going, mine = rsvps_for(ids)
     rooms = chats_for(ids)
+    pins = flags_for(ids)
 
     # Straight off the environment, not through render_template. That runs
     # every context processor, and inject_dock is six queries -- the right
@@ -1384,7 +1414,7 @@ def live_cards(kind, token, parent=None, target_id=None):
     cards = []
     for message_id, post in rows:
         card = post_payload(post, going.get(post.id, []), post.id in mine,
-                            rooms)
+                            rooms, pins)
         cards.append({
             # The message the card lives inside, so a card can be put back
             # where it belongs -- including into a message that arrived live
@@ -2775,6 +2805,7 @@ def find_game():
 
     # Once for the whole list, not once per card.
     rooms = chats_for([p.id for p in posts])
+    pins = flags_for([p.id for p in posts])
 
     return render_template(
         "find.html",
@@ -2792,7 +2823,7 @@ def find_game():
         elsewhere=elsewhere,
         other=OTHER,
         custom_max=CUSTOM_GAME_MAX,
-        posts=[post_payload(p, chats=rooms) for p in posts],
+        posts=[post_payload(p, chats=rooms, flags=pins) for p in posts],
         pairings=pairings,
     )
 
@@ -3038,6 +3069,10 @@ def post_new():
         db.session.add(said)
         # The author is the first one going.
         db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
+        # An in-person meetup goes on the campus map too, seen only by the
+        # people who are in until its author makes it public.
+        if post.mode == "inperson":
+            make_event_flag(post)
         db.session.commit()
         flash("Asked them to meet up." if here
               else "Posted to Community Chat.")
@@ -3132,6 +3167,8 @@ def post_close(post_id):
         flash("That isn't your post.")
     else:
         post.status = "closed"
+        # Its map flag comes down with it.
+        db.session.execute(db.delete(MapFlag).where(MapFlag.post_id == post.id))
         db.session.commit()
         flash(f"{post.game} cancelled.")
 
@@ -3926,20 +3963,63 @@ def onboarding():
     )
 
 
-# Campus Map: additions only; existing routes and behavior are preserved.
+# =====================================================================
+# Campus map
+# ---------------------------------------------------------------------
+# Flags on the Meet up page's map. Two kinds share one table (MapFlag):
+#   - flags a student drops by hand: up to MAP_FLAG_LIMIT at a time, each
+#     ending after a chosen duration;
+#   - event flags, dropped automatically when an in-person meetup is posted
+#     (from Community Chat, Meet up, or a friend chat). They last as long as
+#     the meetup, don't count toward the limit, and are seen only by the
+#     people who said they're in until the author makes them public.
+# Owners can move (drag) and edit their own flags; nobody else can.
+#
+# Endpoints, all JSON and all for signed-in students:
+#   GET    /api/map-flags            every flag you may see, plus picker data
+#   POST   /api/map-flags            drop a new flag
+#   PATCH  /api/map-flags/<id>       move or edit one of your flags
+#   DELETE /api/map-flags/<id>       take one of your flags down
+#
+# Existing databases are brought up to date by upgrade_map_flags_schema()
+# (also `flask --app app upgrade-map-flags`), which runs on its own the first
+# time a request reaches a process that finds the old table.
+# =====================================================================
+
+# Hand-dropped flags per student at once. Event flags are not counted.
 MAP_FLAG_LIMIT = 3
 
-
+# Every kind of flag, in the order the map offers them. models.MAP_FLAG_KINDS
+# is the list the database accepts; the two must match.
 MAP_FLAG_CATEGORIES = {
     "game": "Game",
     "study": "Study",
     "social": "Social",
     "club": "Club",
     "event": "Event",
+    "ufind": "U-Find",   # selling something on campus
 }
+assert tuple(MAP_FLAG_CATEGORIES) == MAP_FLAG_KINDS
 
-
+# Minutes a hand-dropped flag can stay up.
 MAP_FLAG_DURATIONS = {30, 60, 120, 240, 480}
+
+# Who can see a flag, as its owner can set it. An event flag starts at
+# "going" (people who are in) and can be made "public".
+HAND_FLAG_AUDIENCES = ("public", "friends", "club")
+EVENT_FLAG_AUDIENCES = ("going", "public")
+# The friend picker's ceiling, so a request cannot list the whole school.
+MAP_FLAG_FRIENDS_MAX = 50
+# U-Find asking prices, in dollars.
+MAP_FLAG_PRICE_MAX = Decimal("99999.99")
+
+# An event flag stays up until the end of its meetup's day in Boston. Times
+# here are naive UTC like the rest of the app; Boston's midnight is 04:00 or
+# 05:00 UTC depending on daylight saving, so the later one is used.
+EVENT_FLAG_DAY_END = timedelta(hours=5)
+# The landmark an event flag starts on when its location names none. The
+# author can drag it anywhere inside the campus area.
+EVENT_FLAG_DEFAULT_PLACE = "campus-center"
 
 
 MAP_FLAG_BOUNDS = {
@@ -3998,26 +4078,6 @@ def purge_expired_map_flags(now=None):
     return result.rowcount or 0
 
 
-def map_flag_payload(flag, owner_name, club_name=None):
-    return {
-        "id": flag.public_id,
-        "title": flag.title,
-        "description": flag.description or "",
-        "category": flag.category,
-        "category_label": MAP_FLAG_CATEGORIES[flag.category],
-        "visibility": flag.visibility,
-        "club_name": club_name,
-        "location_key": flag.location_key,
-        "location_name": flag.location_name,
-        "latitude": float(flag.latitude),
-        "longitude": float(flag.longitude),
-        "owner_name": owner_name,
-        "mine": flag.owner_id == current_user.id,
-        "created_at": flag.created_at.isoformat() + "Z",
-        "expires_at": flag.expires_at.isoformat() + "Z",
-    }
-
-
 def map_flag_point_is_allowed(latitude, longitude):
     """Return whether a coordinate is finite and inside the campus boundary."""
     return (
@@ -4028,27 +4088,349 @@ def map_flag_point_is_allowed(latitude, longitude):
     )
 
 
+def price_text(price):
+    """A U-Find price as people write it: "40", "12.50"; None when free."""
+    if price is None:
+        return None
+    return str(int(price)) if price == price.to_integral_value() else f"{price:.2f}"
+
+
+# ---------- event flags: one per in-person meetup ----------
+
+def place_for_location(text):
+    """The approved landmark a meetup's location names, if it names one.
+
+    The activity catalogue's locations read like "Campus Center, 2nd floor"
+    or "Clark Athletic Center", so a landmark's name inside the text is
+    enough. Returns (key, place) or (None, None).
+    """
+    folded = (text or "").lower()
+    for key, place in APPROVED_MAP_LOCATIONS.items():
+        if place["name"].lower() in folded:
+            return key, place
+    return None, None
+
+
+def event_flag_deadline(post):
+    """When a meetup's flag comes down: the end of its day, or, with no date,
+    the same horizon its chat has."""
+    if post.when_on is not None:
+        return datetime.combine(post.when_on, datetime.max.time()) + EVENT_FLAG_DAY_END
+    return (post.created_at or datetime.utcnow()) + MEETUP_CHAT_DEFAULT
+
+
+def make_event_flag(post):
+    """Drop the map flag for an in-person meetup. Called inside the
+    transaction that creates the meetup; the caller commits.
+
+    It starts on the landmark the meetup's location names (or the Campus
+    Center), seen only by the people who are in. Returns None for a meetup
+    whose day has already passed.
+    """
+    now = datetime.utcnow()
+    expires = event_flag_deadline(post)
+    if expires <= now:
+        return None
+    key, place = place_for_location(post.location)
+    if place is None:
+        place = APPROVED_MAP_LOCATIONS[EVENT_FLAG_DEFAULT_PLACE]
+    flag = MapFlag(
+        public_id=str(uuid4()),
+        owner_id=post.author_id,
+        title=post.game[:100],
+        description=(post.note or "")[:300] or None,
+        category="event",
+        visibility="going",
+        post_id=post.id,
+        location_key=key or "custom",
+        location_name=(post.location or "Campus meetup point")[:120],
+        latitude=place["latitude"],
+        longitude=place["longitude"],
+        created_at=now,
+        expires_at=expires,
+    )
+    db.session.add(flag)
+    return flag
+
+
+# ---------- what a flag looks like to the browser ----------
+
+def map_flag_payloads(rows):
+    """Payloads for a list of (flag, owner name, club name) rows.
+
+    Batched for the whole list: one query for the meetups behind event flags,
+    two for who is going, one for meetup chats and one for the friends the
+    reader shared their own flags with.
+    """
+    flags = [flag for flag, _, _ in rows]
+    post_ids = [f.post_id for f in flags if f.post_id]
+    posts = {}
+    going, mine = {}, set()
+    rooms = {}
+    if post_ids:
+        posts = {p.id: p for p in db.session.scalars(
+            db.select(GamePost).where(GamePost.id.in_(post_ids)))}
+        going, mine = rsvps_for(post_ids)
+        rooms = chats_for(post_ids)
+
+    # The friends each of *my* "My friend(s)" flags is shared with, so the
+    # editor can show who is picked. Never sent for anybody else's flag.
+    viewers = {}
+    shared = [f.id for f in flags
+              if f.visibility == "friends" and f.owner_id == current_user.id]
+    if shared:
+        for flag_id, user_id, name in db.session.execute(
+            db.select(MapFlagViewer.flag_id, User.id, User.name)
+            .join(User, User.id == MapFlagViewer.user_id)
+            .where(MapFlagViewer.flag_id.in_(shared))
+            .order_by(User.name)
+        ):
+            viewers.setdefault(flag_id, []).append({"id": user_id, "name": name})
+
+    out = []
+    for flag, owner_name, club_name in rows:
+        is_mine = flag.owner_id == current_user.id
+        event = None
+        post = posts.get(flag.post_id)
+        if post is not None:
+            names = going.get(post.id, [])
+            im_going = post.id in mine
+            event = {
+                "post_id": post.id,
+                "when": post.when_text,
+                "going": len(names),
+                "max": post.max_players,
+                "full": len(names) >= post.max_players,
+                "im_going": im_going,
+                "open": post.status == "open",
+                # The meetup's own chat, for the people in it.
+                "chat_id": rooms.get(post.id) if (im_going or is_mine) else None,
+            }
+        out.append({
+            "id": flag.public_id,
+            "title": flag.title,
+            "description": flag.description or "",
+            "category": flag.category,
+            "category_label": MAP_FLAG_CATEGORIES[flag.category],
+            "price": price_text(flag.price),
+            "visibility": flag.visibility,
+            "club_name": club_name,
+            "club_id": flag.club_id if is_mine else None,
+            "friends": viewers.get(flag.id, []) if is_mine else None,
+            "location_key": flag.location_key,
+            "location_name": flag.location_name,
+            "latitude": float(flag.latitude),
+            "longitude": float(flag.longitude),
+            "owner_name": owner_name,
+            "mine": is_mine,
+            "event": event,
+            "created_at": flag.created_at.isoformat() + "Z",
+            "updated_at": flag.updated_at.isoformat() + "Z" if flag.updated_at else None,
+            "expires_at": flag.expires_at.isoformat() + "Z",
+        })
+    return out
+
+
+def map_flag_payload(flag, owner_name, club_name=None):
+    """One flag's payload (see map_flag_payloads)."""
+    return map_flag_payloads([(flag, owner_name, club_name)])[0]
+
+
+def flag_with_names(flag):
+    """A flag's payload, looking up its owner's and club's names."""
+    owner = db.session.get(User, flag.owner_id)
+    club = db.session.get(Club, flag.club_id) if flag.club_id else None
+    return map_flag_payload(flag, owner.name if owner else "Someone",
+                            club.name if club else None)
+
+
+# ---------- reading a new flag or an edit from the browser ----------
+
+class FlagError(Exception):
+    """A message for the student, and the HTTP status to send it with."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
+def read_flag_fields(data, flag=None):
+    """Check the editable parts of a flag from a JSON body.
+
+    For a new flag (flag is None) every field is required, as it always was.
+    For an edit only the fields sent are read, so dragging a pin can send its
+    new position alone. Returns a dict of changes; raises FlagError.
+    """
+    creating = flag is None
+    event = flag is not None and flag.post_id is not None
+    changes = {}
+
+    def sent(key):
+        return creating or key in data
+
+    if sent("title"):
+        title = str(data.get("title") or "").strip()
+        if not title:
+            raise FlagError("Give the meetup a title.")
+        if len(title) > 100:
+            raise FlagError("Keep the title under 100 characters.")
+        changes["title"] = title
+    if sent("description"):
+        description = str(data.get("description") or "").strip()
+        if len(description) > 300:
+            raise FlagError("Keep the note under 300 characters.")
+        changes["description"] = description or None
+    if sent("category"):
+        category = str(data.get("category") or "")
+        if category not in MAP_FLAG_CATEGORIES:
+            raise FlagError("Choose a valid flag category.")
+        if event and category == "ufind":
+            raise FlagError("A meetup's flag can't be a U-Find listing.")
+        changes["category"] = category
+
+    # A price belongs to U-Find flags only, and goes when the kind changes.
+    kind = changes.get("category", flag.category if flag else None)
+    if kind == "ufind" and sent("price"):
+        raw = str(data.get("price") or "").strip().lstrip("$").replace(",", "")
+        if raw:
+            try:
+                price = Decimal(raw)
+            except InvalidOperation:
+                raise FlagError("Enter a price like 15 or 12.50, or leave it empty if it's free.")
+            if not price.is_finite() or price < 0 or price > MAP_FLAG_PRICE_MAX:
+                raise FlagError("Enter a price between $0 and $99,999.")
+            changes["price"] = price.quantize(Decimal("0.01"))
+        else:
+            changes["price"] = None
+    elif kind != "ufind" and "category" in changes:
+        changes["price"] = None
+
+    if sent("location_name"):
+        location_name = str(data.get("location_name") or "").strip()
+        if not location_name:
+            raise FlagError("Add a short label for the meetup location.")
+        if len(location_name) > 120:
+            raise FlagError("Keep the location label under 120 characters.")
+        changes["location_name"] = location_name
+    if sent("latitude") or sent("longitude"):
+        try:
+            latitude = float(data.get("latitude"))
+            longitude = float(data.get("longitude"))
+        except (TypeError, ValueError):
+            latitude = longitude = float("nan")
+        if not map_flag_point_is_allowed(latitude, longitude):
+            raise FlagError("Place the flag inside the shaded UMass Boston campus area.")
+        changes["latitude"] = round(latitude, 6)
+        changes["longitude"] = round(longitude, 6)
+    # Event flags end with their meetup, so only hand-dropped ones take a
+    # duration. On an edit a new duration counts from now.
+    if creating or ("duration" in data and not event):
+        try:
+            duration = int(data.get("duration", 0))
+        except (TypeError, ValueError):
+            duration = 0
+        if duration not in MAP_FLAG_DURATIONS:
+            raise FlagError("Choose a valid expiration time.")
+        changes["duration"] = duration
+
+    if sent("visibility"):
+        visibility = str(data.get("visibility") or "public")
+        if visibility not in (EVENT_FLAG_AUDIENCES if event else HAND_FLAG_AUDIENCES):
+            raise FlagError("Choose who can see this flag.")
+        changes["visibility"] = visibility
+        changes["club_id"] = None
+        changes["friend_ids"] = []
+        if visibility == "club":
+            try:
+                club_id = int(data.get("club_id"))
+            except (TypeError, ValueError):
+                raise FlagError("Choose one of your clubs.")
+            if db.session.get(ClubMember, (current_user.id, club_id)) is None:
+                raise FlagError("You can only post to a club you joined.", 403)
+            if db.session.get(Club, club_id) is None:
+                raise FlagError("That club is no longer available.")
+            changes["club_id"] = club_id
+        elif visibility == "friends":
+            picked = data.get("friend_ids")
+            if not isinstance(picked, list):
+                picked = []
+            try:
+                picked = sorted({int(x) for x in picked})
+            except (TypeError, ValueError):
+                raise FlagError("Pick friends from your list.")
+            if not picked:
+                raise FlagError("Pick at least one friend to share it with.")
+            if len(picked) > MAP_FLAG_FRIENDS_MAX:
+                raise FlagError(f"Share it with up to {MAP_FLAG_FRIENDS_MAX} friends.")
+            friends = {f["user_id"] for f in matching.active_matches(current_user.id)}
+            if not set(picked) <= friends:
+                raise FlagError("You can only share a flag with your friends.", 403)
+            changes["friend_ids"] = picked
+    return changes
+
+
+def apply_flag_changes(flag, changes, now):
+    """Write checked changes onto a flag. The flag must already have an id
+    when its friends list changes (flush a new one first)."""
+    for key in ("title", "description", "category", "price", "location_name",
+                "latitude", "longitude"):
+        if key in changes:
+            setattr(flag, key, changes[key])
+    if "latitude" in changes:
+        # Moved by hand, so it is no longer pinned to a landmark.
+        flag.location_key = "custom"
+    if "duration" in changes:
+        flag.expires_at = now + timedelta(minutes=changes["duration"])
+    if "visibility" in changes:
+        flag.visibility = changes["visibility"]
+        flag.club_id = changes["club_id"]
+        db.session.execute(
+            db.delete(MapFlagViewer).where(MapFlagViewer.flag_id == flag.id))
+        for user_id in changes["friend_ids"]:
+            db.session.add(MapFlagViewer(flag_id=flag.id, user_id=user_id))
+
+
+def from_the_map():
+    """Writes must come from the map's own script, as they always have."""
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+# ---------- the endpoints ----------
+
 @app.route("/api/map-flags")
 @login_required
 def map_flags_list():
-    """Return every active flag this student is allowed to see."""
+    """Return every active flag this student is allowed to see.
+
+    That is: public flags, your own, your clubs' flags, flags a friend shared
+    with you, and the flags of meetups you said you're in for.
+    """
     now = datetime.utcnow()
     if purge_expired_map_flags(now):
         db.session.commit()
 
-    joined_club_ids = db.select(ClubMember.club_id).where(
-        ClubMember.user_id == current_user.id
-    )
+    me = current_user.id
+    joined_club_ids = db.select(ClubMember.club_id).where(ClubMember.user_id == me)
+    shared_with_me = db.select(MapFlagViewer.flag_id).where(MapFlagViewer.user_id == me)
+    my_meetups = db.select(GamePostRsvp.post_id).where(GamePostRsvp.user_id == me)
     rows = db.session.execute(
         db.select(MapFlag, User.name, Club.name)
         .join(User, User.id == MapFlag.owner_id)
         .outerjoin(Club, Club.id == MapFlag.club_id)
+        .outerjoin(GamePost, GamePost.id == MapFlag.post_id)
         .where(
             MapFlag.expires_at > now,
+            # an event flag goes with a cancelled meetup
+            db.or_(MapFlag.post_id.is_(None), GamePost.status == "open"),
             db.or_(
                 MapFlag.visibility == "public",
-                MapFlag.owner_id == current_user.id,
+                MapFlag.owner_id == me,
                 MapFlag.club_id.in_(joined_club_ids),
+                db.and_(MapFlag.visibility == "friends",
+                        MapFlag.id.in_(shared_with_me)),
+                db.and_(MapFlag.visibility == "going",
+                        MapFlag.post_id.in_(my_meetups)),
             ),
         )
         .order_by(MapFlag.expires_at, MapFlag.id)
@@ -4056,20 +4438,26 @@ def map_flags_list():
     mine = db.session.scalar(
         db.select(db.func.count())
         .select_from(MapFlag)
-        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now)
+        .where(MapFlag.owner_id == me, MapFlag.expires_at > now,
+               MapFlag.post_id.is_(None))
     )
     clubs = db.session.execute(
         db.select(Club.id, Club.name)
         .join(ClubMember, ClubMember.club_id == Club.id)
-        .where(ClubMember.user_id == current_user.id)
+        .where(ClubMember.user_id == me)
         .order_by(Club.name)
     ).all()
+    friends = [{"id": f["user_id"], "name": f["name"]}
+               for f in matching.active_matches(me)]
+    friends.sort(key=lambda f: f["name"].lower())
 
     return jsonify({
-        "flags": [map_flag_payload(flag, owner, club) for flag, owner, club in rows],
+        "flags": map_flag_payloads(rows),
         "mine": mine,
         "limit": MAP_FLAG_LIMIT,
         "categories": MAP_FLAG_CATEGORIES,
+        # JSON objects come out sorted, so the map's order travels separately.
+        "category_order": list(MAP_FLAG_CATEGORIES),
         "durations": sorted(MAP_FLAG_DURATIONS),
         "places": [
             {"key": key, **place}
@@ -4077,6 +4465,8 @@ def map_flags_list():
         ],
         "bounds": MAP_FLAG_BOUNDS,
         "clubs": [{"id": club_id, "name": name} for club_id, name in clubs],
+        # For the "My friend(s)" picker.
+        "friends": friends,
     })
 
 
@@ -4084,58 +4474,14 @@ def map_flags_list():
 @login_required
 def map_flag_create():
     """Create one expiring flag inside the reviewed campus boundary."""
-    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+    if not from_the_map():
         return jsonify({"error": "This request must come from the campus map."}), 400
 
     data = request.get_json(silent=True) or {}
-    title = str(data.get("title", "")).strip()
-    description = str(data.get("description", "")).strip()
-    category = str(data.get("category", ""))
-    location_name = str(data.get("location_name", "")).strip()
-    visibility = str(data.get("visibility", "public"))
-
     try:
-        duration = int(data.get("duration", 0))
-    except (TypeError, ValueError):
-        duration = 0
-    try:
-        latitude = float(data.get("latitude"))
-        longitude = float(data.get("longitude"))
-    except (TypeError, ValueError):
-        latitude = longitude = float("nan")
-
-    if not title:
-        return jsonify({"error": "Give the meetup a title."}), 400
-    if len(title) > 100:
-        return jsonify({"error": "Keep the title under 100 characters."}), 400
-    if len(description) > 300:
-        return jsonify({"error": "Keep the note under 300 characters."}), 400
-    if category not in MAP_FLAG_CATEGORIES:
-        return jsonify({"error": "Choose a valid flag category."}), 400
-    if not location_name:
-        return jsonify({"error": "Add a short label for the meetup location."}), 400
-    if len(location_name) > 120:
-        return jsonify({"error": "Keep the location label under 120 characters."}), 400
-    if not map_flag_point_is_allowed(latitude, longitude):
-        return jsonify({
-            "error": "Place the flag inside the shaded UMass Boston campus area."
-        }), 400
-    if duration not in MAP_FLAG_DURATIONS:
-        return jsonify({"error": "Choose a valid expiration time."}), 400
-    if visibility not in {"public", "club"}:
-        return jsonify({"error": "Choose who can see this flag."}), 400
-
-    club = None
-    if visibility == "club":
-        try:
-            club_id = int(data.get("club_id"))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Choose one of your clubs."}), 400
-        if db.session.get(ClubMember, (current_user.id, club_id)) is None:
-            return jsonify({"error": "You can only post to a club you joined."}), 403
-        club = db.session.get(Club, club_id)
-        if club is None:
-            return jsonify({"error": "That club is no longer available."}), 400
+        changes = read_flag_fields(data)
+    except FlagError as error:
+        return jsonify({"error": error.message}), error.status
 
     now = datetime.utcnow()
     if purge_expired_map_flags(now):
@@ -4149,7 +4495,8 @@ def map_flag_create():
     active_count = db.session.scalar(
         db.select(db.func.count())
         .select_from(MapFlag)
-        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now)
+        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now,
+               MapFlag.post_id.is_(None))
     )
     if active_count >= MAP_FLAG_LIMIT:
         db.session.rollback()
@@ -4161,41 +4508,77 @@ def map_flag_create():
     flag = MapFlag(
         public_id=str(uuid4()),
         owner_id=current_user.id,
-        title=title,
-        description=description or None,
-        category=category,
-        visibility=visibility,
-        club_id=(club.id if club else None),
+        title=changes["title"],
+        category=changes["category"],
+        visibility=changes["visibility"],
         location_key="custom",
-        location_name=location_name,
-        latitude=round(latitude, 6),
-        longitude=round(longitude, 6),
+        location_name=changes["location_name"],
+        latitude=changes["latitude"],
+        longitude=changes["longitude"],
         created_at=now,
-        expires_at=now + timedelta(minutes=duration),
+        expires_at=now + timedelta(minutes=changes["duration"]),
     )
     db.session.add(flag)
+    db.session.flush()   # the friends list needs the flag's id
+    apply_flag_changes(flag, changes, now)
     db.session.commit()
 
     return jsonify({
-        "flag": map_flag_payload(flag, current_user.name, club.name if club else None),
+        "flag": flag_with_names(flag),
         "mine": active_count + 1,
         "limit": MAP_FLAG_LIMIT,
     }), 201
 
 
-@app.route("/api/map-flags/<uuid:public_id>", methods=["DELETE"])
-@login_required
-def map_flag_delete(public_id):
-    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
-        return jsonify({"error": "This request must come from the campus map."}), 400
-
+def owned_flag(public_id, verb):
+    """One of the current student's live flags, or (error response)."""
     flag = db.session.scalar(
         db.select(MapFlag).filter_by(public_id=str(public_id))
     )
-    if flag is None:
-        return jsonify({"error": "That flag has already expired or was removed."}), 404
+    if flag is None or flag.expires_at <= datetime.utcnow():
+        return None, (jsonify({"error": "That flag has already expired or was removed."}), 404)
     if flag.owner_id != current_user.id:
-        return jsonify({"error": "You can only remove your own flags."}), 403
+        return None, (jsonify({"error": f"You can only {verb} your own flags."}), 403)
+    return flag, None
+
+
+@app.route("/api/map-flags/<uuid:public_id>", methods=["PATCH"])
+@login_required
+def map_flag_update(public_id):
+    """Move or edit one of your flags. Send only what changed: a dragged pin
+    sends its new latitude and longitude; the editor sends the whole form."""
+    if not from_the_map():
+        return jsonify({"error": "This request must come from the campus map."}), 400
+
+    flag, refused = owned_flag(public_id, "change")
+    if refused:
+        return refused
+
+    data = request.get_json(silent=True) or {}
+    try:
+        changes = read_flag_fields(data, flag)
+    except FlagError as error:
+        return jsonify({"error": error.message}), error.status
+    if not changes:
+        return jsonify({"error": "There was nothing to change."}), 400
+
+    now = datetime.utcnow()
+    apply_flag_changes(flag, changes, now)
+    flag.updated_at = now
+    db.session.commit()
+    return jsonify({"flag": flag_with_names(flag)})
+
+
+@app.route("/api/map-flags/<uuid:public_id>", methods=["DELETE"])
+@login_required
+def map_flag_delete(public_id):
+    """Take one of your flags down. For an event flag the meetup stays."""
+    if not from_the_map():
+        return jsonify({"error": "This request must come from the campus map."}), 400
+
+    flag, refused = owned_flag(public_id, "remove")
+    if refused:
+        return refused
 
     db.session.delete(flag)
     db.session.commit()
@@ -4210,14 +4593,119 @@ def purge_expired_flags_command():
     print(f"Removed {removed} expired map flag(s).")
 
 
+# ---------- bringing an existing database up to date ----------
+
+# The CHECK constraints this version widened. On an older table each is
+# replaced with the model's own text, so the two cannot disagree.
+MAP_FLAG_WIDENED_CHECKS = ("ck_map_flag_category", "ck_map_flag_visibility",
+                           "ck_map_flag_audience", "ck_map_flag_price")
+# Any number, as long as nothing else in the app uses it: serialises the
+# upgrade when several workers start at once.
+MAP_SCHEMA_LOCK = 4207311
+
+_map_schema_checked = False
+
+
+def map_flags_need_upgrade(inspector):
+    """True when map_flags exists but predates event flags."""
+    if not inspector.has_table("map_flags"):
+        return False
+    columns = {c["name"] for c in inspector.get_columns("map_flags")}
+    return (not {"price", "post_id", "updated_at"} <= columns
+            or not inspector.has_table("map_flag_viewers"))
+
+
+def upgrade_map_flags_schema(force=False):
+    """Bring an older map_flags table up to this version. Safe to repeat.
+
+    Adds the price, post_id and updated_at columns, widens the CHECK
+    constraints (U-Find; friends and going audiences), adds the one-flag-per-
+    meetup rule and the map_flag_viewers table, then drops a flag for every
+    open in-person meetup that is still to come. Leaves every existing row as
+    it was. Returns a short report, or None when nothing needed doing.
+    """
+    from sqlalchemy import inspect, text
+
+    with db.engine.begin() as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MAP_SCHEMA_LOCK})
+        inspector = inspect(conn)
+        if not inspector.has_table("map_flags"):
+            return None   # a fresh database: create_all builds it whole
+        if not (force or map_flags_need_upgrade(inspector)):
+            return None
+
+        columns = {c["name"] for c in inspector.get_columns("map_flags")}
+        added_post_link = "post_id" not in columns
+        if "price" not in columns:
+            conn.execute(text("ALTER TABLE map_flags ADD COLUMN price NUMERIC(7, 2)"))
+        if added_post_link:
+            conn.execute(text(
+                "ALTER TABLE map_flags ADD COLUMN post_id INTEGER "
+                "REFERENCES game_posts (id) ON DELETE CASCADE"))
+        if "updated_at" not in columns:
+            conn.execute(text("ALTER TABLE map_flags ADD COLUMN updated_at TIMESTAMP WITHOUT TIME ZONE"))
+
+        for constraint in MapFlag.__table__.constraints:
+            if getattr(constraint, "name", None) in MAP_FLAG_WIDENED_CHECKS:
+                conn.execute(text(f"ALTER TABLE map_flags DROP CONSTRAINT IF EXISTS {constraint.name}"))
+                conn.execute(text(f"ALTER TABLE map_flags ADD CONSTRAINT {constraint.name} "
+                                  f"CHECK ({constraint.sqltext})"))
+        uniques = {u["name"] for u in inspector.get_unique_constraints("map_flags")}
+        if "uq_map_flag_post" not in uniques:
+            conn.execute(text("ALTER TABLE map_flags ADD CONSTRAINT uq_map_flag_post UNIQUE (post_id)"))
+        MapFlagViewer.__table__.create(bind=conn, checkfirst=True)
+
+    # Meetups posted before this version get their flags now -- once, when
+    # the link column first appears, so a flag somebody later took down is
+    # never put back.
+    added = 0
+    if added_post_link:
+        waiting = db.session.scalars(
+            db.select(GamePost).where(GamePost.mode == "inperson",
+                                      GamePost.status == "open")
+        ).all()
+        for post in waiting:
+            if make_event_flag(post) is not None:
+                added += 1
+        db.session.commit()
+    return f"map_flags upgraded; {added} event flag(s) added for upcoming meetups."
+
+
+@app.before_request
+def map_schema_ready():
+    """Upgrade an older map table the first time this process serves a
+    request, so deploying this version needs no manual step. Runs its checks
+    once per process; a fresh database is left to create_all."""
+    global _map_schema_checked
+    if _map_schema_checked:
+        return None
+    _map_schema_checked = True
+    try:
+        report = upgrade_map_flags_schema()
+        if report:
+            app.logger.info(report)
+    except Exception:   # never take the site down over the map
+        db.session.rollback()
+        app.logger.exception("Could not upgrade map_flags; run `flask upgrade-map-flags`.")
+    return None
+
+
+@app.cli.command("upgrade-map-flags")
+def upgrade_map_flags_command():
+    """Bring map_flags up to date (event flags, U-Find, friends). Safe to repeat."""
+    report = upgrade_map_flags_schema(force=True)
+    print(report or "Nothing to upgrade: map_flags is missing (run the app once) "
+                    "or already up to date.")
+
+
 @app.cli.command("init-map-table")
 def init_map_table_command():
-    """Create only map_flags; preserve every existing table and row."""
+    """Create only map_flags (and map_flag_viewers); preserve every existing table and row."""
     import click
     from sqlalchemy import inspect
 
     inspector = inspect(db.engine)
-    missing = [name for name in ("user", "clubs")
+    missing = [name for name in ("user", "clubs", "game_posts")
                if not inspector.has_table(name)]
     if missing:
         raise click.ClickException(
@@ -4226,10 +4714,14 @@ def init_map_table_command():
             ". No tables or data were changed."
         )
     MapFlag.__table__.create(bind=db.engine, checkfirst=True)
-    click.echo("Map table ready. Existing tables and rows were left intact.")
+    MapFlagViewer.__table__.create(bind=db.engine, checkfirst=True)
+    upgrade_map_flags_schema()
+    click.echo("Map tables ready. Existing tables and rows were left intact.")
 
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        # create_all adds missing tables but never changes existing ones.
+        upgrade_map_flags_schema()
     app.run()

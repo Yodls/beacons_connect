@@ -780,8 +780,30 @@ class Notice(db.Model):
         return self.read_at is not None
 
 
+# What a map flag can be, and who may see it. Kept beside the CHECK
+# constraints below so the values the database accepts and the ones the app
+# offers cannot drift apart; app.py reads these for its labels and checks.
+MAP_FLAG_KINDS = ("game", "study", "social", "club", "event", "ufind")
+MAP_FLAG_AUDIENCES = (
+    "public",    # every signed-in student
+    "club",      # members of one club (club_id)
+    "friends",   # the friends the owner picked (map_flag_viewers)
+    "going",     # people who said they're in for the meetup (post_id)
+)
+
+
 class MapFlag(db.Model):
-    """A short-lived meetup beacon inside the approved campus boundary."""
+    """A short-lived meetup beacon inside the approved campus boundary.
+
+    Two kinds share this table:
+      - a flag a student drops by hand on the map (post_id is null), which
+        counts toward their limit and ends after a chosen duration;
+      - an event flag (post_id set), dropped automatically when somebody posts
+        an in-person meetup. It lives as long as the meetup, does not count
+        toward the limit, and starts out visible only to the people who said
+        they're in ("going") until its owner makes it public.
+    Either kind can be moved and edited by its owner and nobody else.
+    """
 
     __tablename__ = "map_flags"
 
@@ -794,37 +816,78 @@ class MapFlag(db.Model):
     title = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(300))
     category = db.Column(db.String(20), nullable=False)
+    # U-Find (selling something) only: the asking price. Null means free or
+    # not given; the CHECK below keeps it off every other kind of flag.
+    price = db.Column(db.Numeric(7, 2))
     visibility = db.Column(db.String(12), nullable=False, default="public")
     club_id = db.Column(
         db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE")
+    )
+    # The meetup this flag belongs to, for event flags. Deleting the meetup
+    # deletes its flag; one meetup has at most one flag.
+    post_id = db.Column(
+        db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE")
     )
     location_key = db.Column(db.String(40), nullable=False)
     location_name = db.Column(db.String(120), nullable=False)
     latitude = db.Column(db.Numeric(9, 6), nullable=False)
     longitude = db.Column(db.Numeric(9, 6), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # When the owner last moved or edited it. Null until they do.
+    updated_at = db.Column(db.DateTime)
     expires_at = db.Column(db.DateTime, nullable=False)
 
     __table_args__ = (
         db.CheckConstraint(
-            "category IN ('game', 'study', 'social', 'club', 'event')",
+            "category IN (" + ", ".join(f"'{k}'" for k in MAP_FLAG_KINDS) + ")",
             name="ck_map_flag_category",
         ),
         db.CheckConstraint(
-            "visibility IN ('public', 'club')",
+            "visibility IN (" + ", ".join(f"'{a}'" for a in MAP_FLAG_AUDIENCES) + ")",
             name="ck_map_flag_visibility",
         ),
+        # Each audience carries exactly what it needs: a club for 'club', a
+        # meetup for 'going', and nothing extra for the others. ('friends'
+        # keeps its list in map_flag_viewers.)
         db.CheckConstraint(
             "(visibility = 'public' AND club_id IS NULL) OR "
-            "(visibility = 'club' AND club_id IS NOT NULL)",
+            "(visibility = 'club' AND club_id IS NOT NULL) OR "
+            "(visibility = 'friends' AND club_id IS NULL) OR "
+            "(visibility = 'going' AND club_id IS NULL AND post_id IS NOT NULL)",
             name="ck_map_flag_audience",
+        ),
+        db.CheckConstraint(
+            "price IS NULL OR (category = 'ufind' AND price >= 0)",
+            name="ck_map_flag_price",
         ),
         db.CheckConstraint(
             "expires_at > created_at", name="ck_map_flag_expiration"
         ),
+        db.UniqueConstraint("post_id", name="uq_map_flag_post"),
         db.Index("ix_map_flags_expires", "expires_at"),
         db.Index("ix_map_flags_owner_expires", "owner_id", "expires_at"),
         db.Index("ix_map_flags_club_expires", "club_id", "expires_at"),
     )
 
 
+class MapFlagViewer(db.Model):
+    """Who may see a flag shared with "My friend(s)".
+
+    One row per friend the owner picked. The owner always sees their own
+    flag, so they are never listed here. Rows go when the flag goes.
+    """
+
+    __tablename__ = "map_flag_viewers"
+
+    flag_id = db.Column(
+        db.Integer, db.ForeignKey("map_flags.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (
+        # "Which flags were shared with me?" is the question the map asks.
+        db.Index("ix_map_flag_viewers_user", "user_id"),
+    )
