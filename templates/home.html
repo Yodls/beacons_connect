@@ -10,7 +10,12 @@
       .home { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
       .home > section, .home > .win, .home > .waiting { margin-top: 0; }
       @media (min-width: 900px) {
-        .home { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+        /* No align-items here on purpose. The default (stretch) is what makes
+           the two columns end on the same line: both are white windows, so
+           `start` left whichever had less in it stopping short -- a short
+           list of rows beside much taller cards, a ragged edge. The
+           shorter one carries the slack, whichever side that turns out to be. */
+        .home { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
         .hello, .home > .waiting, .quick { grid-column: 1 / -1; }
         .home .grid.two { grid-template-columns: minmax(0, 1fr); }
       }
@@ -173,8 +178,8 @@
           {% if chats %}
             {# The total, like the band below. This counted the rows on the
                page, which was the same number until the page started showing
-               only the five most recent -- and then greeted somebody with
-               163 conversations by telling them they had five. #}
+               only the most recent handful -- and then greeted somebody
+               with 163 conversations by telling them they had five. #}
             {{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }} open.
           {% else %}
             Your conversations will live here.
@@ -209,7 +214,7 @@
 
   <section class="sec-chat">
     {# The count is the real total, not the number of rows below it: this
-       page draws the five most recent, and an account with seventy
+       page draws the most recent handful, and an account with seventy
        conversations learns nothing from a band that says 5. #}
     {{ ui.section("My chats", "chat", "talk", chat_total) }}
     <div class="grid">

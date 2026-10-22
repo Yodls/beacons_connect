@@ -76,7 +76,14 @@ CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
 # How many people to suggest in the home rail. The friends page asks for more.
-RECOMMEND_LIMIT = 4
+#
+# Paired with HOME_CHATS below, and the pairing is the reason for the number.
+# The two sit side by side on a wide screen and stretch to the taller of them,
+# so three cards beside six conversation rows come out within about fifty
+# pixels of each other and the grid covers the rest. Four left the chat
+# column with a slab of white under it. Change one of these two and look at
+# the home page, because nothing in the suite can see a layout.
+RECOMMEND_LIMIT = 3
 GENDER_BONUS = 2.0
 GENDERS = {
     "man": "Man",
@@ -340,7 +347,11 @@ def inject_dock():
     }
 
 
-RETURN_TO = {"matches", "clubs", "chats", "welcome"}
+# Where a form is allowed to send you afterwards. "index" is here because the
+# chat page can now leave a club or close a pairing, and the page you were on
+# stops being readable the moment you do -- home, where the chat list is, is
+# the only sensible place to land.
+RETURN_TO = {"matches", "clubs", "chats", "welcome", "index", "find_game"}
 
 
 def joined_clubs(user_id):
@@ -362,9 +373,19 @@ def joined_chats(user_id):
     ).all()
 
 
-def back_to():
-    target = request.form.get("back", "matches")
-    return redirect(url_for(target if target in RETURN_TO else "matches"))
+def back_to(default="matches"):
+    """Where a posted `back` says to go, or the caller's own fallback.
+
+    The default is the caller's because the right fallback differs: a club
+    left from /clubs belongs back on /clubs, a pairing closed from /find
+    belongs back on /find. An unknown or missing value falls to the default
+    rather than to a fixed page, and the default is checked too, so a typo
+    here cannot build a url_for for a route that does not exist.
+    """
+    target = request.form.get("back") or default
+    if target not in RETURN_TO:
+        target = default if default in RETURN_TO else "matches"
+    return redirect(url_for(target))
 
 
 def back_to_people():
@@ -651,8 +672,13 @@ def chat_target(kind, target_id):
 
     if kind == "pair":
         pairing = db.session.get(GamePairing, target_id)
-        if pairing is None or current_user.id not in (pairing.user_lo,
-                                                      pairing.user_hi):
+        # Closed as well as yours. This used to ask only whether you were one
+        # of the two, so closing a pairing dropped it off the chat list and
+        # left the page itself open -- a conversation both of you had agreed
+        # was over, still reachable by anyone who had the link in their
+        # history. Closed now means closed in both places.
+        if (pairing is None or pairing.status != "open"
+                or current_user.id not in (pairing.user_lo, pairing.user_hi)):
             return None, None
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
@@ -1083,20 +1109,22 @@ def chat_list():
         entry["when"] = when
 
     # Sorted here and sliced by the caller, never the other way round: the
-    # five most recent is a different answer from the first five found.
+    # the most recent few is a different answer from the first few found.
     entries.sort(key=lambda e: (e["when"] is not None, e["when"]), reverse=True)
     return entries
 
 
 # How many conversations the home page shows before it stops. Every chat a
 # student has was burying everything below it -- 72 rows on one account here.
-HOME_CHATS = 5
+# Six rather than five to match the suggestion rail beside it: see
+# RECOMMEND_LIMIT, which is the other half of that pairing.
+HOME_CHATS = 6
 
 
 @app.route("/chats/all")
 @login_required
 def all_chats():
-    """Every conversation, for when five is not the one you wanted."""
+    """Every conversation, for when the recent few are not the one you wanted."""
     return render_template("allchats.html", chats=chat_list())
 
 
@@ -1107,8 +1135,8 @@ def index():
     return render_template(
         "home.html",
         chats=everything[:HOME_CHATS],
-        # The real number, not the number drawn. A band that says 5 above
-        # five rows tells a student with seventy conversations nothing.
+        # The real number, not the number drawn. A band that counts the rows
+        # it drew tells a student with seventy conversations nothing.
         chat_total=len(everything),
         recs=matching.recommend_people(
             current_user.id, limit=RECOMMEND_LIMIT, gender_bonus=GENDER_BONUS
@@ -3014,12 +3042,27 @@ def pairing_close(pairing_id):
 
     if pairing is None or current_user.id not in (pairing.user_lo, pairing.user_hi):
         flash("That isn't your pairing.")
-    else:
-        pairing.status = "closed"
-        db.session.commit()
-        flash("Pairing closed.")
+        return back_to("find_game")
 
-    return redirect(url_for("find_game"))
+    other_id = (pairing.user_hi if pairing.user_lo == current_user.id
+                else pairing.user_lo)
+
+    # Not while you are still playing. The lobby links a game to its chat --
+    # the board lives nowhere else -- and game_home only resolves an *open*
+    # pairing, falling back to a friend chat two strangers do not have. So
+    # closing here would leave both of you with a board you cannot open and a
+    # "one game at a time" rule you cannot clear, which is exactly the frozen
+    # state a pair of students got stuck in before. Resigning is the way out,
+    # and it is a button on the board.
+    playing = live_game_with(other_id)
+    if playing is not None:
+        flash("Finish or resign your game first, then close the chat.")
+        return back_to("find_game")
+
+    pairing.status = "closed"
+    db.session.commit()
+    flash("Chat closed.")
+    return back_to("find_game")
 
 
 @app.route("/posts/new", methods=["POST"])

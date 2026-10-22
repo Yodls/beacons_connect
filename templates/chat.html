@@ -51,6 +51,21 @@
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
       }
+      /* The way out, where the header has one. Closed it is another key on
+         the bar; open, the question needs a line of its own -- inside a flex
+         row it would otherwise be squeezed to a word a line. So the bar is
+         allowed to wrap and the open panel takes the whole of the next row.
+         Nothing else here wraps: .grow has min-width 0 and shrinks instead. */
+      .chathead { flex-wrap: wrap; }
+      .chathead .confirm { flex: none; }
+      .chathead .confirm[open] { flex: 1 1 100%; }
+      .chathead .confirm-body { max-width: 460px; }
+      /* The header draws every submit as a gold key, and that selector
+         outranks button.leave-yes -- so the one button here you cannot undo
+         came out looking like the friendly one. Said again at the header's
+         own weight to put the warning colour back. */
+      .chathead button.leave-yes { background: var(--danger); color: #fff; }
+      .chathead button.leave-yes:hover { background: #8a2119; }
       /* When nothing sits between the header and the log, the two join into
          one window: title bar on top, conversation underneath. */
       .chathead:has(+ .gamewrap:not(.playing)) {
@@ -653,6 +668,43 @@
           <button type="submit" class="ghost">Add friend</button>
         </form>
       {% endif %}
+    {% endif %}
+
+    {# The way out of this conversation, for the two kinds that have one.
+       A friend chat has none on purpose -- it belongs to the friendship, and
+       Remove friend on /matches is what ends that -- and nobody leaves the
+       campus room, which has no membership row to delete. A group chat's
+       controls stay in its roster below, because leaving one can mean naming
+       a successor or deleting it outright, which a header button cannot say.
+
+       Both ask first, through the same <details> the Leave Meetup button
+       uses, so neither needs JavaScript and clicking the summary again puts
+       it away. The wording says what actually happens: a club's hub and its
+       membership are one row, and a pairing's status is one row shared by
+       two people. #}
+    {% if kind in ("club", "pair") %}
+      <details class="confirm">
+        <summary class="leave">{{ "Leave club" if kind == "club" else "Close chat" }}</summary>
+        <div class="confirm-body">
+          <span class="confirm-ask">
+            {% if kind == "club" %}
+              Leave {{ title }}? You will lose this hub and have to join the
+              club again to get it back.
+            {% else %}
+              Close this chat? It closes for the other person too, and
+              neither of you will be able to open it again.
+            {% endif %}
+          </span>
+          <span class="confirm-row">
+            <form method="post" action="{% if kind == 'club' %}{{ url_for('leave_club', club_id=target_id) }}{% else %}{{ url_for('pairing_close', pairing_id=target_id) }}{% endif %}">
+              <input type="hidden" name="back" value="index" />
+              <button type="submit" class="leave-yes">
+                {{ "Yes, leave" if kind == "club" else "Yes, close" }}</button>
+            </form>
+            <button type="button" class="confirm-no">Cancel</button>
+          </span>
+        </div>
+      </details>
     {% endif %}
   </div>
 
