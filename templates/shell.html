@@ -16,33 +16,42 @@
     panel carry only icons and short labels, so that audit still holds.
 #}
 {% block content %}
+  {# ---------- the menu bar ----------
+     Brand lockup on the left: the Beacons badge, the BeaconsConnect
+     wordmark, and "Connect on Campus @" with the UMass Boston logo under it.
+     Search, the bell and the account menu sit on the right.
+
+     Everything in here is inside the slice /people's privacy audit reads, so
+     no class, id or word may contain card, pill, score, shared, waiting or
+     dock, and nothing may say "in common". #}
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="{{ url_for('index') }}">
-        <img class="brand-mark" width="36" height="36"
+      <a class="brand" href="{{ url_for('index') }}"
+         aria-label="BeaconsConnect, UMass Boston, home">
+        <img class="brand-mark" width="46" height="46"
              src="{{ url_for('static', filename='logo.webp') }}"
-             alt="Beacons Connect" />
-        <span>
-          <span class="brand-name">Beacons Connect</span>
-          <span class="brand-sub">UMass Boston</span>
+             alt="" />
+        <span class="brand-text">
+          <span class="brand-name">BeaconsConnect</span>
+          <span class="brand-sub">Connect on Campus @<img class="brand-umb"
+                width="46" height="22" alt=""
+                src="{{ url_for('static', filename='bc-umb-logo.svg') }}" /></span>
         </span>
       </a>
-
-      <span class="campus" title="Campus: UMass Boston">
-        <b>UMB</b>
-        <span>Campus<br />selected</span>
-      </span>
 
       <span class="topbar-gap"></span>
 
       {# Navigates to the full search page. The friends panel has its own
-         typeahead on a different parameter, which answers in place. #}
+         typeahead on a different parameter, which answers in place. Shown
+         as a field on wide screens; phones get the icon link below. #}
       <form class="find" method="get" action="{{ url_for('people') }}">
         {{ ui.icon("search") }}
         <input name="q" maxlength="120" placeholder="Find people"
                aria-label="Find people" />
         <button type="submit">Go</button>
       </form>
+      <a class="iconbtn findlink" href="{{ url_for('people') }}"
+         aria-label="Find people">{{ ui.icon("search") }}</a>
 
       {# The bell, to the left of the profile menu. Before the friends panel
          in document order, which keeps it out of the slice the dock audits
