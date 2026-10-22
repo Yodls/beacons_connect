@@ -398,6 +398,9 @@
       /* unread rows: a pale tint and a navy marker on the left */
       .bell-item.unseen { background: var(--friend-bg); box-shadow: inset 4px 0 0 var(--beacon); }
       .bell-item form { margin: 0; }
+      /* the tick sits beside the notice, even when Accept and Decline take
+         the row under it */
+      .bell-item > form:has(.bell-seen) { grid-column: 2; grid-row: 1; }
       button.bell-open, button.bell-open:hover, button.bell-open:active {
         display: block; width: 100%; min-height: 0; padding: .6rem 0;
         background: none; border: 0; border-radius: 0; box-shadow: none;
@@ -970,6 +973,7 @@
            the account menu, so the bar drops its own search icon */
         .findlink { display: none; }
         .brand-mark { width: 38px; height: 38px; }
+        .brandpanel-name { font-size: 44px; }
       }
       @media (min-width: 900px) {
         .grid.two { grid-template-columns: 1fr 1fr; }
