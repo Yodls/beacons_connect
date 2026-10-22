@@ -1,103 +1,146 @@
+{#
+  The campus map (Leaflet + OpenStreetMap), drawn as a Beacon OS window.
+
+  How it works (static/community-map.js does all of this by id):
+    - Flags come from data-flags-url. Tap one to see it in the card under the
+      map (#mapFlagDetail).
+    - "Drop a flag" starts placing: tap the map and a dashed draft flag
+      appears with the editor (#mapFlagForm). Nothing is saved until "Submit
+      flag". The draft can be dragged, or moved by tapping somewhere else.
+    - Your own flags can be dragged straight on the map, and edited or taken
+      down from their card.
+    - Meetups posted in Community Chat, on this page or in a friend chat drop
+      their own event flag. Only the people who said they're in can see it,
+      until its author makes it public from the card.
+
+  data- attributes give the script what only the server knows: the API, the
+  two logo images, where a meetup's chat and "I'm in" live (with 0 standing in
+  for the id), and a flag to open straight away (?flag=<id>, used by the "See
+  on map" links on meetup cards).
+
+  Keep every id and data- attribute here: the script depends on them. Styles
+  are in _community_map.css, included by find.html's page style.
+#}
+{% import "_ui.html" as ui %}
 <section class="campus-map-card" id="campusMapCard"
-         data-flags-url="{{ url_for('map_flags_list') }}">
-  <header class="campus-map-head">
-    <div>
-      <span class="campus-map-kicker">Meet on campus</span>
-      <h2>Community map</h2>
-      <p>See active plans or place a temporary flag anywhere inside the campus safety area.</p>
-    </div>
-    <div class="campus-map-actions">
-      <span class="flag-count" id="mapFlagCount">Loading flags&hellip;</span>
-      <button class="map-button map-button-ghost" id="mapLocate" type="button">
-        Locate me
-      </button>
-    </div>
-  </header>
-
-  <div class="campus-map-grid">
-    <div class="campus-map-stage">
-      <div id="beaconCampusMap" role="application"
-           aria-label="Interactive map for UMass Boston meetup flags"></div>
-      <p class="map-status" id="mapStatus" aria-live="polite">
-        Click inside the shaded campus area to choose a flag position.
-      </p>
-    </div>
-
-    <aside class="flag-panel" aria-labelledby="flagFormTitle">
-      <div class="flag-panel-title">
-        <div>
-          <span class="campus-map-kicker">New meetup</span>
-          <h3 id="flagFormTitle">Drop a flag</h3>
-        </div>
-        <span class="flag-limit">Maximum 3 active</span>
-      </div>
-
-      <form id="mapFlagForm" data-full>
-        <label>
-          Title
-          <input name="title" maxlength="100" placeholder="Pickup frisbee after class" required />
-        </label>
-
-        <div class="flag-form-row">
-          <label>
-            Type
-            <select name="category" required></select>
-          </label>
-          <label>
-            Expires after
-            <select name="duration" required></select>
-          </label>
-        </div>
-
-        <div class="map-point-picker">
-          <span class="map-field-label">Flag position</span>
-          <strong id="mapFlagPoint">Choose a point on the map</strong>
-          <small>You can drag the preview pin to adjust it.</small>
-          <input name="latitude" id="mapFlagLatitude" type="hidden" />
-          <input name="longitude" id="mapFlagLongitude" type="hidden" />
-        </div>
-
-        <label>
-          Location label
-          <input name="location_name" id="mapFlagLocationName" maxlength="120"
-                 placeholder="Campus Center lawn" required />
-        </label>
-
-        <div class="flag-form-row flag-audience-row">
-          <label>
-            Visibility
-            <select name="visibility" id="mapFlagVisibility">
-              <option value="public">All students</option>
-            </select>
-          </label>
-          <label id="mapFlagClubWrap" hidden>
-            Club
-            <select name="club_id" id="mapFlagClub"></select>
-          </label>
-        </div>
-
-        <label>
-          Note <span class="optional">optional</span>
-          <textarea name="description" maxlength="300"
-                    placeholder="How to find the group, what to bring, or who can join"></textarea>
-        </label>
-
-        <button class="map-button map-button-primary" type="submit" id="mapFlagSubmit">
-          Place temporary flag
-        </button>
-      </form>
-
-      <p class="map-privacy">
-        Your GPS position stays in this browser. Only the flag position you choose is saved.
-      </p>
-    </aside>
+         data-flags-url="{{ url_for('map_flags_list') }}"
+         data-umb-logo="{{ url_for('static', filename='bc-umb-logo.svg') }}"
+         data-ufind-logo="{{ url_for('static', filename='ufind.svg') }}"
+         data-chat-url="{{ url_for('chat', kind='group', target_id=0) }}"
+         data-rsvp-url="{{ url_for('post_rsvp', post_id=0) }}"
+         data-focus="{{ request.args.get('flag', '') }}">
+  {# Title bar, coloured for meet ups (navy), with how many flags you can see. #}
+  <div class="bar campus-map-bar">
+    {{ ui.icon("meet") }}<h2>Campus map</h2><span class="grip"></span>
+    <span class="count" id="mapFlagTotal" title="Flags you can see">0</span>
   </div>
 
-  <div class="flag-feed">
-    <div class="flag-feed-head">
-      <h3>Active campus flags</h3>
-      <button class="map-text-button" id="mapRefresh" type="button">Refresh</button>
+  {# The map itself, with the locate button and status line floating on it. #}
+  <div class="campus-map-stage" id="mapStage">
+    <div id="beaconCampusMap" role="application"
+         aria-label="Interactive map of UMass Boston with meetup flags"></div>
+    <button class="iconbtn map-locate" id="mapLocate" type="button"
+            aria-label="Show where I am" title="Show where I am">{{ ui.icon("locate") }}</button>
+    <p class="map-status" id="mapStatus" aria-live="polite">Loading the campus map&hellip;</p>
+  </div>
+
+  <div class="campus-map-pane">
+    {# Key to the pin colours; filled in from the flag types the API sends. #}
+    <ul class="map-legend" id="mapLegend" aria-label="Map key"></ul>
+
+    {# The flag you tapped: what, where, who, and what you can do with it. #}
+    <div id="mapFlagDetail" aria-live="polite"></div>
+
+    {# The draft flag's editor. Hidden until you drop a flag or edit one. #}
+    {# data-full: the page-swapping script (_enhance.html) leaves this form
+       alone; the map script sends it itself. #}
+    <form class="draftbox" id="mapFlagForm" data-full hidden novalidate>
+      <div class="draft-head">
+        <h3 id="flagFormTitle">New flag</h3>
+        <span class="tag" id="mapDraftTag">Draft</span>
+      </div>
+      <p class="draft-note" id="mapDraftNote">Only you can see this until you submit
+        it. Tap the map or drag the dashed flag to move it.</p>
+
+      <fieldset class="draft-kinds" id="mapKinds">
+        <legend>Type</legend>
+        {# Radio chips, one per flag type, built by the script. #}
+        <div class="kind-chips" id="mapKindChips"></div>
+      </fieldset>
+
+      <label><span id="mapTitleLabel">Title</span>
+        <input name="title" maxlength="100" required autocomplete="off"
+               placeholder="Pickup frisbee after class" />
+      </label>
+
+      {# U-Find only. #}
+      <label id="mapPriceWrap" hidden>Price
+        <span class="price-field"><span aria-hidden="true">$</span><input name="price"
+          inputmode="decimal" maxlength="9" autocomplete="off"
+          placeholder="Leave empty if it's free" /></span>
+      </label>
+
+      {# Filled in by the script as the draft flag moves. #}
+      <div class="map-point-picker">
+        <span class="map-field-label">Flag position</span>
+        <strong id="mapFlagPoint">Choose a point on the map</strong>
+        <input name="latitude" id="mapFlagLatitude" type="hidden" />
+        <input name="longitude" id="mapFlagLongitude" type="hidden" />
+      </div>
+
+      <label>Location label
+        <input name="location_name" id="mapFlagLocationName" maxlength="120" required
+               autocomplete="off" placeholder="Campus Center lawn" />
+      </label>
+
+      <div class="flag-form-row">
+        {# Hand-dropped flags only; a meetup's flag ends with the meetup. #}
+        <label id="mapDurationWrap">Expires after
+          <select name="duration"></select>
+        </label>
+        <label>Who can see my flag?
+          <select name="visibility" id="mapFlagVisibility"></select>
+        </label>
+      </div>
+
+      {# "My friend(s)": a short list, a search for everyone else, and chips
+         for who is picked. #}
+      <div class="fpick" id="mapFriendPick" hidden>
+        <p class="fpick-label" id="mapFriendLabel">Pick friends</p>
+        <div class="fchips" id="mapFriendChips" aria-live="polite"></div>
+        <input type="search" id="mapFriendSearch" autocomplete="off"
+               placeholder="Find a friend by name" aria-label="Find a friend by name" />
+        <div class="flist" id="mapFriendList" role="group" aria-labelledby="mapFriendLabel"></div>
+        <p class="fmore" id="mapFriendMore" hidden></p>
+      </div>
+
+      <label id="mapFlagClubWrap" hidden>Club
+        <select name="club_id" id="mapFlagClub"></select>
+      </label>
+
+      <label>Note <span class="optional">optional</span>
+        <textarea name="description" maxlength="300"
+                  placeholder="How to find you, what to bring, who can join"></textarea>
+      </label>
+
+      <p class="safe" id="mapUfindSafety" hidden>Meet somewhere busy, like the Campus
+        Center, and check the item before you pay.</p>
+      <p class="draft-error" id="mapFormError" role="alert" hidden></p>
+
+      <div class="draft-actions">
+        <button type="submit" id="mapFlagSubmit">Submit flag</button>
+        <button type="button" class="map-button" id="mapFlagCancel">Discard</button>
+      </div>
+    </form>
+
+    {# Starts placing a new flag (and cancels it). #}
+    <div class="map-drop-row">
+      <button class="map-drop" id="mapDrop" type="button">{{ ui.icon("club") }}<span>Drop a flag</span></button>
+      <p class="flag-count" id="mapFlagCount">Loading flags&hellip;</p>
     </div>
-    <div class="flag-list" id="mapFlagList" aria-live="polite"></div>
+
+    <p class="map-privacy">
+      Your GPS position stays in this browser. Only the flag position you choose is saved.
+    </p>
   </div>
 </section>

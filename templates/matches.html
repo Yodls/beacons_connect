@@ -3,62 +3,50 @@
 {% block title %}Your friends{% endblock %}
 
 {% block appstyle %}
+      /* ---------- the heading panel, with three counts ---------- */
       .hero {
-        padding: 1.3rem 1.4rem;
-        background:
-          radial-gradient(120% 140% at 100% 0%, #1d3a6e 0%, transparent 60%),
-          var(--navy-deep);
-        color: #fff; border-radius: 18px;
-        box-shadow: var(--shadow-2);
+        padding: 14px 16px 16px;
+        background: rgba(255, 255, 255, .86);
+        -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
       }
-      .hero h1 { color: #fff; }
-      .hero .lede { color: #bed2ec; }
-      .hero .lede a { color: #fff; text-decoration: underline; }
-
       .stats {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem;
-        margin-top: 1.1rem;
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        margin-top: 14px;
       }
       .stat {
-        padding: .6rem .7rem;
-        background: rgba(255, 255, 255, .08);
-        border: 1px solid rgba(255, 255, 255, .14);
-        border-radius: var(--r-sm);
+        padding: 8px 10px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
       }
-      .stat b { display: block; font-size: 1.35rem; font-weight: 800; line-height: 1.15; }
+      .stat b { display: block; font: 400 32px/1 var(--px); }
       .stat em {
-        display: block; font-style: normal;
-        font-size: .66rem; font-weight: 700; color: #a9c2e2;
-        letter-spacing: .06em; text-transform: uppercase;
+        display: block; margin-top: 2px; font-style: normal;
+        color: var(--muted); font-size: .76rem; font-weight: 700;
+        letter-spacing: .05em; text-transform: uppercase;
       }
 
       /* Someone is waiting on an answer, so it should catch the eye. */
-      .card.asked {
-        border-color: var(--club);
-        box-shadow: 0 0 0 3px var(--club-bg), var(--shadow);
+      section .card.asked {
+        border-color: var(--navy);
+        box-shadow: inset 6px 0 0 var(--gold), 3px 3px 0 var(--navy);
       }
 
-      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .45rem; }
-      .shared i {
-        font-style: normal; font-size: .72rem; font-weight: 600;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--surface-2); border: 1px solid var(--line);
-        color: var(--muted);
-      }
-      .why-lead { margin: .7rem 0 0; color: var(--muted); font-size: .8rem; }
+      .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
 
+      /* the way back home at the bottom */
       .continue {
-        display: flex; align-items: center; justify-content: center; gap: .4rem;
-        margin-top: 1.8rem; padding: .95rem 1.2rem;
-        background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r);
-        box-shadow: var(--shadow);
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        margin-top: 24px; min-height: 52px; padding: 0 16px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
         font-weight: 700; text-align: center;
       }
-      .continue:hover {
-        text-decoration: none; box-shadow: var(--shadow-2);
-        border-color: var(--friend);
-      }
+      .continue:hover { text-decoration: none; background: var(--paper); }
+      .continue:active { transform: translate(4px, 4px); box-shadow: none; }
 {% endblock %}
 
 {#
@@ -190,7 +178,7 @@
       {% for club in joined %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(club.name, club.id, square=true) }}
+            {{ ui.club_badge(club.name, club.description) }}
             <div class="grow">
               <h3>{{ club.name }}</h3>
               <span class="why">{{ club.description }}</span>
@@ -221,7 +209,7 @@
       {% for club in clubs %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(club.name, club.club_id, square=true) }}
+            {{ ui.club_badge(club.name, club.description) }}
             <div class="grow">
               <h3>{{ club.name }}</h3>
               <span class="why">{{ club.description }}</span>

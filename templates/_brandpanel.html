@@ -1,0 +1,26 @@
+{#
+  The sign-in brand panel, shared by login, register, verify and onboarding.
+
+  Top to bottom: the Beacons badge, the BeaconsConnect wordmark, and
+  "Connect on Campus @" with the UMass Boston logo, on a frosted panel; then
+  one line of tagline on UMass Boston yellow (black text, for contrast).
+
+  Set `tagline` before including to change the yellow line, and
+  `brand_compact` to get the shorter side-by-side version (onboarding uses
+  it so the questions start higher up the page).
+
+  The wordmark is a <p>, never a heading: each page's own <h1> sits in the
+  form window's title bar, and the test suites read the first <h1> on a page.
+#}
+<div class="brandpanel{% if brand_compact %} compact{% endif %}">
+  <img class="brandpanel-logo" width="104" height="104"
+       src="{{ url_for('static', filename='logo.webp') }}"
+       alt="Beacons Connect" />
+  <div>
+    <p class="brandpanel-name">BeaconsConnect</p>
+    <p class="brandpanel-umb">Connect on Campus @<img width="92" height="44"
+         src="{{ url_for('static', filename='bc-umb-logo.svg') }}"
+         alt="UMass Boston" /></p>
+  </div>
+</div>
+<p class="goldline">{{ tagline or "Meet UMass Boston students in person, not just online." }}</p>

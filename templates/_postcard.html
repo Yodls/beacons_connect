@@ -22,14 +22,21 @@
     <input type="hidden" name="from_id" value="{{ home_id }}" />
   {% endif -%}
 {%- endmacro %}
+{#- A small window: a navy "Meetup" title bar (the Meet up pin), then the
+    details and the action row. The icon is written out rather than taken
+    from ui.icon(), because the live channel renders this file on its own,
+    without chat.html's imports. -#}
 <div class="post" data-post="{{ post.id }}" data-token="{{ post.card_token }}">
+  <div class="cardbar"><svg class="icon" aria-hidden="true"><use href="#icon-meet" /></svg><span>Meetup</span></div>
+  <div class="cardpane">
   <b>{{ post.game }}</b>
   <span class="meta">{{ post.mode_label }}
     {%- if post.location %} &middot; {{ post.location }}{% endif -%}
     {%- if post.when_text %} &middot; {{ post.when_text }}{% endif -%}
   </span>
   {% if post.note %}<span class="note">{{ post.note }}</span>{% endif %}
-  <span class="meta">
+  {# The count stays one text node ("3 of 8 going: ..."), as before. #}
+  <span class="meta going">
     {{ post.count }} of {{ post.max_players }} going{% if post.going %}:
     {{ post.going | join(", ") }}{% endif %}
   </span>
@@ -65,6 +72,12 @@
                   {% if post.full %}disabled{% endif %}>I'm in</button>
         </form>
       {% endif %}
+      {# The meetup's flag on the campus map, for whoever may see it (the
+         people who are in, or everyone once its author made it public). #}
+      {% if post.flag %}
+        <a class="maplink" data-flag="{{ post.flag }}"
+           href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
+      {% endif %}
       {# Only for somebody going: the chat refuses anybody else, so offering
          it to them would be a door that does not open. #}
       {% if post.im_going and post.chat_id %}
@@ -79,5 +92,6 @@
         </form>
       {% endif %}
     {% endif %}
+  </div>
   </div>
 </div>

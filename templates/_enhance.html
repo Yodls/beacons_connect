@@ -48,6 +48,10 @@
       // page has already seen, and `apply` is handed the whole answer.
       watch: function (what) {
         Beacon.watching = what;
+        // If the channel's held request already went out without this (the
+        // page arrived in pieces and the channel's one-tick head start ran
+        // first), it starts again, so a chat is never left 25 seconds behind.
+        if (Beacon.rewatch) { Beacon.rewatch(); }
         return function () { Beacon.watching = null; };
       },
       watching: null
@@ -170,10 +174,14 @@
       if (form.hasAttribute("data-full")) { return; }
       if (form.target && form.target !== "_self") { return; }
 
-      var action = form.getAttribute("action") || location.href;
+      // A button may send its form somewhere else with formaction/formmethod
+      // (the Games page's "Send invite" does: same form as "Find a player",
+      // different route). The browser honours those, so this does too.
+      var by = e.submitter || null;
+      var action = (by && by.getAttribute("formaction")) || form.getAttribute("action") || location.href;
       if (!sameOrigin(action)) { return; }
 
-      var method = (form.getAttribute("method") || "get").toLowerCase();
+      var method = ((by && by.getAttribute("formmethod")) || form.getAttribute("method") || "get").toLowerCase();
       var data = new FormData(form);
       // A submit button's own name and value are not part of FormData unless
       // the button is passed as the submitter -- that is specified behaviour,
@@ -202,7 +210,11 @@
          {method: "post", body: data}, ownForm)
         // Any failure falls back to a real submit, so the worst case is
         // exactly how the app behaved before this file existed.
-        .catch(function () { form.submit(); });
+        .catch(function () {
+          // form.submit() ignores the button, so carry its address over.
+          if (by && by.getAttribute("formaction")) { form.setAttribute("action", action); }
+          form.submit();
+        });
     });
 
     // Backing out of a confirmation. Delegated here rather than copied into

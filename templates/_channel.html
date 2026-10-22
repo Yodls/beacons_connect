@@ -99,6 +99,8 @@
     function round() {
       if (stopped) { return; }
       var ctl = new AbortController();
+      // What this request was sent watching, for rewatch below.
+      ctl.here = (Beacon.watching && Beacon.watching.here) || null;
       inflight = ctl;
 
       fetch(url + query(),
@@ -162,6 +164,16 @@
       // shell, so without this the first request would go out before the chat
       // had said what it wants watched.
       first = setTimeout(round, 0);
+      // Beacon.watch calls this. Usually the page registers inside that one
+      // tick and there is nothing to do; when it registers later, the held
+      // request was sent without it and is replaced (still one at a time).
+      var rewatch = Beacon.rewatch = function () {
+        if (stopped || !inflight) { return; }
+        var here = (Beacon.watching && Beacon.watching.here) || null;
+        if (inflight.here === here) { return; }
+        inflight.abort();
+        round();
+      };
       document.addEventListener("visibilitychange", onFlip);
       // pagehide rather than beforeunload: beforeunload is unreliable on
       // mobile, where backgrounding an app is how leaving usually happens.
@@ -176,6 +188,7 @@
 
       return function () {
         stopped = true;
+        if (Beacon.rewatch === rewatch) { Beacon.rewatch = null; }
         clearTimeout(first);
         document.removeEventListener("visibilitychange", onFlip);
         window.removeEventListener("pagehide", sayGone);

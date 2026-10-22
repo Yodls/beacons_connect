@@ -3,19 +3,33 @@
 {% block title %}Tell us about you{% endblock %}
 
 {% block style %}
+      /* "Optional" marker at the end of a question */
       .opt-note {
-        margin-left: auto; padding: .1rem .45rem;
-        background: var(--surface-2); border-radius: var(--pill);
-        font-size: .64rem; font-weight: 800;
-        letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+        margin-left: auto; padding: 2px 7px;
+        background: var(--paper); color: var(--muted);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
+        font-size: .72rem; font-weight: 700;
+        letter-spacing: .05em; text-transform: uppercase;
       }
       legend { width: 100%; }
+      /* answer rows: tighter than the form's usual label spacing, but still
+         a comfortable 40px tap target */
+      .auth-card .opts label, .auth-card .chips label { margin: 0; }
+      .opts label { min-height: 40px; }
+      /* Inside the form window each question is a softer group, so windows
+         don't stack up inside windows. */
+      .auth-card fieldset { border-color: var(--line); box-shadow: none; }
       /* The pronouns fieldset is marked with an icon instead of a number,
          because it is not one of the numbered questions. */
-      .qnum .icon { width: 13px; height: 13px; }
+      .qnum .icon { width: 12px; height: 12px; }
       .pronoun-pick { display: block; margin: 0; }
-      .pronoun-pick select { margin-top: .25rem; max-width: 18rem; }
-      .pronoun-pick .hint { margin-top: .3rem; }
+      .pronoun-pick select { margin-top: 6px; max-width: 18rem; }
+      .pronoun-pick .hint { display: block; margin-top: 6px; font-weight: 400; }
+      @media (max-width: 520px) {
+        .brandpanel.compact .brandpanel-logo { width: 60px; height: 60px; }
+        .brandpanel.compact .brandpanel-name { font-size: 34px; }
+        .brandpanel.compact .brandpanel-umb img { height: 36px; }
+      }
 {% endblock %}
 
 {#
@@ -24,86 +38,89 @@
   `type="radio" name="qN"` and `type="checkbox" name="qN"`, and `checked`
   must stay a bare attribute. Restyle freely; do not reorder attributes.
 #}
+{#
+  Layout (Beacon OS): the compact brand panel, then the questions in a
+  window whose title bar carries the page's <h1>.
+#}
 {% block content %}
   <div class="auth">
-    <div class="auth-card wide">
-      <div class="auth-brand">
-        <img class="brand-mark" width="36" height="36"
-             src="{{ url_for('static', filename='logo.webp') }}"
-             alt="Beacons Connect" />
-        <span>
-          <span class="brand-name">Beacons Connect</span>
-          <span class="brand-sub">About you &middot; one time only</span>
-        </span>
-      </div>
+    <div class="auth-stack wide">
+      {% set tagline = "A few questions, one time only. Change any of it later." %}
+      {% set brand_compact = true %}
+      {% include "_brandpanel.html" %}
 
-      {{ ui.flashes() }}
+      <div class="auth-card">
+        <div class="bar sec-friend">{{ ui.icon("star") }}<h1>Tell us about you</h1><span class="grip"></span></div>
 
-      <h1>Tell us about you</h1>
-      <p class="lede">
-        This is how we find students you'd actually get along with.
-        You can change any of it later.
-      </p>
+        <div class="auth-body">
+          {{ ui.flashes() }}
 
-      <form method="post">
-        {# Not one of the questionnaire's questions -- it is a column on the
-           account, so it sits above them and outside the numbered run. The
-           route only writes it when it comes back in the POST. #}
-        <fieldset>
-          <legend><span class="qnum">{{ ui.icon("user") }}</span>Your pronouns</legend>
-          <label class="pronoun-pick">
-            <select name="pronouns">
-              {% for slug, label in pronoun_options.items() %}
-                <option value="{{ slug }}"
-                        {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <span class="hint">Shown next to your name to other students.</span>
-          </label>
-        </fieldset>
+          <p class="lede">
+            This is how we find students you'd actually get along with.
+            You can change any of it later.
+          </p>
 
-        {% for question in questions %}
-          <fieldset>
-            <legend>
-              <span class="qnum">{{ loop.index }}</span>{{ question.prompt }}
-              {%- if question.key in optional %}<span class="opt-note">Optional</span>{% endif -%}
-            </legend>
+          <form method="post">
+            {# Not one of the questionnaire's questions -- it is a column on the
+               account, so it sits above them and outside the numbered run. The
+               route only writes it when it comes back in the POST. #}
+            <fieldset>
+              <legend><span class="qnum">{{ ui.icon("user") }}</span>Your pronouns</legend>
+              <label class="pronoun-pick">
+                <select name="pronouns">
+                  {% for slug, label in pronoun_options.items() %}
+                    <option value="{{ slug }}"
+                            {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <span class="hint">Shown next to your name to other students.</span>
+              </label>
+            </fieldset>
 
-            {% if question.allows_multiple %}
-              <div class="chips">
-                {% for option in question.options %}
-                  <label>
-                    <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
-                      {% if option.id in selected %}checked{% endif %} />
-                    {{ option.label }}
-                  </label>
-                {% endfor %}
-              </div>
-            {% elif question.options | length > 12 %}
-              <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
-                <option value="">Choose one</option>
-                {% for option in question.options %}
-                  <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
-                {% endfor %}
-              </select>
-            {% else %}
-              <div class="opts">
-                {% for option in question.options %}
-                  <label>
-                    <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
-                      {% if option.id in selected %}checked{% endif %} required />
-                    {{ option.label }}
-                  </label>
-                {% endfor %}
-              </div>
-            {% endif %}
-          </fieldset>
-        {% endfor %}
+            {% for question in questions %}
+              <fieldset>
+                <legend>
+                  <span class="qnum">{{ loop.index }}</span>{{ question.prompt }}
+                  {%- if question.key in optional %}<span class="opt-note">Optional</span>{% endif -%}
+                </legend>
 
-        <div class="submit-bar">
-          <button type="submit">Save and continue</button>
+                {% if question.allows_multiple %}
+                  <div class="chips">
+                    {% for option in question.options %}
+                      <label>
+                        <input type="checkbox" name="q{{ question.id }}" value="{{ option.id }}"
+                          {% if option.id in selected %}checked{% endif %} />
+                        {{ option.label }}
+                      </label>
+                    {% endfor %}
+                  </div>
+                {% elif question.options | length > 12 %}
+                  <select name="q{{ question.id }}" {% if question.key not in optional %}required{% endif %}>
+                    <option value="">Choose one</option>
+                    {% for option in question.options %}
+                      <option value="{{ option.id }}" {% if option.id in selected %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                  </select>
+                {% else %}
+                  <div class="opts">
+                    {% for option in question.options %}
+                      <label>
+                        <input type="radio" name="q{{ question.id }}" value="{{ option.id }}"
+                          {% if option.id in selected %}checked{% endif %} required />
+                        {{ option.label }}
+                      </label>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </fieldset>
+            {% endfor %}
+
+            <div class="submit-bar">
+              <button type="submit">Save and continue</button>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 {% endblock %}

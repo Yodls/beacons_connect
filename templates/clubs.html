@@ -2,51 +2,17 @@
 {% import "_ui.html" as ui %}
 {% block title %}All clubs{% endblock %}
 
-{% block appstyle %}
-      /* Its own class rather than an override of base's .grid, so the two
-         cannot fight over the column count. */
-      .clubgrid {
-        display: grid; gap: .7rem; margin-top: .9rem;
-        grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-      }
-      .clubgrid .card { margin-top: 0; display: flex; flex-direction: column; }
-      .clubgrid .card .actions { margin-top: auto; padding-top: .7rem; }
-
-      .joined {
-        display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--place-bg); color: var(--place);
-        font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
-      }
-      .joined::before { content: "\2713"; }
-
-      /* Why a club is at the top of the list. The same chips /matches and the
-         welcome page use, so a reason reads the same wherever it is given. */
-      .pick {
-        display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-        font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
-      }
-      .why-lead { margin: .5rem 0 0; font-size: .74rem; color: var(--muted); }
-      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
-      .shared i {
-        font-style: normal; font-size: .72rem; font-weight: 600;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-      }
-
-      .counter {
-        display: inline-block; padding: .2rem .6rem;
-        border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-        font-size: .8rem; font-weight: 700;
-      }
-{% endblock %}
-
 {#
+  Clubs, by category.
+
+  A row of category keys at the top, a search box, then one window per
+  category (club_catalog.py decides which club goes where and which pixel
+  icon it gets). Inside each window, suggested clubs come first, then A to Z.
+
+  Without JavaScript the keys are plain links that jump to their window and
+  the search box stays hidden. With it, a key shows just that category and
+  the search box narrows every window as you type.
+
   Two counts are asserted on this page.
 
   The <h1> is compared by exact textContent, so it stays bare -- no icon, no
@@ -58,57 +24,211 @@
   the closing quote, so adding a second class to the same attribute hides the
   card from it.
 #}
-{% block main %}
-  <h1>All clubs</h1>
-  <p class="lede">
-    Every club on campus, with the ones your answers point at first.
-    <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
-  </p>
 
-  <div class="clubgrid">
-    {% for club in clubs %}
-      <div class="card">
-        <div class="card-top">
-          {{ ui.avatar(club.name, club.id, square=true) }}
-          <div class="grow">
-            <h3>{{ club.name }}</h3>
-          </div>
-          {% if club.id in joined_ids %}
-            <span class="joined">Joined</span>
-          {% elif club.id in picks %}
-            <span class="pick">Suggested</span>
-          {% endif %}
-        </div>
-        <p class="why">{{ club.description }}</p>
-        {# The reason, on the card the club already has. A separate
-           "suggested" band would put the same four clubs on this page twice
-           and make the one-card-per-club count mean nothing. #}
-        {% if club.id in picks %}
-          <p class="why-lead">Because you picked:</p>
-          <div class="shared">
-            {% for item in picks[club.id].shared %}<i>{{ item }}</i>{% endfor %}
-          </div>
-        {% endif %}
-        <div class="actions">
-          {% if club.id in joined_ids %}
-            <form method="get"
-                  action="{{ url_for('chat', kind='club', target_id=club.id) }}">
-              <button type="submit">Club space</button>
-            </form>
-            <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
-              <input type="hidden" name="back" value="clubs" />
-              <button type="submit" class="ghost">Leave</button>
-            </form>
-          {% else %}
-            <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
-              <input type="hidden" name="back" value="clubs" />
-              <button type="submit">Join</button>
-            </form>
-          {% endif %}
-        </div>
-      </div>
-    {% endfor %}
+{% block appstyle %}
+      /* ---------- the category keys and the search ---------- */
+      .catbar {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        margin-top: 20px;
+      }
+      .catkey {
+        display: inline-flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font: 700 .92rem/1 var(--sans); text-decoration: none; white-space: nowrap;
+      }
+      .catkey:hover { background: var(--paper); text-decoration: none; }
+      .catkey b {
+        min-width: 22px; padding: 2px 5px; border-radius: 4px;
+        background: var(--club-bg); text-align: center; font-size: .8rem;
+      }
+      .catkey[aria-pressed="true"] { background: var(--gold); box-shadow: none; transform: translateY(3px); }
+      .catkey[aria-pressed="true"] b { background: #fff; }
+      /* On phones the keys scroll sideways in one line instead of wrapping
+         into a wall of buttons. */
+      @media (max-width: 700px) {
+        .catbar { flex-wrap: nowrap; overflow-x: auto; margin-left: -16px; margin-right: -16px;
+                  padding: 2px 16px 8px; scrollbar-width: none; }
+        .catbar::-webkit-scrollbar { display: none; }
+      }
+
+      .clubfind { margin-top: 16px; max-width: 26rem; }
+      .clubfind label { margin-bottom: 6px; }
+      .nomatch { margin-top: 24px; }
+
+      /* ---------- one window per category ---------- */
+      .clubcat .tag-dot, .clubcat .tag-dot svg { width: 32px; height: 32px; }
+      .clubcat .tag-dot svg { display: block; }
+      .clubcat > .cathome { margin: 12px 14px 0; color: var(--muted); font-size: .9rem; }
+      .clubgrid {
+        display: grid; gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+      }
+
+      /* ---------- a club ---------- */
+      .clubgrid .card { display: flex; flex-direction: column; }
+      .clubgrid .card-top { align-items: flex-start; }
+      .clubgrid .card-top h3 { margin: 0; font: 700 1.05rem/1.25 var(--sans); }
+      .clubgrid .card-top .grow { padding-top: 2px; }
+      .clubgrid .card .why { margin-top: 10px; color: var(--navy); }
+      .clubgrid .card .actions { margin-top: auto; padding-top: 12px; }
+
+      /* status tags beside the name */
+      .joined, .pick {
+        display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+        height: 24px; margin-top: 6px; padding: 0 8px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .76rem/1 var(--sans);
+      }
+      .joined { background: var(--beacon); color: #fff; }
+      .joined::before { content: "\2713"; }
+      .pick { background: var(--sky); color: var(--navy); }
+
+      /* Why a club is suggested. The same chips /matches and the welcome
+         page use, so a reason reads the same wherever it is given. */
+      .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
+
+      .counter {
+        display: inline-flex; align-items: center; height: 26px; margin-left: 4px; padding: 0 8px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .85rem; font-weight: 700; vertical-align: 1px;
+      }
+{% endblock %}
+
+{% block main %}
+  <div class="pagehead">
+    <h1>All clubs</h1>
+    <p class="lede">
+      Every club on campus, grouped by subject the way UMass Boston groups its
+      colleges, with the ones your answers point at first.
+      <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
+    </p>
   </div>
 
+  {# Links to each window. The script turns them into a filter. #}
+  <nav class="catbar" id="catbar" aria-label="Club categories">
+    <a class="catkey" href="#cat-all" data-cat="all">All <b>{{ clubs | length }}</b></a>
+    {% for cat, members in groups %}
+      <a class="catkey" href="#cat-{{ cat.key }}" data-cat="{{ cat.key }}">{{ cat.label }} <b>{{ members | length }}</b></a>
+    {% endfor %}
+  </nav>
+
+  <div class="clubfind" id="clubfind" hidden>
+    <label for="clubq">Search clubs</label>
+    <input id="clubq" type="search" placeholder="Try chess, nursing or film" autocomplete="off" />
+  </div>
+  <p class="empty nomatch" id="nomatch" hidden>No clubs match that. Try another word, or pick a category.</p>
+
+  <span id="cat-all"></span>
+  {% for cat, members in groups %}
+    <section class="sec-club clubcat" id="cat-{{ cat.key }}" data-cat="{{ cat.key }}">
+      {# Written out rather than ui.section(): the bar carries the category's
+         club icon, which lives in /club-icons.svg, not _icons.html. #}
+      <div class="sec sec-club">
+        <span class="tag-dot"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="{{ club_icon_href(cat.icon) }}" /></svg></span>
+        <h2>{{ cat.label }}</h2>
+        <span class="count">{{ members | length }}</span>
+      </div>
+      <p class="cathome">{{ cat.home }}</p>
+      <div class="clubgrid">
+        {% for club in members %}
+          <div class="card" id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
+            <div class="card-top">
+              {{ ui.club_badge(club.name, club.description) }}
+              <div class="grow">
+                <h3>{{ club.name }}</h3>
+                {% if club.id in joined_ids %}
+                  <span class="joined">Joined</span>
+                {% elif club.id in picks %}
+                  <span class="pick">Suggested for you</span>
+                {% endif %}
+              </div>
+            </div>
+            <p class="why">{{ club.description }}</p>
+            {# The reason, on the card the club already has. A separate
+               "suggested" band would put the same clubs on this page twice
+               and make the one-card-per-club count mean nothing. #}
+            {% if club.id in picks %}
+              <p class="why-lead">Because you picked:</p>
+              <div class="shared">
+                {% for item in picks[club.id].shared %}<i>{{ item }}</i>{% endfor %}
+              </div>
+            {% endif %}
+            <div class="actions">
+              {% if club.id in joined_ids %}
+                <form method="get"
+                      action="{{ url_for('chat', kind='club', target_id=club.id) }}">
+                  <button type="submit">Club space</button>
+                </form>
+                <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+                  <input type="hidden" name="back" value="clubs" />
+                  <button type="submit" class="ghost">Leave</button>
+                </form>
+              {% else %}
+                <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
+                  <input type="hidden" name="back" value="clubs" />
+                  <button type="submit">Join</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+
   <p class="nav"><a href="{{ url_for('matches') }}">&larr; Back to your friends</a></p>
+{% endblock %}
+
+{% block script %}
+<script>
+  // Category keys become a filter, and the search box narrows every window.
+  // Without this the keys still jump to their window.
+  (function () {
+    var bar = document.getElementById("catbar");
+    if (!bar || bar.dataset.wired) { return; }
+    bar.dataset.wired = "1";
+    var keys = Array.prototype.slice.call(bar.querySelectorAll(".catkey"));
+    var cats = Array.prototype.slice.call(document.querySelectorAll(".clubcat"));
+    var find = document.getElementById("clubfind");
+    var box = document.getElementById("clubq");
+    var none = document.getElementById("nomatch");
+    var picked = "all";
+
+    function show() {
+      var q = (box.value || "").trim().toLowerCase();
+      var any = false;
+      cats.forEach(function (cat) {
+        var inCat = picked === "all" || cat.dataset.cat === picked;
+        var seen = 0;
+        Array.prototype.forEach.call(cat.querySelectorAll(".card"), function (club) {
+          var hit = inCat && (!q || club.dataset.find.indexOf(q) !== -1);
+          club.hidden = !hit;
+          if (hit) { seen += 1; }
+        });
+        cat.hidden = !seen;
+        if (seen) { any = true; }
+      });
+      none.hidden = any;
+      keys.forEach(function (key) {
+        key.setAttribute("aria-pressed", String(key.dataset.cat === picked));
+      });
+    }
+
+    keys.forEach(function (key) {
+      key.setAttribute("role", "button");
+      key.addEventListener("click", function (e) {
+        e.preventDefault();
+        picked = key.dataset.cat;
+        show();
+      });
+    });
+    find.hidden = false;
+    box.addEventListener("input", show);
+    show();
+  })();
+</script>
 {% endblock %}

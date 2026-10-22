@@ -3,54 +3,158 @@
 {% block title %}Beacons Connect{% endblock %}
 
 {% block appstyle %}
-      .greet { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
-      .greet .lede { margin: 0; }
+      /* ---------- layout ----------
+         Phones: one column, in source order. Wide screens: the welcome
+         window and the shortcuts run across the top, with chats and
+         suggestions side by side underneath. */
+      .home { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+      .home > section, .home > .win, .home > .waiting { margin-top: 0; }
+      @media (min-width: 900px) {
+        .home { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+        .hello, .home > .waiting, .quick { grid-column: 1 / -1; }
+        .home .grid.two { grid-template-columns: minmax(0, 1fr); }
+      }
 
-      .quick { display: grid; gap: .6rem; margin-top: 1.2rem; }
-      @media (min-width: 760px) { .quick { grid-template-columns: repeat(3, 1fr); } }
+      /* ---------- the welcome window: a night harbour ----------
+         The greeting sits on a night sky with pixel stars, a lighthouse
+         whose beam sweeps the harbour, and a strip of water. All CSS: this
+         page arms no scripts (see the note above the markup). */
+      .hello { overflow: hidden; }
+      .scene {
+        position: relative; height: 200px; overflow: hidden;
+        background: var(--night); color: #fff;
+      }
+      .scene-copy {
+        position: absolute; z-index: 3; left: 16px; top: 22px; right: 104px;
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      .scene-copy h1 { color: #fff; font-size: 54px; line-height: .9; }
+      .scene-copy .lede { margin: 0; color: var(--on-navy); font-size: 1rem; }
+      /* stars: four-pixel squares, every third one gold */
+      .star {
+        position: absolute; width: 4px; height: 4px;
+        background: #fff; transform: translate(-50%, -50%);
+      }
+      .star:nth-child(3n) { background: var(--gold); }
+      .star:nth-child(1) { left: 58%; top: 12%; }
+      .star:nth-child(2) { left: 70%; top: 26%; }
+      .star:nth-child(3) { left: 88%; top: 13%; }
+      .star:nth-child(4) { left: 80%; top: 38%; }
+      .star:nth-child(5) { left: 18%; top: 72%; }
+      .star:nth-child(6) { left: 44%; top: 78%; }
+      .star:nth-child(7) { left: 6%; top: 58%; }
+      .star:nth-child(8) { left: 36%; top: 12%; }
+      /* The lighthouse. The beams and the lamp glow are positioned from the
+         lamp itself (24px across, 17px down the 48 x 72 drawing), so they
+         stay lined up at any screen size. */
+      .lh { position: absolute; z-index: 2; right: 34px; bottom: 26px; width: 48px; height: 72px; }
+      .lh .icon { position: relative; z-index: 2; display: block; width: 48px; height: 72px; }
+      .beam {
+        position: absolute; z-index: 1; top: 3px; height: 28px;
+        background: linear-gradient(to left, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0));
+        /* scanlines, so the light reads as pixels too */
+        -webkit-mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px);
+        mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px);
+      }
+      .beam-l {
+        right: 24px; width: 440px;
+        clip-path: polygon(100% 40%, 0 0, 0 100%, 100% 60%);
+        transform-origin: right center;
+        animation: sweep-l 9s ease-in-out infinite;
+      }
+      .beam-r {
+        left: 24px; width: 140px;
+        clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%);
+        transform-origin: left center;
+        background: linear-gradient(to right, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0));
+        animation: sweep-r 9s ease-in-out infinite;
+      }
+      /* the beam turns: long to the left, edge-on, short to the right, back */
+      @keyframes sweep-l { 0%, 100% { transform: scaleX(1); } 25%, 75% { transform: scaleX(0); } }
+      @keyframes sweep-r { 0%, 25%, 75%, 100% { transform: scaleX(0); } 50% { transform: scaleX(1); } }
+      /* the lamp flares as the beam passes edge-on */
+      .glow {
+        position: absolute; z-index: 1; left: 24px; top: 16px;
+        width: 60px; height: 60px; margin: -30px 0 0 -30px;
+        background: radial-gradient(circle, rgba(254, 222, 66, .95) 0 22%,
+                    rgba(254, 222, 66, .35) 45%, rgba(254, 222, 66, 0) 70%);
+        opacity: .15; pointer-events: none;
+        animation: lamp-flash 9s ease-in-out infinite;
+      }
+      @keyframes lamp-flash { 0%, 50%, 100% { opacity: .15; } 25%, 75% { opacity: 1; } }
+      .water {
+        position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 28px;
+        background-color: var(--beacon);
+        background-image: linear-gradient(90deg, var(--sky) 0 14px, transparent 14px);
+        background-size: 36px 4px; background-repeat: repeat-x; background-position: 6px 8px;
+        border-top: 2px solid var(--navy);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .beam-l, .beam-r, .glow { animation: none; }
+        .beam-r { transform: scaleX(0); }
+        .glow { opacity: .5; }
+      }
+      @media (min-width: 900px) {
+        .scene { height: 240px; }
+        .scene-copy { left: 24px; top: 30px; }
+        .scene-copy h1 { font-size: 72px; }
+        .scene-copy .lede { font-size: 1.1rem; }
+      }
+
+      /* ---------- shortcuts, like icons on a desktop ---------- */
+      .quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
       .quick-tile {
-        display: flex; align-items: center; gap: .7rem;
-        padding: .85rem 1rem;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-top: 3px solid var(--kind);
-        border-radius: var(--r);
-        box-shadow: var(--shadow);
-        color: var(--ink); font-weight: 700;
-        transition: box-shadow .15s, transform .08s;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+        color: var(--navy); text-align: center;
       }
-      .quick-tile:hover {
-        text-decoration: none; box-shadow: var(--shadow-2);
-        transform: translateY(-1px);
+      .quick-tile:hover { text-decoration: none; }
+      .quick-icon {
+        width: 80px; height: 80px;
+        display: grid; place-items: center;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: 14px;
+        box-shadow: var(--drop);
       }
-      .quick-tile small { display: block; color: var(--muted); font-size: .76rem; font-weight: 500; }
-      .quick-tile .icon { color: var(--kind); }
+      .quick-icon .icon { width: 48px; height: 48px; }
+      .quick-tile:hover .quick-icon { background: var(--kind-bg); }
+      .quick-tile:active .quick-icon { transform: translate(4px, 4px); box-shadow: none; }
+      .quick-label {
+        padding: 5px 8px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .92rem/1.15 var(--sans);
+      }
+      .quick-label small {
+        display: block; margin-top: 3px;
+        color: var(--muted); font-size: .8rem; font-weight: 400;
+      }
+      @media (max-width: 600px) { .quick-label small { display: none; } }
 
+      /* ---------- My chats: rows inside the window ---------- */
+      .home .sec-chat > .grid { margin: 0; gap: 0; }
+      .home .sec-chat > .grid > .empty { margin: 14px; }
       .chatrow {
-        display: flex; align-items: center; gap: .75rem;
-        padding: .7rem .9rem;
-        background: var(--surface);
-        border: 1px solid var(--line); border-radius: var(--r);
-        box-shadow: var(--shadow);
-        color: inherit; font-weight: 400;
-        transition: box-shadow .15s, border-color .15s, transform .08s;
+        display: flex; align-items: center; gap: 12px;
+        min-height: 68px; padding: 10px 14px;
+        border-top: 2px dashed var(--line);
+        color: var(--navy); font-weight: 400;
       }
-      .chatrow:hover {
-        text-decoration: none; box-shadow: var(--shadow-2);
-        border-color: var(--line-2); transform: translateY(-1px);
-      }
+      .chatrow:first-child { border-top: 0; }
+      .chatrow:hover { background: var(--paper); text-decoration: none; }
       .chatrow .mid { flex: 1 1 auto; min-width: 0; display: block; }
-      .chatrow .name { display: block; font-size: .93rem; font-weight: 700; }
+      .chatrow .name { display: block; font-size: 1rem; font-weight: 700; }
       .chatrow .last {
-        display: block; margin-top: .1rem;
-        color: var(--muted); font-size: .82rem;
+        display: block; margin-top: 2px;
+        color: var(--muted); font-size: .88rem;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .chev { flex: none; color: var(--line-2); font-size: 1.1rem; }
-      .tag.community { background: var(--surface-2); color: var(--muted); }
-      .tag.match { background: var(--friend-bg); color: var(--friend); }
-      .tag.pair { background: var(--game-bg); color: var(--game); }
-      .tag.club { background: var(--club-bg); color: #7d5512; }
+      .chev { flex: none; color: var(--navy); font-size: 1.4rem; line-height: 1; }
+      /* each kind of chat wears its own colour */
+      .tag.community { background: var(--beacon); color: #fff; }
+      .tag.match     { background: var(--sky);    color: var(--navy); }
+      .tag.pair      { background: var(--orange); color: var(--navy); }
+      .tag.club      { background: var(--gold);   color: var(--navy); }
+      .tag.group     { background: #fff;          color: var(--navy); }
 {% endblock %}
 
 {#
@@ -67,15 +171,33 @@
   at once.
 #}
 {% block main %}
-  <div class="greet">
-    <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
-    <p class="lede">
-      {% if chats %}
-        {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }} open.
-      {% else %}
-        Your conversations will live here.
-      {% endif %}
-    </p>
+<div class="home">
+  {# The welcome window. The stars, beams and water are decoration only
+     (aria-hidden); the <h1> stays bare and is still the first and only one
+     on the page. #}
+  <div class="win hello sec-chat">
+    <div class="bar">{{ ui.icon("home") }}<span class="bar-title">Welcome back</span><span class="grip"></span></div>
+    <div class="scene">
+      <span class="star"></span><span class="star"></span><span class="star"></span><span class="star"></span>
+      <span class="star"></span><span class="star"></span><span class="star"></span><span class="star"></span>
+      <div class="lh" aria-hidden="true">
+        <span class="beam beam-l"></span>
+        <span class="beam beam-r"></span>
+        <span class="glow"></span>
+        {{ ui.icon("lighthouse") }}
+      </div>
+      <div class="water"></div>
+      <div class="scene-copy">
+        <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
+        <p class="lede">
+          {% if chats %}
+            {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }} open.
+          {% else %}
+            Your conversations will live here.
+          {% endif %}
+        </p>
+      </div>
+    </div>
   </div>
 
   {# The digits must be the first text inside this tag -- a test reads the
@@ -88,16 +210,16 @@
      uses short ones on purpose. #}
   <div class="quick">
     <a class="quick-tile sec-place" href="{{ url_for('find_game') }}">
-      {{ ui.icon("meet") }}
-      <span>Meet up in person!<small>Find someone on campus</small></span>
+      <span class="quick-icon">{{ ui.icon("big-meet") }}</span>
+      <span class="quick-label">Meet up in person!<small>Find someone on campus</small></span>
     </a>
     <a class="quick-tile sec-game" href="{{ url_for('game_lobby') }}">
-      {{ ui.icon("game") }}
-      <span>Play an online game<small>Chess, Battleship and more</small></span>
+      <span class="quick-icon">{{ ui.icon("big-game") }}</span>
+      <span class="quick-label">Play an online game<small>Chess, Battleship and more</small></span>
     </a>
     <a class="quick-tile sec-chat" href="{{ url_for('chat', kind='community', target_id=0) }}">
-      {{ ui.icon("talk") }}
-      <span>Community Chat<small>Everyone on campus</small></span>
+      <span class="quick-icon">{{ ui.icon("big-talk") }}</span>
+      <span class="quick-label">Community Chat<small>Everyone on campus</small></span>
     </a>
   </div>
 
@@ -107,7 +229,7 @@
       {% for chat in chats %}
         <a class="chatrow"
            href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
-          {{ ui.avatar(chat.title, chat.target_id, square=(chat.kind == "club")) }}
+          {% if chat.kind == "club" %}{{ ui.club_badge(chat.title) }}{% else %}{{ ui.avatar(chat.title, chat.target_id) }}{% endif %}
           <span class="mid">
             <span class="name">{{ chat.title }}</span>
             <span class="last">{{ chat.subtitle }}</span>
@@ -153,4 +275,5 @@
       {% endfor %}
     </div>
   </section>
+</div>
 {% endblock %}

@@ -3,53 +3,56 @@
 {% block title %}Group chats{% endblock %}
 
 {% block appstyle %}
+      /* ---------- Start a chat ----------
+         A small blue-tinted panel inside the window. */
       .maker {
-        padding: 1.25rem 1.4rem; margin-top: .6rem;
-        background:
-          radial-gradient(120% 140% at 100% 0%, #1b96a3 0%, transparent 62%),
-          var(--chat);
-        color: #fff; border-radius: 18px;
-        box-shadow: var(--shadow-2);
+        padding: 14px;
+        background: var(--chat-bg);
+        border: 2px solid var(--navy); border-radius: var(--r);
       }
-      .maker h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
-      .maker p { color: #d6f1f4; font-size: .86rem; margin: 0 0 .9rem; }
-      .maker input[type="text"] { margin: 0; background: #fff; border-color: transparent; }
-      .maker button {
-        margin: 0; background: #fff; color: var(--chat); white-space: nowrap;
-      }
-      .maker button:hover { background: #e8f7f8; }
-      .maker .line { display: flex; flex-wrap: wrap; gap: .5rem; }
+      .maker h3 { font-size: 1.05rem; margin-bottom: 2px; }
+      .maker p { margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
+      .maker input[type="text"] { margin: 0; }
+      .maker button { margin: 0; white-space: nowrap; }
+      .maker .line { display: flex; flex-wrap: wrap; gap: 10px; }
       .maker .line input[type="text"] { flex: 1 1 12rem; }
-      .picks { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: .7rem 0 0; }
+      .picks { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 0; }
       .picks label {
-        display: flex; align-items: center; gap: .35rem; margin: 0;
-        font-size: .82rem; font-weight: 600; color: #eaf8f9;
+        display: flex; align-items: center; gap: 8px; margin: 0;
+        font-size: .92rem; font-weight: 700; color: var(--navy);
       }
-      .picks input { margin: 0; width: auto; }
+      .picks input { margin: 0; }
+
+      /* Join with a code: the form sits straight in the window. */
+      .sec-chat > .card:has(.newpost) { padding: 0; border: 0; }
+      .newpost { display: flex; flex-wrap: wrap; gap: 10px; }
+      .newpost input { flex: 1 1 10rem; width: auto; margin: 0; }
 
       /* The code is the whole point of the card, and it gets read aloud and
          typed, so it is monospaced and roomy rather than pretty. */
       .code {
-        display: inline-block; padding: .1rem .45rem;
-        background: var(--surface-2); border: 1px solid var(--line);
-        border-radius: var(--r-sm);
+        display: inline-block; padding: 1px 7px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: .86rem; font-weight: 700; letter-spacing: .08em;
+        font-size: .9rem; font-weight: 700; letter-spacing: .08em;
         user-select: all;
       }
+      /* open / closed, as a small tag */
       .vis {
-        display: inline-block; padding: .08rem .45rem;
-        border-radius: var(--pill);
-        font-size: .7rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
+        display: inline-flex; align-items: center; height: 24px; padding: 0 7px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .78rem/1 var(--sans);
       }
-      .vis.open { background: var(--place-bg); color: var(--place); }
-      .vis.shut { background: var(--surface-2); color: var(--muted); }
+      .vis.open { background: var(--beacon); color: #fff; }
+      .vis.shut { background: var(--paper); color: var(--muted); border-color: var(--line-2); }
 {% endblock %}
 
 {% block main %}
-  <h1>Group chats</h1>
-  <p class="lede">Make a chat, join one with a code, or look through the public ones.</p>
+  <div class="pagehead">
+    <h1>Group chats</h1>
+    <p class="lede">Make a chat, join one with a code, or look through the public ones.</p>
+  </div>
 
   <section class="sec-chat">
     {{ ui.section("Start a chat", "chat", "plus") }}

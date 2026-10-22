@@ -26,8 +26,9 @@
   <a class="tab sec-game {% if here == 'game_lobby' %}on{% endif %}"
      href="{{ url_for('game_lobby') }}">{{ ui.icon("game") }}Games</a>
 
-  {# No label on purpose, as in the mockup. It also keeps the room's own
-     title off every page. #}
+  {# No label in the markup on purpose, as in the mockup: it keeps the
+     room's own title off every page. The "Post" caption under the yellow
+     key is drawn by CSS (.tab-new::after in base.html). #}
   <a class="tab-new" href="{{ url_for('chat', kind='community', target_id=0) }}"
      aria-label="Post to the community room">{{ ui.icon("plus") }}</a>
 
