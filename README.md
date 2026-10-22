@@ -221,3 +221,24 @@ joins it with `form="startgame"` and "Send invite" posts to `/games/new` with
 `formaction`, so it works without JavaScript. `/games/seek` and `/games/new`
 take the same fields as before.
 
+## Chat: bubbles and cards
+
+Messages are bubbles that fit their words, with the sender's name, the text
+and the time inside, and the sender's avatar beside them (yours sit on the
+right in Beacon Blue). Times show in the reader's own time zone, with
+"Today", "Yesterday" or the date where each day starts (each message carries
+its full UTC timestamp as `data-ts`).
+
+Some messages are small windows instead of bubbles:
+
+| Card | Title bar | Comes from |
+| --- | --- | --- |
+| Meetup | navy, "Meetup" | a message carrying a meetup (`_postcard.html`) |
+| Game | orange, the game's name | an invite, accept, decline or result |
+| Map flag | the flag's colour (U-Find shows its logo and price) | a link to a flag (`/find?flag=...`) in a message |
+
+To share a flag, press **Copy link** on its card on the map and paste it into
+any chat. The chat asks `/api/map-flags` which flags the reader may see, so a
+flag shared with the wrong people still only shows to its own audience;
+everyone else sees "That map flag has ended, or it isn't shared with you."
+

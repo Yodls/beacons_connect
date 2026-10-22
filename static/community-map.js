@@ -490,9 +490,36 @@
       chat.href = urls.chat.replace(/\/0$/, "/" + ev.chat_id);
       actions.appendChild(chat);
     }
+    // Anyone who can see a flag can share it: pasted into a chat, the link
+    // shows as the flag's card, but only to people allowed to see the flag.
+    actions.appendChild(button("Copy link", "map-button", function () { copyLink(flag); }));
     if (actions.children.length) { card.appendChild(actions); }
     if (flag.mine) { card.appendChild(node("p", "fd-hint", "Drag your flag on the map to move it.")); }
     el.detail.appendChild(card);
+  }
+
+  // The flag's own address, copied for pasting into a chat.
+  function copyLink(flag) {
+    var link = location.origin + "/find?flag=" + encodeURIComponent(flag.id);
+    var done = function () { announce("Link copied. Paste it into any chat to share this flag.", "success"); };
+    var fallback = function () {
+      // Older browsers, and pages not served over https: a hidden field.
+      var field = node("textarea");
+      field.value = link;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed"; field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+      field.remove();
+      if (ok) { done(); } else { announce("Copy this link to share the flag: " + link); }
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(link).then(done, fallback);
+    } else {
+      fallback();
+    }
   }
 
   // ---------- 6. the draft ----------

@@ -75,24 +75,68 @@
         box-shadow: var(--drop);
       }
 
-      /* speech bubbles: white with a hard shadow; yours are Beacon Blue */
-      .msg { display: flex; flex-direction: column; max-width: 78%; margin: 0 0 14px; }
-      .msg .who { margin-bottom: 3px; padding: 0 2px; color: var(--navy); font-size: .82rem; font-weight: 700; }
-      .msg .body {
-        display: block; padding: 9px 12px 8px;
+      /* ---------- messages ----------
+         A bubble per message, as wide as its words: the sender's name, the
+         text and the time inside, a hard navy shadow, and the sender's
+         avatar outside on the left. Yours sit on the right in Beacon Blue,
+         with no name and no avatar. */
+      .msg {
+        position: relative; align-self: flex-start;
+        display: flex; flex-direction: column;
+        max-width: min(78%, 36rem); margin: 0 0 14px 44px;
+        padding: 7px 12px 6px;
         background: #fff; color: var(--navy);
-        border: 2px solid var(--navy);
-        border-radius: 12px 12px 12px 3px;
-        box-shadow: 3px 3px 0 var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 var(--navy);
+      }
+      .msg > .avatar { position: absolute; left: -44px; bottom: -2px; }
+      .msg .who { margin-bottom: 1px; color: var(--navy); font-size: .8rem; font-weight: 700; }
+      .msg .body {
+        display: block;
         white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1rem; line-height: 1.4;
       }
       .msg .at {
-        margin-top: 5px; padding: 0 2px;
-        color: var(--muted); font-size: .76rem;
+        margin-top: 2px;
+        color: var(--muted); font-size: .74rem;
         font-variant-numeric: tabular-nums;
       }
-      .msg.mine { margin-left: auto; align-items: flex-end; }
-      .msg.mine .body { background: var(--beacon); color: #fff; border-radius: 12px 12px 3px 12px; }
+      .msg.mine { align-self: flex-end; margin-left: 0; background: var(--beacon); color: #fff; }
+      .msg.mine .who { display: none; }
+      .msg.mine .at { color: rgba(255, 255, 255, .78); }
+
+      /* A message that carries a card (a meetup, a shared map flag): the
+         card is the message, so the bubble steps back. The name sits above
+         the card and the time under it; a meetup's one-line summary is left
+         out, because the card says it better. */
+      .msg.has-card {
+        width: min(100% - 44px, 24rem); max-width: none;
+        padding: 0; background: none; color: var(--navy); border: 0; box-shadow: none;
+      }
+      .msg.has-card > .avatar { bottom: 16px; }
+      .msg.has-card .who { margin-bottom: 4px; }
+      .msg.has-card .at { margin-top: 6px; color: var(--muted); }
+      .msg.has-card.mine { width: min(100%, 24rem); }
+      .msg.has-card.mine .at { text-align: right; }
+      .msg.has-post > .body { display: none; }
+      /* words sent with a shared flag: their own small bubble above it */
+      .msg.has-card > .body {
+        align-self: flex-start; max-width: 100%; margin-bottom: 8px; padding: 7px 12px;
+        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 var(--navy);
+      }
+      .msg.has-card.mine > .body { align-self: flex-end; background: var(--beacon); color: #fff; }
+      /* a flag link nobody can open here */
+      .msg .flaggone { display: block; margin-top: 4px; color: var(--muted); font-size: .86rem; font-style: italic; }
+      .msg.mine .flaggone { color: rgba(255, 255, 255, .8); }
+
+      /* "Today", "Yesterday", or the date, where each day starts. */
+      .daymark {
+        align-self: center; flex: none;
+        margin: 2px 0 16px; padding: 3px 10px;
+        background: var(--navy); color: #fff;
+        border-radius: var(--r-sm);
+        font: 700 .8rem/1.3 var(--sans);
+      }
 
       #empty {
         margin: auto; padding: 12px 16px;
@@ -102,17 +146,60 @@
         text-align: center; font-size: .95rem; font-weight: 700;
       }
 
-      /* A game moment in the log: centred, quieter than speech, and never
-         aligned to a side, because it is not something anybody said. */
-      .msg.note { max-width: 100%; align-items: center; margin: 6px auto 14px; text-align: center; }
-      .msg.note .body {
-        background: var(--navy); color: #fff;
-        border-color: var(--navy); border-radius: var(--r-sm);
-        box-shadow: none; font-size: .88rem; font-weight: 700;
+      /* ---------- cards in the log ----------
+         Meetups, game moments and shared map flags are small windows: a
+         coloured title bar (--bar, --bar-ink) over a white pane, with the
+         same hard shadow as the bubbles. Meetups are navy, games orange, and
+         a map flag takes its kind's colour from the map. */
+      .post, .flagcard, .msg.note {
+        display: block; text-align: left;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 var(--navy);
       }
-      .note-act { display: flex; gap: 8px; margin-top: 8px; }
-      .note-act form { margin: 0; }
-      .note-act button { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      .cardbar {
+        display: flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 0 10px;
+        background: var(--bar, var(--navy)); color: var(--bar-ink, #fff);
+        border-bottom: 2px solid var(--navy); border-radius: 6px 6px 0 0;
+        font: 400 22px/1 var(--px); letter-spacing: .01em;
+      }
+      .cardbar::after {
+        content: ""; flex: 1 1 auto; min-width: 16px; height: 10px;
+        background: repeating-linear-gradient(to bottom, currentColor 0 2px, transparent 2px 4px);
+        opacity: .35;
+      }
+      .cardbar .icon { flex: none; }
+      .cardbar img { display: block; height: 22px; width: auto; }
+      .cardpane { display: block; padding: 12px 14px 14px; }
+      .cardpane b { display: block; margin-bottom: 2px; font: 700 1.05rem/1.25 var(--sans); }
+      .cardpane .meta { display: block; margin-top: 2px; color: var(--muted); font-size: .9rem; }
+      .cardpane .note { display: block; margin-top: 6px; color: var(--navy); font-size: .92rem; }
+      .cardpane .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+      /* "3 of 8 going", and other facts, as small dark tags */
+      .cardpane .meta.going, .cardpane .chip {
+        display: inline-block; width: fit-content; margin-top: 10px; padding: 3px 8px;
+        background: var(--navy); color: #fff;
+        border-radius: var(--r-sm); font-size: .8rem; font-weight: 700; line-height: 1.35;
+      }
+      .cardpane .tags .chip { margin-top: 0; }
+      .cardpane .chip.light { background: #fff; color: var(--navy); border: 2px solid var(--navy); padding: 1px 6px; }
+      .cardpane .chip.price { background: var(--gold); color: var(--navy); }
+
+      .post { --bar: var(--navy); --bar-ink: #fff; }
+
+      /* A game moment: the orange window, centred, because it is not
+         something anybody said. */
+      .msg.note {
+        --bar: var(--orange); --bar-ink: var(--navy);
+        align-self: center; width: min(100%, 26rem); max-width: 100%;
+        margin: 6px 0 16px; padding: 0;
+      }
+      .msg.note .body { padding: 10px 14px 0; font-size: .95rem; font-weight: 700; }
+      .msg.note .at { display: block; padding: 6px 14px 10px; text-align: right; }
+      .note-act { display: flex; gap: 8px; padding: 10px 14px 0; }
+      .note-act form { margin: 0; flex: 1 1 0; }
+      .note-act button { width: 100%; min-height: 40px; margin: 0; padding: 0 12px; font-size: .9rem; }
 
       /* ---------- the composer row ---------- */
       /* The composer and the game and meetup menus share a row. */
@@ -248,25 +335,18 @@
       .newpost input[type="number"] { flex: 0 0 5rem; text-align: center; }
       .newpost button { margin: 0; }
 
-      /* ---------- a meetup card inside a message ---------- */
-      .post {
-        display: block; margin-top: 6px; padding: 10px 12px;
-        background: var(--club-bg); color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 3px 3px 0 var(--navy);
-        text-align: left;
-      }
-      .post b { display: block; font: 400 22px/1.05 var(--px); }
-      .post .meta { display: block; color: var(--muted); font-size: .86rem; font-weight: 700; }
-      .post .note { display: block; margin-top: 4px; color: var(--navy); font-size: .92rem; }
       /* The action row: divided off and pushed to the end, so it reads as the
          card's own controls. Wraps rather than colliding on a narrow screen. */
       .post-actions {
-        display: flex; flex-wrap: wrap; justify-content: flex-end;
+        display: flex; flex-wrap: wrap; justify-content: flex-start;
         align-items: center; gap: 8px;
-        margin-top: 10px; padding-top: 10px;
-        border-top: 2px dashed var(--line-2);
+        margin-top: 12px; padding-top: 12px;
+        border-top: 2px dashed var(--line);
       }
+      /* The main key (I'm in) takes the full width, as in the preview. */
+      .post-actions > form:first-child:last-child,
+      .post-actions > form:first-child:has(> button:not(.ghost)) { flex: 1 1 100%; }
+      .post-actions > form:first-child:has(> button:not(.ghost)) button { width: 100%; min-height: 44px; font-size: 1rem; }
       .post-actions form { margin: 0; }
       .post-actions .meta { margin-right: auto; }
       /* "See on map": a white key that goes to the meetup's flag on Meet up */
@@ -686,7 +766,9 @@
            A <div> and not a <p>: these carry Accept and Decline forms, and
            HTML closes a <p> at a <form> start tag, which left the buttons
            outside the message as loose children of #log. #}
-        <div class="msg note" data-id="{{ message.id }}">
+        <div class="msg note" data-id="{{ message.id }}" data-ts="{{ message.ts }}">
+          {# A small window with the game's orange title bar. #}
+          <span class="cardbar">{{ ui.icon("game") }}<span>{{ message.game_label }}</span></span>
           <span class="body">{{ message.body }}</span>
           {% if message.can_answer %}
             <span class="note-act">
@@ -698,9 +780,19 @@
               </form>
             </span>
           {% endif %}
+          <span class="at">{{ message.at }}</span>
         </div>
       {% else %}
-      <div class="msg {% if message.mine %}mine{% endif %}" data-id="{{ message.id }}">
+      {# Speech: a bubble that fits its text, with the sender's name, the
+         words and the time inside it, and their avatar beside it. Yours sit
+         on the right, in Beacon Blue, without either. A message carrying a
+         meetup shows the meetup's own window instead of a bubble
+         (has-card), and the script below does the same for a shared map
+         flag. data-ts is the moment in full, for local times and the
+         "Today" markers. #}
+      <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}"
+           data-id="{{ message.id }}" data-ts="{{ message.ts }}">
+        {% if not message.mine %}{{ ui.avatar(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
         <span class="body">{{ message.body }}</span>
         {% if message.post %}
@@ -896,6 +988,175 @@
   })();
 </script>
 <script>
+  // How the log reads, separate from how it stays live (the next script):
+  //   - each time in the reader's own time zone ("3:12 PM")
+  //   - "Today", "Yesterday" or the date where each day starts
+  //   - a link to a map flag (/find?flag=...) shown as that flag's card
+  // The live script calls BeaconChat.dress() after adding messages.
+  (function () {
+    var log = document.getElementById("log");
+    if (!log) { return; }
+    var FLAGS_URL = {{ url_for("map_flags_list") | tojson }};
+    var UFIND = {{ url_for("static", filename="ufind.svg") | tojson }};
+    var FLAG_LINK = /\S*\/find\?flag=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\S*/i;
+    // The map's colours and icons, so a flag looks the same here as there.
+    var KINDS = {
+      game:   { bar: "#ff791f", ink: "#132245", icon: "game" },
+      study:  { bar: "#005a8b", ink: "#ffffff", icon: "book" },
+      social: { bar: "#78afe9", ink: "#132245", icon: "talk" },
+      club:   { bar: "#fede42", ink: "#132245", icon: "club" },
+      event:  { bar: "#132245", ink: "#ffffff", icon: "star" },
+      ufind:  { bar: "#0b3159", ink: "#ffffff", icon: null }
+    };
+
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) { n.className = cls; }
+      if (text != null) { n.textContent = text; }
+      return n;
+    }
+    function icon(name) {
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "icon");
+      svg.setAttribute("aria-hidden", "true");
+      var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#icon-" + name);
+      svg.appendChild(use);
+      return svg;
+    }
+
+    // ---------- times and days ----------
+    function clock(d) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    function dayLabel(d) {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var that = new Date(d); that.setHours(0, 0, 0, 0);
+      var days = Math.round((today - that) / 86400000);
+      if (days === 0) { return "Today"; }
+      if (days === 1) { return "Yesterday"; }
+      return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric",
+        year: that.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+    }
+    function times() {
+      Array.prototype.forEach.call(log.querySelectorAll(".msg[data-ts]:not([data-day])"), function (m) {
+        var d = new Date(m.dataset.ts);
+        if (isNaN(d.getTime())) { return; }
+        m.dataset.day = d.toDateString();
+        m.dataset.dayLabel = dayLabel(d);
+        var at = m.querySelector(":scope > .at");
+        if (at) { at.textContent = clock(d); }
+      });
+      // Markers are rebuilt each time: cheap, and never out of step.
+      Array.prototype.forEach.call(log.querySelectorAll(".daymark"), function (n) { n.remove(); });
+      var last = null;
+      Array.prototype.forEach.call(log.querySelectorAll(".msg[data-day]"), function (m) {
+        if (m.dataset.day === last) { return; }
+        last = m.dataset.day;
+        log.insertBefore(el("div", "daymark", m.dataset.dayLabel), m);
+      });
+    }
+
+    // ---------- shared map flags ----------
+    // The flags API answers with the flags this reader may see, so a flag
+    // shared somewhere it shouldn't be stays a plain line for everyone else.
+    var flags = null, flagsAt = 0;
+    function loadFlags() {
+      if (flags && Date.now() - flagsAt < 20000) { return Promise.resolve(flags); }
+      return fetch(FLAGS_URL, { credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : { flags: [] }; })
+        .catch(function () { return { flags: [] }; })
+        .then(function (data) { flags = data.flags || []; flagsAt = Date.now(); return flags; });
+    }
+    // The same words the map's flag card uses.
+    function endsIn(value) {
+      var left = new Date(value).getTime() - Date.now();
+      if (!(left > 0)) { return "Expired"; }
+      var minutes = Math.ceil(left / 60000);
+      if (minutes < 60) { return "Ends in " + minutes + " min"; }
+      var rest = minutes % 60;
+      return "Ends in " + Math.floor(minutes / 60) + " hr" + (rest ? " " + rest + " min" : "");
+    }
+    function whoLine(flag) {
+      if (flag.mine) { return flag.event ? "Your meetup" : "Posted by you"; }
+      if (flag.visibility === "club") { return flag.club_name + " members. Posted by " + flag.owner_name; }
+      if (flag.visibility === "friends") { return "Shared with you by " + flag.owner_name; }
+      if (flag.event) { return flag.owner_name + "'s meetup"; }
+      return "Posted by " + flag.owner_name;
+    }
+    function flagCard(flag) {
+      var look = KINDS[flag.category] || KINDS.event;
+      var card = el("div", "flagcard");
+      card.dataset.flag = flag.id;
+      card.style.setProperty("--bar", look.bar);
+      card.style.setProperty("--bar-ink", look.ink);
+      var bar = el("div", "cardbar");
+      if (flag.category === "ufind") {
+        var img = el("img"); img.src = UFIND; img.alt = "U-Find"; bar.appendChild(img);
+      } else {
+        bar.appendChild(icon(look.icon));
+        bar.appendChild(el("span", "", flag.category_label || "Flag"));
+      }
+      card.appendChild(bar);
+      var pane = el("div", "cardpane");
+      pane.appendChild(el("b", "", flag.title));
+      if (flag.location_name) { pane.appendChild(el("span", "meta", flag.location_name)); }
+      pane.appendChild(el("span", "meta", whoLine(flag)));
+      if (flag.description) { pane.appendChild(el("span", "note", flag.description)); }
+      var tags = el("span", "tags");
+      if (flag.category === "ufind") { tags.appendChild(el("span", "chip price", flag.price ? "$" + flag.price : "Free")); }
+      if (flag.event) {
+        if (flag.event.when) { tags.appendChild(el("span", "chip", flag.event.when)); }
+        tags.appendChild(el("span", "chip", flag.event.going + " of " + flag.event.max + " going"));
+      } else {
+        tags.appendChild(el("span", "chip light", endsIn(flag.expires_at)));
+      }
+      pane.appendChild(tags);
+      var acts = el("div", "post-actions");
+      var link = el("a", "maplink", "See on map");
+      link.href = "/find?flag=" + encodeURIComponent(flag.id);
+      link.dataset.flag = flag.id;
+      acts.appendChild(link);
+      pane.appendChild(acts);
+      card.appendChild(pane);
+      return card;
+    }
+    function unfurl() {
+      var todo = [];
+      Array.prototype.forEach.call(log.querySelectorAll(".msg:not(.note):not([data-unfurled])"), function (m) {
+        m.dataset.unfurled = "1";
+        var body = m.querySelector(":scope > .body");
+        var hit = body && FLAG_LINK.exec(body.textContent);
+        if (hit) { todo.push({ msg: m, body: body, id: hit[1].toLowerCase(), raw: hit[0] }); }
+      });
+      if (!todo.length) { return; }
+      loadFlags().then(function (list) {
+        // Measured before the cards go in: they make the log taller.
+        var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+        todo.forEach(function (t) {
+          var flag = list.filter(function (f) { return String(f.id).toLowerCase() === t.id; })[0];
+          var at = t.msg.querySelector(":scope > .at");
+          if (!flag) {
+            t.msg.insertBefore(el("span", "flaggone", "That map flag has ended, or it isn't shared with you."), at);
+            return;
+          }
+          // The link becomes the card; any words around it stay above it.
+          var rest = t.body.textContent.replace(t.raw, "").trim();
+          t.body.textContent = rest;
+          if (!rest) { t.body.style.display = "none"; }
+          t.msg.classList.add("has-card");
+          t.msg.insertBefore(flagCard(flag), at);
+        });
+        if (stuck) { log.scrollTop = log.scrollHeight; }
+      });
+    }
+
+    function dress() { times(); unfurl(); }
+    window.BeaconChat = { dress: dress };
+    dress();
+  })();
+</script>
+<script>
   // One waiting request for the whole chat: messages and the game together.
   //
   // This used to be two intervals, 4000ms and 2500ms, and that interval *was*
@@ -954,6 +1215,8 @@
       if (!had) {
         var at = msg.querySelector(".at");
         if (at) { msg.insertBefore(fresh, at); } else { msg.appendChild(fresh); }
+        // Now it is a meetup's message: the card stands in for the bubble.
+        msg.classList.add("has-card", "has-post");
         return;
       }
       // Whether the "are you sure" is open is the reader's business, not the
@@ -1004,11 +1267,24 @@
       var p = document.createElement("p");
       p.dataset.id = message.id;
 
+      if (message.ts) { p.dataset.ts = message.ts; }
+
       if (message.event) {
         // Something that happened to a game, not something anybody said. It
         // keeps the .msg class because `after` above is read from #log .msg --
         // without it every round would fetch these again.
         p.className = "msg note";
+        // The orange title bar, as the server draws it.
+        var bar = span("cardbar", "");
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "icon");
+        svg.setAttribute("aria-hidden", "true");
+        var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+        use.setAttribute("href", "#icon-game");
+        svg.appendChild(use);
+        bar.appendChild(svg);
+        bar.appendChild(span("", message.game_label || "Game"));
+        p.appendChild(bar);
         p.appendChild(span("body", message.body));
         if (message.can_answer) {
           var acts = document.createElement("span");
@@ -1017,11 +1293,20 @@
           acts.appendChild(answer(message.decline_url, "Decline", "ghost"));
           p.appendChild(acts);
         }
+        p.appendChild(span("at", message.at || ""));
         log.appendChild(p);
         return;
       }
 
       p.className = "msg" + (message.user_id === me ? " mine" : "");
+      if (message.user_id !== me) {
+        // The same avatar ui.avatar() draws: initials on a palette colour.
+        var parts = String(message.name || "?").trim().split(/\s+/);
+        var face = span("avatar av-" + (message.user_id % 6) + " sm",
+          (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
+        face.setAttribute("aria-hidden", "true");
+        p.appendChild(face);
+      }
       p.appendChild(span("who", message.name));
       p.appendChild(span("body", message.body));
       p.appendChild(span("at", message.at || ""));
@@ -1054,6 +1339,7 @@
       if (data.messages && data.messages.length) {
         var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
         data.messages.forEach(add);
+        if (window.BeaconChat) { window.BeaconChat.dress(); }
         if (stuck) { log.scrollTop = log.scrollHeight; }
       }
       if (typeof data.after === "number") { after = data.after; }

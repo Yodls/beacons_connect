@@ -822,6 +822,9 @@ def chat_rows(kind, parent, after=0):
             "name": name,
             "body": m.body,
             "at": m.created_at.strftime("%H:%M"),
+            # The same moment in full (UTC), so the page can show it in the
+            # reader's own time zone and mark where each day starts.
+            "ts": m.created_at.isoformat() + "Z",
             "mine": m.user_id == current_user.id,
         }
         post = posts.get(m.post_id)
@@ -837,6 +840,9 @@ def chat_rows(kind, parent, after=0):
             ) if game and game.seat_of(current_user.id) is not None else None
             entry["event"] = m.event
             entry["game_id"] = m.game_id
+            # The title on the game's card in the log ("Battleship").
+            entry["game_label"] = (rules.LABELS.get(game.kind, "Game")
+                                   if game is not None else "Game")
             entry["body"] = event_wording(
                 m, game, name, other.name if other else "them")
             # Only the invitee, and only while it is still unanswered, gets

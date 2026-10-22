@@ -48,6 +48,10 @@
       // page has already seen, and `apply` is handed the whole answer.
       watch: function (what) {
         Beacon.watching = what;
+        // If the channel's held request already went out without this (the
+        // page arrived in pieces and the channel's one-tick head start ran
+        // first), it starts again, so a chat is never left 25 seconds behind.
+        if (Beacon.rewatch) { Beacon.rewatch(); }
         return function () { Beacon.watching = null; };
       },
       watching: null
