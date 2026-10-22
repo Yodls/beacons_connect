@@ -47,6 +47,7 @@ from models import (
     ChatMember,
     Club,
     ClubMember,
+    ClubTag,
     Game,
     GamePairing,
     GameSeek,
@@ -54,6 +55,7 @@ from models import (
     GamePostRsvp,
     GameQueue,
     GAME_EVENTS,
+    HubRequest,
     Match,
     MAP_FLAG_KINDS,
     MapFlag,
@@ -62,6 +64,7 @@ from models import (
     Message,
     PRONOUNS,
     Question,
+    QuestionOption,
     User,
     UserAnswer,
     db,
@@ -3388,6 +3391,201 @@ def leave_club(club_id):
         flash(f"You left {club.name}.")
 
     return back_to()
+
+
+# ----------------------------------------------------------- hub requests
+# The catalogue is seeded by hand, so until now the only way to get a hub was
+# to know somebody who could edit db/seed_clubs.py. These three routes are the
+# way in for everybody else: ask, and one person decides.
+
+HUB_NAME_MAX = 60
+HUB_PITCH_MAX = 300
+# How many interests an admin may tag a new hub with. Enough to place it,
+# few enough that a hub cannot be tagged with everything and out-rank the
+# seeded ones for every student at once.
+HUB_TAGS_MAX = 6
+
+
+def admin_ids():
+    """Everyone who reviews requests. Usually one person."""
+    return db.session.scalars(
+        db.select(User.id).filter_by(is_admin=True)).all()
+
+
+def not_admin():
+    """The redirect to send an ordinary student away with, or None.
+
+    A flash and a redirect rather than a 403: no page in this app aborts, and
+    somebody who followed a link they should not have is better told what
+    happened than shown a bare error. The sentence names who may do this, the
+    way the chat routes' do.
+    """
+    if current_user.is_admin:
+        return None
+    flash("That page is for whoever reviews hub requests.")
+    return redirect(url_for("clubs"))
+
+
+@app.route("/hubs/request", methods=["POST"])
+@login_required
+def hub_request():
+    name = request.form.get("name", "").strip()
+    pitch = request.form.get("pitch", "").strip()
+
+    if not name:
+        flash("Give the hub a name.")
+        return redirect(url_for("clubs"))
+    if len(name) > HUB_NAME_MAX:
+        flash(f"Hub names are limited to {HUB_NAME_MAX} characters.")
+        return redirect(url_for("clubs"))
+    if not pitch:
+        flash("Say what the hub is for, so there is something to decide on.")
+        return redirect(url_for("clubs"))
+    if len(pitch) > HUB_PITCH_MAX:
+        flash(f"Keep it under {HUB_PITCH_MAX} characters.")
+        return redirect(url_for("clubs"))
+
+    # Already a hub. Checked case-insensitively, because "chess" and "Chess"
+    # are the same request and only one of them collides with the unique name.
+    taken = db.session.scalar(
+        db.select(Club).where(db.func.lower(Club.name) == name.lower()))
+    if taken is not None:
+        flash(f"{taken.name} already exists. You can join it from here.")
+        return redirect(url_for("clubs"))
+
+    # Insert and catch, rather than looking first: two students asking for the
+    # same hub in the same moment would both pass a pre-check. The partial
+    # unique index is what actually decides, and it only covers pending rows,
+    # so something turned down last term can be asked for again.
+    db.session.add(HubRequest(name=name, pitch=pitch,
+                              requested_by=current_user.id))
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        flash(f"{name} has already been requested and is waiting for review.")
+        return redirect(url_for("clubs"))
+
+    for admin_id in admin_ids():
+        notices.hub_requested(admin_id, name)
+    db.session.commit()
+    flash(f"Thanks. {name} has been sent for review.")
+    return redirect(url_for("clubs"))
+
+
+@app.route("/admin/hubs")
+@login_required
+def admin_hubs():
+    away = not_admin()
+    if away:
+        return away
+
+    rows = db.session.scalars(
+        db.select(HubRequest).order_by(HubRequest.id.desc())).all()
+    people = {u.id: u for u in db.session.scalars(
+        db.select(User).where(User.id.in_(
+            [r.requested_by for r in rows] or [0])))}
+    return render_template(
+        "adminhubs.html",
+        pending=[r for r in rows if r.status == "pending"],
+        decided=[r for r in rows if r.status != "pending"],
+        people=people,
+        # What a new hub may be tagged with. The question a hub is placed by
+        # is the one whose answers people are shown -- so the admin is
+        # choosing from the same words a student saw.
+        tags=db.session.scalars(
+            db.select(QuestionOption)
+            .join(Question, Question.id == QuestionOption.question_id)
+            .where(Question.key == matching.SHOWN_QUESTION)
+            .order_by(QuestionOption.sort_order)).all(),
+        tag_max=HUB_TAGS_MAX,
+    )
+
+
+@app.route("/admin/hubs/<int:request_id>/approve", methods=["POST"])
+@login_required
+def hub_approve(request_id):
+    away = not_admin()
+    if away:
+        return away
+
+    asked = db.session.get(HubRequest, request_id)
+    if asked is None or asked.status != "pending":
+        flash("That request has already been decided.")
+        return redirect(url_for("admin_hubs"))
+
+    picked = [int(v) for v in request.form.getlist("tag") if v.isdigit()]
+    # Refused rather than allowed through, because an untagged hub is not
+    # merely ranked low: recommend_clubs reaches clubs only through club_tags,
+    # so a hub with none can never be suggested to anybody, ever. It would sit
+    # in the browse list looking fine and quietly never find its people.
+    if not picked:
+        flash("Pick at least one interest, or the hub will never be "
+              "suggested to anyone.")
+        return redirect(url_for("admin_hubs"))
+    if len(picked) > HUB_TAGS_MAX:
+        flash(f"Pick at most {HUB_TAGS_MAX} interests.")
+        return redirect(url_for("admin_hubs"))
+
+    # Checked against the offered set rather than trusted: these are small
+    # integers in a posted form, and a tag naming another question's option
+    # would be accepted by the composite foreign key only if the question id
+    # agreed -- so the question id comes from the row, never from the form.
+    options = db.session.scalars(
+        db.select(QuestionOption)
+        .join(Question, Question.id == QuestionOption.question_id)
+        .where(Question.key == matching.SHOWN_QUESTION,
+               QuestionOption.id.in_(picked))).all()
+    if len(options) != len(set(picked)):
+        flash("That is not one of the interests on offer.")
+        return redirect(url_for("admin_hubs"))
+
+    club = Club(name=asked.name, description=asked.pitch)
+    db.session.add(club)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        # Somebody seeded a hub with this name between the request and now.
+        db.session.rollback()
+        flash(f"{asked.name} already exists as a hub.")
+        return redirect(url_for("admin_hubs"))
+
+    for option in options:
+        db.session.add(ClubTag(club_id=club.id,
+                               question_id=option.question_id,
+                               option_id=option.id))
+
+    asked.status = "approved"
+    asked.decided_by = current_user.id
+    asked.decided_at = datetime.utcnow()
+    asked.club_id = club.id
+    notices.hub_decided(asked.requested_by, club.name, True)
+    db.session.commit()
+    flash(f"{club.name} is open, tagged with "
+          f"{', '.join(o.label for o in options)}.")
+    return redirect(url_for("admin_hubs"))
+
+
+@app.route("/admin/hubs/<int:request_id>/decline", methods=["POST"])
+@login_required
+def hub_decline(request_id):
+    away = not_admin()
+    if away:
+        return away
+
+    asked = db.session.get(HubRequest, request_id)
+    if asked is None or asked.status != "pending":
+        flash("That request has already been decided.")
+        return redirect(url_for("admin_hubs"))
+
+    asked.status = "declined"
+    asked.decided_by = current_user.id
+    asked.decided_at = datetime.utcnow()
+    asked.note = request.form.get("note", "").strip()[:HUB_PITCH_MAX]
+    notices.hub_decided(asked.requested_by, asked.name, False, asked.note)
+    db.session.commit()
+    flash(f"{asked.name} was turned down.")
+    return redirect(url_for("admin_hubs"))
 
 
 # ---------------------------------------------------------------- group chats

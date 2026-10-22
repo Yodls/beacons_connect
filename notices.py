@@ -89,6 +89,34 @@ def friend_accepted(recipient_id, actor):
     )
 
 
+def hub_requested(admin_id, name):
+    """Somebody asked for a hub. Addressed to whoever reviews them.
+
+    No actor on purpose. The app is telling an admin that a queue has
+    something in it, not that a particular student did something -- and a
+    null actor also means an admin who asks for a hub themselves still gets
+    told, instead of being silently skipped by the no-self-notice rule.
+    """
+    return notify(admin_id, "hub_request",
+                  f"{name} was requested. It is waiting for review.",
+                  "/admin/hubs")
+
+
+def hub_decided(requester_id, name, approved, note=""):
+    """What became of the hub somebody asked for.
+
+    The sentence is finished here, as every notice's is, so the decision
+    reads the same later as it did on the day -- including the reason, which
+    is the whole point of telling somebody no.
+    """
+    if approved:
+        return notify(requester_id, "hub_decision",
+                      f"{name} is open. You can join it now.", "/clubs")
+    said = f"{name} was not added."
+    return notify(requester_id, "hub_decision",
+                  f"{said} {note}".strip() if note else said, "/clubs")
+
+
 def chat_invite(recipient_id, actor, chat):
     return notify(
         recipient_id, "chat_invite",

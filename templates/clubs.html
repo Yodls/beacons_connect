@@ -26,6 +26,22 @@
 #}
 
 {% block appstyle %}
+      /* ---------- asking for a hub that isn't here ----------
+         A .win rather than a .card, for the reason given above: the card
+         class on this page is counted against the number of clubs. */
+      .hubask { max-width: 560px; }
+      .hubform { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+      .hubform .lede { margin: 0 0 6px; }
+      .hubform label { color: var(--navy); font-size: .88rem; font-weight: 700; }
+      .hubform input, .hubform textarea {
+        padding: 9px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .95rem/1.35 var(--sans);
+      }
+      .hubform textarea { resize: vertical; }
+      .hubform button { align-self: flex-start; margin-top: 8px; }
+
       /* ---------- the category keys and the search ---------- */
       .catbar {
         display: flex; flex-wrap: wrap; gap: 8px;
@@ -179,6 +195,30 @@
       </div>
     </section>
   {% endfor %}
+
+  {# Asking for one that isn't here.
+
+     Deliberately NOT a .card: this page's card class is counted across the
+     whole document and compared to the number of clubs, by two suites. A
+     second thing wearing it would read as a club that does not exist. The
+     box below is a .win, which is what every other framed block on the site
+     uses anyway. #}
+  <section class="win hubask sec-club">
+    <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Missing something?</span><span class="grip"></span></div>
+    <form class="hubform" method="post" action="{{ url_for('hub_request') }}">
+      <p class="lede">
+        If there's no hub for the thing you're into, ask for one. It goes to
+        whoever looks after the list.
+      </p>
+      <label for="hubname">What should it be called?</label>
+      <input id="hubname" name="name" maxlength="60" required
+             placeholder="Rock Climbing" autocomplete="off" />
+      <label for="hubpitch">What's it for?</label>
+      <textarea id="hubpitch" name="pitch" maxlength="300" rows="2" required
+                placeholder="Weekly sessions at the gym, and trips when the weather holds."></textarea>
+      <button type="submit">Request this hub</button>
+    </form>
+  </section>
 
   <p class="nav"><a href="{{ url_for('matches') }}">&larr; Back to your friends</a></p>
 {% endblock %}

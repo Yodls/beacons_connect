@@ -4,13 +4,24 @@ from sqlalchemy.exc import IntegrityError
 
 from models import Match, User, UserAnswer, db, pair, pronoun_label
 
-# The hobbies two students both picked, for one named person, as an array.
+# The one question whose answers are shown back to people, by key. Named here
+# so a test can assert the question actually exists -- which is the only way
+# to catch this pointing at nothing, since the SQL below would not complain.
+SHOWN_QUESTION = "activity"
+
+# The activities two students both picked, for one named person, as an array.
 #
-# Hobbies alone. The overlap as a whole is still private -- test_privacy keeps
-# majors, graduation years and the rest off every page -- and this is the one
-# question carved out of that, because "you both like Hiking" is the reason a
-# suggestion is a suggestion. _SHARED_SQL below is the same shape without the
-# q.key filter, and is still nobody's business.
+# That question alone. The overlap as a whole is still private -- test_privacy
+# keeps majors, graduation years and the rest off every page -- and this is the
+# one question carved out of that, because "you both like Board Games" is the
+# reason a suggestion is a suggestion. _SHARED_SQL below is the same shape
+# without the q.key filter, and is still nobody's business.
+#
+# The key is read here and nowhere else, and it is read as a string rather
+# than joined through anything -- so pointing it at a question that does not
+# exist raises nothing at all. Every card simply loses its chips, quietly.
+# That is what happened to `hobbies`, which this replaced: if the key ever
+# changes again, change it here and check a card, because no error will.
 #
 # Written as a column rather than a second lookup because it is wanted for
 # whole lists: a per-row call would be one query per card, and test_privacy
@@ -25,7 +36,7 @@ def _hobbies_for(other):
            JOIN question_options o ON o.id = mine.option_id
            JOIN questions q        ON q.id = mine.question_id
           WHERE mine.user_id = :user_id
-            AND q.key = 'hobbies')"""
+            AND q.key = '{SHOWN_QUESTION}')"""
 
 
 _CLUBS_SQL = """

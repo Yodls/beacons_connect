@@ -63,6 +63,17 @@ class User(UserMixin, db.Model):
     # this field.
     discoverable = db.Column(db.Boolean, nullable=False, default=True,
                              server_default="true")
+    # Whether this account reviews what students ask for -- today that is hub
+    # requests and nothing else. The app has no other notion of privilege, so
+    # this is deliberately one boolean and not a role table: there is one
+    # thing an admin can do, and inventing a permission system for it would be
+    # more machinery than the feature.
+    #
+    # server_default for the same two reasons as discoverable above: it
+    # backfills every existing account as an ordinary student, which is what
+    # they are, and lets the suites keep building User(...) without naming it.
+    is_admin = db.Column(db.Boolean, nullable=False, default=False,
+                         server_default="false")
 
     __table_args__ = (
         db.CheckConstraint(
@@ -170,6 +181,59 @@ class ClubMember(db.Model):
         db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE"), primary_key=True
     )
     joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+HUB_REQUEST_STATUSES = ("pending", "approved", "declined")
+
+
+class HubRequest(db.Model):
+    """A hub a student asked for, and what was decided about it.
+
+    Kept after it is decided rather than deleted, so a student who asks for
+    the same thing twice can be told it was already turned down, and so the
+    decision has a record. `club_id` is what an approved one became: it is the
+    only link between the request and the hub, and it goes null rather than
+    taking the request with it if that hub is ever deleted -- the request is
+    still a true account of what was asked for.
+    """
+
+    __tablename__ = "hub_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.Text, nullable=False)
+    pitch = db.Column(db.Text, nullable=False)
+    requested_by = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    status = db.Column(db.Text, nullable=False, default="pending",
+                       server_default="pending")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    decided_by = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
+    decided_at = db.Column(db.DateTime)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.id", ondelete="SET NULL"))
+    note = db.Column(db.Text)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN (" + ", ".join(f"'{s}'" for s in HUB_REQUEST_STATUSES) + ")",
+            name="ck_hub_request_status",
+        ),
+        # A decided request names who decided it and when; a pending one names
+        # neither. Written as a rule rather than left to the route, because
+        # "approved by nobody at no time" is the shape a half-finished branch
+        # would leave behind.
+        db.CheckConstraint(
+            "(status = 'pending') = (decided_by IS NULL AND decided_at IS NULL)",
+            name="ck_hub_request_decided",
+        ),
+        db.CheckConstraint("length(btrim(name)) > 0", name="ck_hub_request_name"),
+        # Two people asking for the same hub while it is still pending is one
+        # request, not two. Decided ones are exempt, so a hub that was turned
+        # down can be asked for again later.
+        db.Index("uq_hub_request_pending", db.text("lower(name)"),
+                 unique=True, postgresql_where=db.text("status = 'pending'")),
+        db.Index("ix_hub_requests_status", "status", "id"),
+    )
 
 
 # Join codes are read aloud and typed by hand, so the alphabet leaves out every
@@ -719,6 +783,8 @@ NOTICE_KINDS = (
     "game_answer",       # the challenge you sent was accepted or declined
     "paired",            # you and somebody else picked the same game
     "message",           # new messages in a chat you were not reading
+    "hub_request",       # a student asked for a hub; for whoever reviews them
+    "hub_decision",      # the hub you asked for was created, or was not
 )
 
 

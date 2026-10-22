@@ -71,6 +71,9 @@
           <a href="{{ url_for('people') }}">Find people</a>
           <a href="{{ url_for('chats') }}">Group chats{%
             if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
+          {% if current_user.is_admin %}
+            <a href="{{ url_for('admin_hubs') }}">Hub requests</a>
+          {% endif %}
           <a href="{{ url_for('logout') }}">Sign out</a>
         </div>
       </details>
