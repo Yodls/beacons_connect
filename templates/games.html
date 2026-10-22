@@ -3,43 +3,43 @@
 {% block title %}Play an online game{% endblock %}
 
 {% block appstyle %}
+      /* ---------- Start a game ----------
+         Each way to start is a small orange-tinted panel inside the window. */
       .starter {
-        padding: 1.25rem 1.4rem; margin-top: .6rem;
-        background:
-          radial-gradient(120% 140% at 100% 0%, #e8821f 0%, transparent 62%),
-          var(--game);
-        color: #fff; border-radius: 18px;
-        box-shadow: var(--shadow-2);
+        padding: 14px;
+        background: var(--game-bg);
+        border: 2px solid var(--navy); border-radius: var(--r);
       }
-      .starter h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
-      .starter p { color: #fbe4d2; font-size: .86rem; margin: 0 0 .9rem; }
-      .starter form { display: flex; flex-wrap: wrap; gap: .5rem; }
-      .starter select {
-        width: auto; flex: 1 1 9rem; margin: 0;
-        border-color: transparent; background: #fff;
-      }
-      .starter button {
-        margin: 0; background: #fff; color: var(--game);
-        white-space: nowrap;
-      }
-      .starter button:hover { background: #fdf0e6; }
+      .starter h3 { font-size: 1.05rem; margin-bottom: 2px; }
+      .starter p { margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
+      .starter form { display: flex; flex-wrap: wrap; gap: 10px; }
+      .starter select { width: auto; flex: 1 1 9rem; margin: 0; }
+      .starter button { margin: 0; white-space: nowrap; }
 
-      /* The note that turns up once waiting has gone on a while. Shaped like
-         the chat's .presence strip -- a dot and a sentence -- and coloured
-         like find's .queuebox .waiting, which is the same problem of a badge
-         sitting on a saturated card. It had no rule of its own before, so it
-         came out as loose prose with a second white button under it. */
+      /* Waiting for a player: a pixel progress bar under the heading. */
+      #seekbox h3::after {
+        content: ""; display: block; height: 22px; margin-top: 10px;
+        padding: 3px; background-clip: content-box;
+        background-color: #fff;
+        background-image: repeating-linear-gradient(90deg, var(--orange) 0 14px, transparent 14px 18px);
+        background-size: 0 100%; background-repeat: no-repeat;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        animation: seek-fill 3s steps(12) infinite;
+      }
+      @keyframes seek-fill { from { background-size: 0 100%; } to { background-size: 100% 100%; } }
+
+      /* The note that turns up once waiting has gone on a while: a dot and
+         a sentence, on a yellow strip. */
       .starter .seek-slow {
-        display: flex; align-items: center; gap: .5rem;
-        margin: 0 0 .9rem; padding: .45rem .75rem;
-        background: rgba(255, 255, 255, .18);
-        border-radius: var(--r-sm);
-        color: #fff; font-size: .82rem;
+        display: flex; align-items: center; gap: 8px;
+        margin: 0 0 12px; padding: 8px 10px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .9rem; font-weight: 700;
       }
       .starter .seek-slow::before {
-        content: ""; flex: 0 0 auto;
-        width: 7px; height: 7px; border-radius: 50%;
-        background: #ffd27a;
+        content: ""; flex: 0 0 auto; width: 8px; height: 8px;
+        background: var(--orange); border: 2px solid var(--navy);
       }
       /* The display above beats the browser's own [hidden] rule, so the note
          would be on screen from the first second rather than after a minute.
@@ -49,16 +49,15 @@
       /* Whose turn it is. Base scopes its own .pill to the friends dock, so
          these are fully declared here. */
       .pill {
-        display: inline-flex; align-items: center; gap: .3rem; flex: 0 0 auto;
-        margin-left: auto; padding: .18rem .55rem;
-        border-radius: var(--pill);
-        font-size: .7rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
+        display: inline-flex; align-items: center; flex: 0 0 auto;
+        margin-left: auto; height: 26px; padding: 0 8px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .8rem/1 var(--sans); white-space: nowrap;
       }
-      .pill.you  { background: var(--club-bg);    color: #7d5512; }
-      .pill.them { background: var(--surface-2);  color: var(--muted); }
-      .pill.done { background: var(--place-bg);   color: var(--place); }
-      .pill.dead { background: var(--danger-bg);  color: var(--danger); }
+      .pill.you  { background: var(--gold);   color: var(--navy); }
+      .pill.them { background: var(--paper);  color: var(--muted); border-color: var(--line-2); }
+      .pill.done { background: var(--beacon); color: #fff; }
+      .pill.dead { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 {% endblock %}
 
 {#
@@ -67,9 +66,11 @@
   after everything in this block.
 #}
 {% block main %}
-  <h1>Play an online game</h1>
-  <p class="lede">Turn-based games against your friends &mdash; or whoever is
-    waiting for the same one.</p>
+  <div class="pagehead">
+    <h1>Play an online game</h1>
+    <p class="lede">Turn-based games against your friends &mdash; or whoever is
+      waiting for the same one.</p>
+  </div>
 
   <section class="sec-game">
     {{ ui.section("Start a game", "game", "plus") }}

@@ -3,31 +3,23 @@
 {% block title %}Find people{% endblock %}
 
 {% block appstyle %}
+      /* ---------- the heading panel, with the search ---------- */
       .finder {
-        padding: 1.25rem 1.4rem;
-        background:
-          radial-gradient(120% 140% at 100% 0%, #1c6fb5 0%, transparent 62%),
-          var(--blue);
-        color: #fff; border-radius: 18px;
-        box-shadow: var(--shadow-2);
+        padding: 14px 16px 16px;
+        background: rgba(255, 255, 255, .86);
+        -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
       }
-      .finder h1 { color: #fff; }
-      .finder .lede { color: #d4e6f6; margin-bottom: .9rem; }
-      .finder form { display: flex; gap: .5rem; }
-      .finder input {
-        margin: 0; flex: 1 1 auto;
-        border-color: transparent; background: #fff;
-      }
-      .finder button {
-        margin: 0; background: #fff; color: var(--blue);
-        white-space: nowrap;
-      }
-      .finder button:hover { background: #eaf1f9; }
+      .finder .lede { margin-bottom: 14px; }
+      .finder form { display: flex; gap: 10px; }
+      .finder input { margin: 0; flex: 1 1 auto; }
+      .finder button { margin: 0; white-space: nowrap; }
 
       /* They are waiting on an answer from you. */
-      .card.asked {
-        border-color: var(--club);
-        box-shadow: 0 0 0 3px var(--club-bg), var(--shadow);
+      section .card.asked {
+        border-color: var(--navy);
+        box-shadow: inset 6px 0 0 var(--gold), 3px 3px 0 var(--navy);
       }
 {% endblock %}
 

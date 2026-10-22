@@ -1,3 +1,18 @@
+/*
+  Community map (Leaflet + OpenStreetMap) for the Meet up page.
+
+  What this file does, top to bottom:
+    1. loads Leaflet from unpkg on demand
+    2. draws the campus area, the landmark pins and everyone's flags
+    3. runs the draft flag: tap the map, drag the dashed pin, fill the form,
+       and nothing is saved until "Submit flag" (POST to data-flags-url)
+    4. keeps the list, the key and the "N / 3 flags used" count up to date
+
+  Beacon OS look: pins are pixel flags in the UMass Boston palette, with an
+  icon from the page's sprite (templates/_icons.html); landmarks are pixel
+  lighthouses; the Campus Center wears the UMass Boston logo. The markup and
+  styles for all of these live in templates/_community_map.html and .css.
+*/
 (function () {
   "use strict";
 
@@ -10,14 +25,22 @@
   var LEAFLET_JS = "https://unpkg.com/leaflet@" + LEAFLET_VERSION + "/dist/leaflet.js";
   var CAMPUS_CENTER = [42.31335, -71.03815];
   var CAMPUS_BOUNDS = [[42.3097, -71.0436], [42.3174, -71.0317]];
+  // One look per flag type: the pin colour, the colour of the icon on it,
+  // and which sprite icon it shows. Brand colours: Orange, Beacon Blue, Sky,
+  // Yellow and Navy.
   var FLAG_COLORS = {
-    game: "#d9620f",
-    study: "#1d5fb0",
-    social: "#0f7a86",
-    club: "#a9741a",
-    event: "#1b7f52"
+    game: "#ff791f",
+    study: "#005a8b",
+    social: "#78afe9",
+    club: "#fede42",
+    event: "#132245"
   };
+  var FLAG_INK = { game: "#132245", study: "#ffffff", social: "#132245", club: "#132245", event: "#ffffff" };
+  var FLAG_ICONS = { game: "game", study: "book", social: "talk", club: "club", event: "star" };
   var FLAG_LETTERS = { game: "G", study: "S", social: "C", club: "H", event: "E" };
+  var DEFAULT_COLOR = "#005a8b";
+  var CAMPUS_CENTER_KEY = "campus-center";
+  var SVG_NS = "http://www.w3.org/2000/svg";
 
   var apiUrl = root.dataset.flagsUrl;
   var statusEl = document.getElementById("mapStatus");
@@ -34,6 +57,8 @@
   var submitButton = document.getElementById("mapFlagSubmit");
   var locateButton = document.getElementById("mapLocate");
   var refreshButton = document.getElementById("mapRefresh");
+  var legendEl = document.getElementById("mapLegend");
+  var umbLogo = root.dataset.umbLogo || "";
 
   var map;
   var flagLayer;
@@ -114,12 +139,14 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
     }).addTo(map);
 
+    // The campus area flags may go in: a dashed Beacon Blue outline.
     L.rectangle(CAMPUS_BOUNDS, {
-      color: "#1b7f52",
-      weight: 1,
-      opacity: 0.35,
-      fillColor: "#1b7f52",
-      fillOpacity: 0.025,
+      color: "#005a8b",
+      weight: 2,
+      opacity: 0.6,
+      dashArray: "6 6",
+      fillColor: "#005a8b",
+      fillOpacity: 0.04,
       interactive: false
     }).addTo(map);
 
@@ -143,31 +170,54 @@
     return L.latLngBounds(CAMPUS_BOUNDS).contains(latlng);
   }
 
-  function approvedIcon() {
+  // Markup for an icon from the page's sprite. Names are always one of the
+  // fixed keys above, never user text.
+  function spriteMarkup(name) {
+    return '<svg class="icon" aria-hidden="true" focusable="false"><use href="#icon-' + name + '"/></svg>';
+  }
+
+  // The same icon as a DOM node, for the key and the list.
+  function spriteNode(name) {
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    var use = document.createElementNS(SVG_NS, "use");
+    use.setAttribute("href", "#icon-" + name);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  // Landmarks: a pixel lighthouse on a yellow tile, except the Campus
+  // Center, which wears the UMass Boston logo.
+  function approvedIcon(place) {
+    if (place && place.key === CAMPUS_CENTER_KEY && umbLogo) {
+      return L.divIcon({
+        className: "approved-place-icon",
+        html: '<span class="campus-umb-pin" aria-hidden="true"><img src="' + umbLogo +
+          '" alt="" width="46" height="22" /></span>',
+        iconSize: [58, 34],
+        iconAnchor: [29, 34]
+      });
+    }
     return L.divIcon({
       className: "approved-place-icon",
       html: '<span class="campus-lighthouse-pin" aria-hidden="true">' +
-        '<svg viewBox="0 0 32 42" focusable="false">' +
-          '<path class="lighthouse-rays" d="M16 1v3M5 7l3 2M27 7l-3 2" />' +
-          '<path d="M8 8l8-5 8 5z" class="lighthouse-blue" />' +
-          '<rect x="10" y="8" width="12" height="7" rx="1" class="lighthouse-lamp" />' +
-          '<path d="M7 15h18v3H7z" class="lighthouse-blue" />' +
-          '<path d="M11 18h10l3 19H8z" class="lighthouse-tower" />' +
-          '<path d="M10 24h12l1 5H9z" class="lighthouse-blue" />' +
-          '<path d="M14 31h4v6h-4z" class="lighthouse-door" />' +
-          '<path d="M6 37h20v3H6z" class="lighthouse-blue" />' +
-        '</svg></span>',
-      iconSize: [30, 40],
-      iconAnchor: [15, 39]
+        spriteMarkup("lighthouse") + "</span>",
+      iconSize: [28, 38],
+      iconAnchor: [14, 38]
     });
   }
 
+  // The draft flag: dashed and bobbing until "Submit flag" is pressed.
   function draftIcon() {
     return L.divIcon({
       className: "draft-position-icon",
-      html: '<span class="draft-position-pin"><span>+</span></span>',
-      iconSize: [28, 28],
-      iconAnchor: [7, 26]
+      html: '<span class="beacon-flag-pin draft-position-pin">' +
+        '<span class="flag-head">' + spriteMarkup("plus") + '</span>' +
+        '<span class="flag-pole"></span></span>',
+      iconSize: [36, 52],
+      iconAnchor: [18, 52]
     });
   }
 
@@ -176,12 +226,12 @@
     placeMarkers = {};
     places.forEach(function (place) {
       var marker = L.marker([place.latitude, place.longitude], {
-        icon: approvedIcon(),
+        icon: approvedIcon(place),
         title: place.name,
         keyboard: true,
         zIndexOffset: 100
       }).addTo(placeLayer);
-      marker.bindTooltip("Landmark: " + place.name, { direction: "top", offset: [0, -30] });
+      marker.bindTooltip("Landmark: " + place.name, { direction: "top", offset: [0, -36] });
       marker.on("click", function () {
         selectPoint(marker.getLatLng());
         map.flyTo(marker.getLatLng(), 18, { duration: 0.45 });
@@ -222,7 +272,7 @@
         title: "Drag to adjust the flag position",
         zIndexOffset: 800
       }).addTo(draftLayer);
-      draftMarker.bindTooltip("Drag to adjust", { direction: "top", offset: [7, -24] });
+      draftMarker.bindTooltip("Drag to adjust", { direction: "top", offset: [0, -50] });
       draftMarker.on("dragend", function (event) {
         var next = event.target.getLatLng();
         if (!campusContains(next)) {
@@ -250,15 +300,20 @@
     draftMarker = null;
   }
 
+  // A live flag: a square pixel head on a pole, coloured by its type.
   function flagIcon(flag) {
-    var color = FLAG_COLORS[flag.category] || "#005a8b";
+    var color = FLAG_COLORS[flag.category] || DEFAULT_COLOR;
+    var ink = FLAG_INK[flag.category] || "#ffffff";
+    var icon = FLAG_ICONS[flag.category] || "star";
     return L.divIcon({
       className: "beacon-flag-icon",
-      html: '<span class="beacon-flag-pin" style="--flag-color:' + color + '"><span>' +
-        (FLAG_LETTERS[flag.category] || "B") + "</span></span>",
-      iconSize: [30, 30],
-      iconAnchor: [8, 27],
-      popupAnchor: [7, -25]
+      html: '<span class="beacon-flag-pin" style="--flag-color:' + color + ";--flag-ink:" + ink +
+        '" data-letter="' + (FLAG_LETTERS[flag.category] || "B") + '">' +
+        '<span class="flag-head">' + spriteMarkup(icon) + '</span>' +
+        '<span class="flag-pole"></span></span>',
+      iconSize: [36, 52],
+      iconAnchor: [18, 52],
+      popupAnchor: [0, -48]
     });
   }
 
@@ -325,10 +380,11 @@
     }
 
     flags.forEach(function (flag) {
-      var color = FLAG_COLORS[flag.category] || "#005a8b";
+      var color = FLAG_COLORS[flag.category] || DEFAULT_COLOR;
       var item = document.createElement("article");
       item.className = "flag-item";
       item.style.setProperty("--flag-color", color);
+      item.style.setProperty("--flag-ink", FLAG_INK[flag.category] || "#ffffff");
       item.tabIndex = 0;
       item.setAttribute("role", "button");
       item.setAttribute("aria-label", "Show " + flag.title + " on map");
@@ -389,13 +445,39 @@
         });
       }
       renderPlaces();
+      renderLegend(data.categories);
     }
+  }
+
+  // The key under the map: one swatch per flag type, plus landmarks.
+  function renderLegend(categories) {
+    if (!legendEl) { return; }
+    legendEl.replaceChildren();
+    function key(label, swatch) {
+      var item = document.createElement("li");
+      item.className = "map-key";
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(label));
+      legendEl.appendChild(item);
+    }
+    Object.keys(categories).forEach(function (name) {
+      var swatch = document.createElement("span");
+      swatch.className = "map-key-swatch";
+      swatch.style.setProperty("--flag-color", FLAG_COLORS[name] || DEFAULT_COLOR);
+      swatch.style.setProperty("--flag-ink", FLAG_INK[name] || "#ffffff");
+      swatch.appendChild(spriteNode(FLAG_ICONS[name] || "star"));
+      key(categories[name], swatch);
+    });
+    var place = document.createElement("span");
+    place.className = "map-key-swatch place";
+    place.appendChild(spriteNode("lighthouse"));
+    key("Landmark", place);
   }
 
   function updateCount() {
     countEl.textContent = mine + " / " + limit + " flags used";
     submitButton.disabled = mine >= limit;
-    submitButton.textContent = mine >= limit ? "Flag limit reached" : "Place temporary flag";
+    submitButton.textContent = mine >= limit ? "Flag limit reached" : "Submit flag";
   }
 
   function loadFlags(quiet) {
@@ -500,11 +582,11 @@
     var icon = L.divIcon({
       className: "user-position-icon",
       html: '<span class="user-position-dot"></span>',
-      iconSize: [16, 16], iconAnchor: [8, 8]
+      iconSize: [18, 18], iconAnchor: [9, 9]
     });
     L.circle(event.latlng, {
-      radius: Math.min(event.accuracy, 180), color: "#1677d2", weight: 1,
-      fillColor: "#1677d2", fillOpacity: 0.08, interactive: false
+      radius: Math.min(event.accuracy, 180), color: "#ff791f", weight: 2,
+      fillColor: "#ff791f", fillOpacity: 0.1, interactive: false
     }).addTo(userLayer);
     L.marker(event.latlng, { icon: icon, title: "Your approximate location" }).addTo(userLayer);
     var inside = campusContains(event.latlng);

@@ -1,9 +1,31 @@
+{#
+  The community map (Leaflet + OpenStreetMap), drawn as a Beacon OS window.
+
+  How it works: static/community-map.js loads Leaflet, reads the flags from
+  data-flags-url, and wires up everything below by id. Placing a flag is a
+  two-step draft: tapping the map drops a dashed draft pin you can drag, the
+  form fills in, and nothing is saved until "Submit flag" is pressed.
+
+  Keep every id, name and data- attribute here as it is: the script and the
+  map API depend on them. data-umb-logo gives the script the UMass Boston logo
+  for the Campus Center pin (this file can use url_for; the script cannot).
+
+  Styles live in _community_map.css, which find.html includes in its page
+  style. The legend (#mapLegend) is filled in by the script from the flag
+  categories the API returns, so a new category shows up there on its own.
+#}
+{% import "_ui.html" as ui %}
 <section class="campus-map-card" id="campusMapCard"
-         data-flags-url="{{ url_for('map_flags_list') }}">
+         data-flags-url="{{ url_for('map_flags_list') }}"
+         data-umb-logo="{{ url_for('static', filename='bc-umb-logo.svg') }}">
+  {# Title bar, coloured for meet ups (navy). #}
+  <div class="bar campus-map-bar">
+    {{ ui.icon("meet") }}<h2>Community map</h2><span class="grip"></span>
+  </div>
+
   <header class="campus-map-head">
     <div>
       <span class="campus-map-kicker">Meet on campus</span>
-      <h2>Community map</h2>
       <p>See active plans or place a temporary flag anywhere inside the campus safety area.</p>
     </div>
     <div class="campus-map-actions">
@@ -23,6 +45,7 @@
       </p>
     </div>
 
+    {# The draft flag. Stays editable until it is submitted. #}
     <aside class="flag-panel" aria-labelledby="flagFormTitle">
       <div class="flag-panel-title">
         <div>
@@ -49,6 +72,7 @@
           </label>
         </div>
 
+        {# Filled in by the script when you tap the map or drag the draft pin. #}
         <div class="map-point-picker">
           <span class="map-field-label">Flag position</span>
           <strong id="mapFlagPoint">Choose a point on the map</strong>
@@ -65,7 +89,7 @@
 
         <div class="flag-form-row flag-audience-row">
           <label>
-            Visibility
+            Who can see my flag?
             <select name="visibility" id="mapFlagVisibility">
               <option value="public">All students</option>
             </select>
@@ -83,7 +107,7 @@
         </label>
 
         <button class="map-button map-button-primary" type="submit" id="mapFlagSubmit">
-          Place temporary flag
+          Submit flag
         </button>
       </form>
 
@@ -92,6 +116,9 @@
       </p>
     </aside>
   </div>
+
+  {# Key to the pin colours, filled in by the script. #}
+  <ul class="map-legend" id="mapLegend" aria-label="Map key"></ul>
 
   <div class="flag-feed">
     <div class="flag-feed-head">

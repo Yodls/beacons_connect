@@ -454,7 +454,17 @@
       /* ---------- page ---------- */
       .page { max-width: 1180px; margin: auto; padding: 22px 16px 0; }
       .lede { margin-top: .45rem; color: var(--muted); font-size: 1.05rem; line-height: 1.45; }
-      .nav { margin-top: 1.6rem; font-size: .95rem; }
+      /* "Back to your friends" style links at the foot of a page: white
+         keys, so they read on the grid */
+      .nav { margin-top: 24px; font-size: .95rem; }
+      .nav a {
+        display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+      }
+      .nav a:hover { background: var(--paper); text-decoration: none; }
+      .nav a:active { transform: translateY(3px); box-shadow: none; }
 
       /* A page's title and its one-line explanation, on a frosted label so
          dark text stays readable over the grid. Wrap the page title and
@@ -723,8 +733,8 @@
         position: relative;
         --kind: var(--friend); --kind-ink: var(--friend-ink); --kind-bg: var(--friend-bg);
       }
-      /* The summary is styled as a tab. It carries class="tab" too, so this
-         only adds what a summary element needs on top of that. */
+      /* The summary is styled as a tab. It carries the tab class too, so
+         this only adds what a summary element needs on top of that. */
       .dock > summary { list-style: none; cursor: pointer; }
       .dock > summary::-webkit-details-marker { display: none; }
       /* The friend-request count. Scoped to the dock on purpose: the games

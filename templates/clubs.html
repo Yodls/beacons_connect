@@ -3,46 +3,48 @@
 {% block title %}All clubs{% endblock %}
 
 {% block appstyle %}
-      /* Its own class rather than an override of base's .grid, so the two
+      /* ---------- the club grid ----------
+         Its own class rather than an override of base's .grid, so the two
          cannot fight over the column count. */
       .clubgrid {
-        display: grid; gap: .7rem; margin-top: .9rem;
-        grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+        display: grid; gap: 22px; margin-top: 24px;
+        grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
       }
-      .clubgrid .card { margin-top: 0; display: flex; flex-direction: column; }
-      .clubgrid .card .actions { margin-top: auto; padding-top: .7rem; }
+      /* Each club is a small window: its name row becomes a yellow title
+         bar. Done in CSS so each club is still exactly one card element
+         (a test counts them). */
+      .clubgrid .card { margin-top: 0; padding: 0; display: flex; flex-direction: column; }
+      .clubgrid .card-top {
+        min-height: 60px; padding: 8px 12px;
+        background: var(--gold);
+        border-bottom: 2px solid var(--navy); border-radius: 6px 6px 0 0;
+      }
+      .clubgrid .card-top h3 { font: 400 24px/1 var(--px); }
+      .clubgrid .card-top .avatar { background: #fff; color: var(--navy); }
+      .clubgrid .card > :not(.card-top) { margin-left: 14px; margin-right: 14px; }
+      .clubgrid .card > .why { margin-top: 12px; color: var(--navy); }
+      .clubgrid .card .actions { margin-top: auto; padding: 12px 0 14px; }
 
-      .joined {
-        display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--place-bg); color: var(--place);
-        font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
+      /* status tags on the bar */
+      .joined, .pick {
+        display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+        height: 26px; padding: 0 8px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .78rem/1 var(--sans);
       }
+      .joined { background: var(--beacon); color: #fff; }
       .joined::before { content: "\2713"; }
+      .pick { background: #fff; color: var(--navy); }
 
       /* Why a club is at the top of the list. The same chips /matches and the
          welcome page use, so a reason reads the same wherever it is given. */
-      .pick {
-        display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-        font-size: .68rem; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase;
-      }
-      .why-lead { margin: .5rem 0 0; font-size: .74rem; color: var(--muted); }
-      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
-      .shared i {
-        font-style: normal; font-size: .72rem; font-weight: 600;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-      }
+      .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
 
       .counter {
-        display: inline-block; padding: .2rem .6rem;
-        border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-        font-size: .8rem; font-weight: 700;
+        display: inline-flex; align-items: center; height: 26px; margin-left: 4px; padding: 0 8px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .85rem; font-weight: 700; vertical-align: 1px;
       }
 {% endblock %}
 
@@ -59,11 +61,13 @@
   card from it.
 #}
 {% block main %}
-  <h1>All clubs</h1>
-  <p class="lede">
-    Every club on campus, with the ones your answers point at first.
-    <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
-  </p>
+  <div class="pagehead">
+    <h1>All clubs</h1>
+    <p class="lede">
+      Every club on campus, with the ones your answers point at first.
+      <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
+    </p>
+  </div>
 
   <div class="clubgrid">
     {% for club in clubs %}

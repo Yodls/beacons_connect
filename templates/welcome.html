@@ -6,28 +6,22 @@
       /* The hand-off, which is the one thing on this page that is not a
          suggestion. Centred and alone under the two lists so it reads as
          "done here" rather than as a third option. */
-      .onward {
-        display: flex; justify-content: center;
-        margin: 1.4rem 0 .4rem;
-      }
+      .onward { display: flex; justify-content: center; margin: 24px 0 8px; }
       .onward a {
-        display: inline-flex; align-items: center; gap: .45rem;
-        padding: .7rem 1.4rem; border-radius: var(--pill);
-        background: var(--navy); color: #fff;
+        display: inline-flex; align-items: center; gap: 8px;
+        min-height: 50px; padding: 0 20px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 4px 0 var(--navy);
         font-weight: 700; text-decoration: none;
       }
-      .onward a:hover { background: var(--navy-deep); text-decoration: none; }
+      .onward a:hover { background: #fff2a8; text-decoration: none; }
+      .onward a:active { transform: translateY(4px); box-shadow: none; }
 
       /* Why a club is here. Same markup as /matches, because a suggestion
          explained one way on the first screen and another way afterwards is
          two different features to the person reading it. */
-      .why-lead { margin: .6rem 0 0; font-size: .76rem; color: var(--muted); }
-      .shared { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
-      .shared i {
-        font-style: normal; font-size: .72rem; font-weight: 600;
-        padding: .14rem .5rem; border-radius: var(--pill);
-        background: var(--club-bg); color: #7d5512;
-      }
+      .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
 {% endblock %}
 
 {#
@@ -44,9 +38,11 @@
   same thing in words.
 #}
 {% block main %}
-  <h1>You're all set</h1>
-  <p class="lede">Here's who and what your answers point at. Join or say hello
-    now, or go straight in &mdash; all of this is waiting for you later.</p>
+  <div class="pagehead">
+    <h1>You're all set</h1>
+    <p class="lede">Here's who and what your answers point at. Join or say hello
+      now, or go straight in &mdash; all of this is waiting for you later.</p>
+  </div>
 
   <section class="sec-friend">
     {{ ui.section("People you might like", "friend", "people", recs | length) }}

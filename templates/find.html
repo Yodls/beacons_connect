@@ -3,166 +3,149 @@
 {% block title %}Meet up in person{% endblock %}
 
 {% block appstyle %}
-      .queuebox {
-        padding: 1.25rem 1.4rem; margin-top: .6rem;
-        background:
-          radial-gradient(120% 140% at 100% 0%, #24996a 0%, transparent 62%),
-          var(--place);
-        color: #fff; border-radius: 18px;
-        box-shadow: var(--shadow-2);
-      }
-      .queuebox h3 { color: #fff; font-size: 1.05rem; margin-bottom: .15rem; }
-      .queuebox p { color: #d8f0e4; font-size: .86rem; margin: 0 0 .9rem; }
-      .queuebox form { display: flex; flex-wrap: wrap; gap: .5rem; }
-      .queuebox select {
-        width: auto; flex: 1 1 11rem; margin: 0;
-        border-color: transparent; background: #fff;
-      }
+      /* ---------- Matchmaking: the queue ---------- */
+      .queuebox h3 { font-size: 1.05rem; margin-bottom: 2px; }
+      .queuebox p { margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
+      .queuebox form { display: flex; flex-wrap: wrap; gap: 10px; }
+      .queuebox select { width: auto; flex: 1 1 11rem; margin: 0; }
       /* Sized like the select beside it, or the global full-width input rule
          gives it a line of its own and pushes the button onto a third one. */
-      .queuebox .custom {
-        width: auto; flex: 1 1 11rem; margin: 0;
-        border-color: transparent; background: #fff;
-      }
-      .queuebox button {
-        margin: 0; background: #fff; color: var(--place);
-        white-space: nowrap;
-      }
-      .queuebox button:hover { background: #eaf6f0; }
+      .queuebox .custom { width: auto; flex: 1 1 11rem; margin: 0; }
+      .queuebox button { margin: 0; white-space: nowrap; }
 
-      /* Scoped: base's .waiting is the friend-request banner on home. */
-      /* The write-in queues other people are sitting in. One row of pills, so
-         three of them do not become three lines inside the green box: each is
-         its own little form, and a form is a block by default. */
-      .alsowaiting {
-        display: flex; flex-wrap: wrap; align-items: center;
-        gap: .4rem; margin-top: .9rem;
-      }
-      .alsowaiting .lead {
-        margin: 0 .2rem 0 0; color: #d8f0e4; font-size: .82rem;
-      }
-      .alsowaiting form { display: inline-flex; }
-      .alsowaiting .n { opacity: .7; }
+      /* "N other students waiting": a yellow tag. Scoped, because base's
+         .waiting is the friend-request banner on home. */
       .queuebox .waiting {
-        display: inline-flex; align-items: center; gap: .4rem;
-        padding: .2rem .6rem; border-radius: var(--pill);
-        background: rgba(255, 255, 255, .18);
-        border: 0; box-shadow: none; color: #fff;
-        font-size: .8rem; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 6px;
+        margin: 0; padding: 3px 9px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: none; font-size: .88rem; font-weight: 700;
       }
       .queuebox .waiting::before {
-        content: ""; width: 7px; height: 7px;
-        border-radius: 50%; background: #ffd27a;
+        content: ""; width: 8px; height: 8px; background: var(--orange);
+        border: 2px solid var(--navy);
+      }
+      .queuebox .waiting:active { transform: none; }
+
+      /* The write-in queues other people are sitting in: one row of small
+         keys. Each is its own little form, and a form is a block by
+         default, hence the inline-flex. */
+      .alsowaiting {
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: 8px; margin-top: 14px; padding-top: 12px;
+        border-top: 2px dashed var(--line);
+      }
+      .alsowaiting .lead { margin: 0 4px 0 0; color: var(--muted); font-size: .9rem; }
+      .alsowaiting form { display: inline-flex; }
+      .alsowaiting button[type="submit"] {
+        min-height: 36px; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        box-shadow: 0 3px 0 var(--navy); font-size: .88rem;
+      }
+      .alsowaiting button[type="submit"]:hover { background: var(--paper); }
+      .alsowaiting .n {
+        margin-left: 4px; padding: 0 5px;
+        background: var(--navy); color: #fff; border-radius: 4px; font-size: .78rem;
       }
 
-      /* Leaving a meetup carries the palette's warning colour, and asks
-         first. Qualified with the element and with :hover spelled out,
-         because base.html paints every submit button solid blue -- the same
-         reason button.ghost is written that way. */
+      /* ---------- leaving a meetup asks first ----------
+         Qualified with the element and with :hover spelled out, because
+         base draws every submit button as a raised blue key: tie on
+         specificity, win on order. */
       .confirm { margin: 0; }
       .confirm > summary {
-        display: inline-block; list-style: none; cursor: pointer;
-        padding: .4rem .8rem; border-radius: var(--r-sm);
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px;
+        list-style: none; cursor: pointer;
         background: var(--danger-bg); color: var(--danger);
-        border: 1px solid var(--danger);
-        font-size: .82rem; font-weight: 600;
+        border: 2px solid var(--danger); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--danger);
+        font-size: .92rem; font-weight: 700;
       }
       .confirm > summary::-webkit-details-marker { display: none; }
-      .confirm > summary:hover,
-      .confirm[open] > summary { background: #fbdcd8; }
+      .confirm > summary:hover { background: #fbdcd8; }
+      .confirm[open] > summary { transform: translateY(3px); box-shadow: none; }
       .confirm-body {
-        display: block; margin-top: .45rem; padding: .55rem .7rem;
-        background: var(--surface); border: 1px solid var(--danger);
-        border-radius: var(--r-sm);
+        display: block; margin-top: 10px; padding: 10px 12px;
+        background: #fff;
+        border: 2px solid var(--danger); border-radius: var(--r);
       }
-      .confirm-ask {
-        display: block; margin-bottom: .45rem;
-        font-size: .84rem; line-height: 1.35; color: var(--ink);
-      }
-      .confirm-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .confirm-ask { display: block; margin-bottom: 8px; color: var(--navy); font-size: .92rem; line-height: 1.35; }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .confirm-row form { margin: 0; }
-      button.leave-yes, button.leave-yes:hover {
-        border: 1px solid var(--danger); color: #fff;
-      }
-      button.leave-yes { background: var(--danger); }
+      button.leave-yes, button.leave-yes:hover { background: var(--danger); color: #fff; border-color: var(--navy); }
       button.leave-yes:hover { background: #8a2119; }
       button.confirm-no {
-        background: var(--surface); color: var(--ink);
-        border: 1px solid var(--line-2);
+        min-height: 40px; padding: 0 14px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-weight: 700;
       }
-      button.confirm-no:hover { background: var(--surface-2); }
+      button.confirm-no:hover { background: var(--paper); }
 
-      .newpost { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+      /* ---------- Post a meetup ---------- */
+      /* the form already sits in a window, so its card wrapper goes quiet */
+      .sec-place > .card:has(.newpost) { padding: 0; border: 0; }
+      .newpost { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
       .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
       .newpost select { margin: 0; flex: 1 1 7rem; width: auto; }
-      /* The day and the time read as one control rather than four loose
-         boxes. After the .newpost rules above on purpose: these tie them on
-         specificity, so order is what decides. */
-      /* nowrap on purpose: if the row runs out of room the whole when-group
-         moves to the next line together, rather than leaving the day on one
-         line and its time on the next -- which is what looked broken. */
-      /* The optional meetup date. Sized with the rest of the row, or the
-         global full-width input rule gives it a line to itself. */
-      /* No shrink: the meetup row is already crowded, and a date
-         input squeezed below its own content renders as a bare
-         "mm" with a calendar glyph. The row wraps instead. */
-      /* .newpost .ondate, not .ondate: the rule above it is
-         `.newpost input`, which is an element plus a class and so
-         outranks a bare class however they are ordered. A plain
-         .ondate lost the flex-basis and the box rendered as a
-         naked "mm" with a calendar glyph. */
-      .newpost .ondate { width: auto; flex: 0 0 9.5rem; margin: 0; }
+      /* The optional meetup date. No shrink: a date input squeezed below its
+         own content renders as a bare "mm" with a calendar glyph, so the
+         row wraps instead. .newpost .ondate rather than .ondate, because
+         `.newpost input` (element plus class) would outrank a bare class. */
+      .newpost .ondate { width: auto; flex: 0 0 10rem; margin: 0; }
       /* What stands where the composer was once a meetup is over. */
       .chat-ended {
-        margin: 0; padding: .7rem .9rem;
-        background: var(--surface-2); border: 1px solid var(--line);
-        border-radius: var(--r-sm);
-        color: var(--muted); font-size: .85rem; text-align: center;
+        margin: 0; padding: 10px 12px;
+        background: var(--paper); border: 2px dashed var(--line-2);
+        border-radius: var(--r);
+        color: var(--muted); font-size: .92rem; text-align: center;
       }
+      /* nowrap on purpose: if the row runs out of room the whole time
+         group moves to the next line together. */
       .whenrow {
         display: inline-flex; flex-wrap: nowrap; align-items: center;
-        gap: .25rem; flex: 1 1 21rem; min-width: 0;
+        gap: 4px; flex: 1 1 21rem; min-width: 0;
       }
       .whenrow input { flex: 1 1 5.5rem; min-width: 4.5rem; }
 
-      /* The three time selects as one control: one border around the set,
-         hairlines between, and no rounding or border on the parts. The group
-         is a single flex item, so wrapping can move it but never break it in
-         half the way three loose selects did. */
+      /* The three time selects as one control: one frame around the set,
+         dividers between, and no frame on the parts. */
       .timeset {
         display: inline-flex; align-items: stretch; flex: 0 0 auto;
-        background: var(--surface);
-        border: 1px solid var(--line-2); border-radius: var(--r-sm);
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: inset 3px 3px 0 var(--paper);
         overflow: hidden;
       }
       .timeset select {
-        flex: 0 0 auto; width: auto; margin: 0;
-        padding: .6rem .35rem .6rem .5rem;
-        background: none; border: 0; border-radius: 0;
+        flex: 0 0 auto; width: auto; min-height: 42px; margin: 0;
+        padding: 0 1.9rem 0 .6rem;
+        background-color: transparent; background-position: right 8px center;
+        border: 0; border-radius: 0; box-shadow: none;
       }
-      .timeset select + select { border-left: 1px solid var(--line); }
-      /* The ring belongs to the whole group; a per-segment one would draw a
+      .timeset select + select { border-left: 2px solid var(--line); }
+      /* The ring belongs to the whole group; a per-part one would draw a
          box inside a box. */
-      .timeset select:focus { box-shadow: none; }
-      .timeset:focus-within {
-        border-color: var(--blue);
-        box-shadow: 0 0 0 3px rgba(0, 90, 139, .13);
-      }
+      .timeset select:focus { outline: none; }
+      .timeset:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
 
       /* A count of players is two digits, not a sentence. */
-      .newpost input[type="number"] { flex: 0 0 4.5rem; text-align: center; }
+      .newpost input[type="number"] { flex: 0 0 5rem; text-align: center; }
       .newpost button { margin: 0; white-space: nowrap; }
 
-      .meta { display: block; color: var(--muted); font-size: .82rem; }
+      /* ---------- Open meetups ---------- */
+      .meta { display: block; color: var(--muted); font-size: .9rem; }
       .going {
-        display: inline-flex; align-items: center; gap: .3rem;
-        margin-top: .4rem; padding: .16rem .55rem;
-        border-radius: var(--pill);
-        background: var(--surface-2); color: var(--muted);
-        font-size: .76rem; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 4px;
+        margin-top: 8px; padding: 3px 8px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
+        font-size: .85rem; font-weight: 700;
       }
-      .going.full { background: var(--danger-bg); color: var(--danger); }
+      .going.full { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 
+      /* ---------- the community map ---------- */
       {% include "_community_map.css" %}
 {% endblock %}
 
@@ -177,8 +160,15 @@
   <select name="game" keeps that attribute order too.
 #}
 {% block main %}
-  <h1>Meet up in person!</h1>
-  <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
+  <div class="pagehead">
+    <h1>Meet up in person!</h1>
+    <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
+  </div>
+
+  {# The community map leads the page, as in the Beacon OS mockup. It sits
+     before the Matchmaking heading, so the queue form is still the first
+     <form> after <h2>Matchmaking</h2>. #}
+  {% include "_community_map.html" %}
 
   <section class="sec-place">
     {{ ui.section("Matchmaking", "place", "meet") }}
@@ -410,8 +400,6 @@
       {% endfor %}
     </div>
   </section>
-
-  {% include "_community_map.html" %}
 {% endblock %}
 
 {% block script %}
