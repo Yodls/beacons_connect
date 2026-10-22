@@ -92,6 +92,7 @@ CSS and markup; nothing in the backend depends on it.
 | --- | --- |
 | Colours, fonts, windows, buttons, top bar, taskbar, friends panel, sign-in pages | `templates/base.html` (the one shared stylesheet, numbered sections 1 to 10) |
 | Pixel icons | `templates/_icons.html` (one SVG sprite, used with `ui.icon("name")`) |
+| Club categories and club icons | `club_catalog.py` (which club goes where) and `club_icons.py` (the drawings) |
 | Sign-in brand panel and yellow tagline | `templates/_brandpanel.html` |
 | Styles used by one page only | that page's `{% block appstyle %}` (or `{% block style %}`) |
 | Community map styles | `templates/_community_map.css` (included by `find.html`) |
@@ -182,3 +183,41 @@ flask --app app upgrade-map-flags
 **Map tiles.** OpenStreetMap only serves its tiles to pages opened from a web
 address, so the map is blank (with a note saying so) if a page is opened as a
 file. Running the app (`python app.py`) and visiting it in the browser works.
+
+## Clubs: categories and icons
+
+The Clubs page groups clubs by subject, following UMass Boston's own
+colleges, then the usual student-life groups:
+
+| Category | Under |
+| --- | --- |
+| Tech & Computing | College of Science and Mathematics, College of Management |
+| Engineering; Science & Math | College of Science and Mathematics |
+| Health & Medicine | Manning College of Nursing and Health Sciences |
+| Law, Policy & Government | McCormack Graduate School of Policy and Global Studies |
+| Humanities & Social Sciences | College of Liberal Arts |
+| Business | College of Management |
+| Education | College of Education and Human Development |
+| Environment | School for the Environment |
+| Arts & Media, Sports & Recreation, Games & Hobbies, Culture & Identity, Faith & Spirituality, Service & Advocacy | student life |
+| More clubs | anything the rules don't recognise |
+
+Nothing is stored for this: `club_catalog.py` reads each club's name (then
+its description) against a list of keywords and picks a category and a pixel
+icon, so a club added to the database lands in the right place by itself.
+If one lands wrongly, add its exact name to `OVERRIDES` in that file.
+
+Each icon is a 16 x 16 drawing written as text in `club_icons.py`, one letter
+per colour. The app serves the whole set, cached, at `/club-icons.svg`; in a
+template, `ui.club_badge(club.name, club.description)` shows a club's icon
+wherever a person would get initials (Clubs, Friends, Welcome, Home, the club
+chat header).
+
+## Games page
+
+Pick a game from the four tiles, then **Find a player** (the queue) or pick a
+friend and **Send invite**. Both buttons belong to one form: the friend list
+joins it with `form="startgame"` and "Send invite" posts to `/games/new` with
+`formaction`, so it works without JavaScript. `/games/seek` and `/games/new`
+take the same fields as before.
+

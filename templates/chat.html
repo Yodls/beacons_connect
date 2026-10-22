@@ -540,7 +540,7 @@
   <p class="nav backlink"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
 
   <div class="chathead">
-    {{ ui.avatar(title, target_id, square=(kind == "club")) }}
+    {% if kind == "club" %}{{ ui.club_badge(title) }}{% else %}{{ ui.avatar(title, target_id) }}{% endif %}
     <div class="grow">
       {# The chip stays outside the <h1>: the browser harness identifies pages
          by h1 textContent, so the heading has to read exactly the title. #}

@@ -229,7 +229,7 @@
       {% for chat in chats %}
         <a class="chatrow"
            href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
-          {{ ui.avatar(chat.title, chat.target_id, square=(chat.kind == "club")) }}
+          {% if chat.kind == "club" %}{{ ui.club_badge(chat.title) }}{% else %}{{ ui.avatar(chat.title, chat.target_id) }}{% endif %}
           <span class="mid">
             <span class="name">{{ chat.title }}</span>
             <span class="last">{{ chat.subtitle }}</span>

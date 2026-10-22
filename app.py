@@ -32,6 +32,8 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from flask_mail import Message as MailMessage
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import club_catalog
+import club_icons
 import games as rules
 import matching
 import notices
@@ -123,6 +125,39 @@ def inject_db_banner():
     return {"db_banner": DB_BANNER}
 
 
+# ---------- Club categories and icons ----------
+# club_catalog.py decides a club's category and icon from its name;
+# club_icons.py draws the icons. The icons are one SVG file, built once at
+# start-up and served cached from /club-icons.svg, so pages carry only short
+# references to it. The ?v= tag changes whenever a drawing does, so browsers
+# never keep an old copy.
+CLUB_SPRITE = club_icons.sprite_file()
+CLUB_SPRITE_TAG = hashlib.sha1(CLUB_SPRITE.encode()).hexdigest()[:10]
+
+
+@app.route("/club-icons.svg")
+def club_icon_sprite():
+    """The club icon set, for <use href="...#club-NAME">. Public and cached:
+    it is pictures only, and the sign-in pages may show it too."""
+    resp = app.response_class(CLUB_SPRITE, mimetype="image/svg+xml")
+    resp.set_etag(CLUB_SPRITE_TAG)
+    resp.cache_control.public = True
+    resp.cache_control.max_age = 7 * 24 * 3600
+    return resp.make_conditional(request)
+
+
+def club_icon_href(name):
+    """Where one club icon lives, for <use href>."""
+    return url_for("club_icon_sprite", v=CLUB_SPRITE_TAG) + "#club-" + name
+
+
+# Template globals rather than a context processor: plain functions, so no
+# page pays a query for them.
+#   club_look(name, description) -> (category, icon)   used by ui.club_badge
+#   club_icon_href(icon)         -> the icon's address  used by ui.club_badge
+app.jinja_env.globals.update(club_look=club_catalog.look, club_icon_href=club_icon_href)
+
+
 # A gitignored templates_local/ overrides templates/ when it exists, so local
 # UI experiments stay off the repository. No folder, no change in behaviour.
 _local_ui = os.path.join(app.root_path, "templates_local")
@@ -174,6 +209,7 @@ NAME_MAX = 120
 
 ONBOARDING_EXEMPT = {
     "static",
+    "club_icon_sprite",
     "onboarding",
     "login",
     "logout",
@@ -3210,6 +3246,9 @@ def clubs():
     return render_template(
         "clubs.html",
         clubs=ordered,
+        # The same clubs, bucketed into the categories in club_catalog.py
+        # (each keeps the order above: suggestions first, then A to Z).
+        groups=club_catalog.grouped(ordered),
         picks=picks,
         joined_ids={club.id for club in joined},
     )

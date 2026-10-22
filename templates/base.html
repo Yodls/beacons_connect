@@ -634,6 +634,11 @@
       .av-3 { background: var(--orange); }
       .av-4 { background: var(--navy); color: #fff; }
       .av-5 { background: #fff; }
+      /* A club's own pixel icon (club_icons.py) in place of initials:
+         white tile, the 16 x 16 drawing at 2x. */
+      .avatar.clubmark { background: #fff; }
+      .avatar.clubmark svg { display: block; width: 32px; height: 32px; }
+      .avatar.sm.clubmark svg { width: 24px; height: 24px; }
 
       /* The chat-invite count. Deliberately not .pill or .waiting: both of
          those are strings a test asserts about inside the friends panel's

@@ -12,6 +12,16 @@
 {%- endmacro %}
 
 {#
+  A club's own pixel icon, where a person would get initials. The icon comes
+  from the club's name (club_catalog.py), so any club, old or new, gets one.
+#}
+{% macro club_badge(name, description="", sm=false) -%}
+  <span class="avatar sq clubmark{% if sm %} sm{% endif %}" aria-hidden="true">
+    {#- -#}<svg viewBox="0 0 16 16"><use href="{{ club_icon_href(club_look(name, description).icon) }}" /></svg>
+  {#- -#}</span>
+{%- endmacro %}
+
+{#
   What two students both picked, on a person's card.
 
   Hobbies only, and `.hobbies` rather than `.shared` on purpose: `.shared` is

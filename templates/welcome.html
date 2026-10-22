@@ -81,7 +81,7 @@
       {% for club in clubs %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(club.name, club.club_id, square=true) }}
+            {{ ui.club_badge(club.name, club.description) }}
             <div class="grow">
               <h3>{{ club.name }}</h3>
               <span class="why">{{ club.description }}</span>
