@@ -144,10 +144,11 @@ app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
 # so this costs nothing and covers the thirty-odd POST routes that were
 # written before anybody thought about it, not just the new ones.
 #
-# Secure follows the same switch as the mail TLS flag rather than being
-# hard-coded: set it on a site served over https, and leave it off for a
-# development server on http, which would otherwise drop the cookie and make
-# signing in impossible.
+# Secure is its own switch -- SESSION_COOKIE_SECURE in .env -- rather than
+# being hard-coded: set it true on a site served over https, and leave it
+# off for a development server on http, which would otherwise drop the
+# cookie and make signing in impossible. (This comment used to claim it
+# followed MAIL_USE_TLS. It never did.)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SECURE"] = (
@@ -283,29 +284,24 @@ ONBOARDING_EXEMPT = {
 GUEST_ONLY = {"login", "register", "verify", "resend_code"}
 
 
-@app.before_request
-def same_origin():
-    """Refuse a write that a different site asked for.
-
-    The check behind SESSION_COOKIE_SAMESITE, for anything that does not
-    honour it. A browser cannot be made to omit or forge Origin on a
-    cross-origin POST, so this is the real guard; the cookie setting is what
-    makes a forged request harmless even before it gets here.
-
-    A request with neither header is let through, which is what the test
-    suites and curl send, and is the same choice every framework's referer
-    check makes. Answered as JSON because the map and the live channel
-    already understand a 403 and a genuine user never sees this.
-    """
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return None
-    came = request.headers.get("Origin") or request.headers.get("Referer")
-    if came is None:
-        return None
-    parts = urlsplit(came)
-    if (parts.scheme, parts.netloc) == urlsplit(request.host_url)[:2]:
-        return None
-    return jsonify({"error": "unavailable"}), 403
+# There was a `same_origin` before_request here, comparing the Origin header
+# against request.host_url and refusing a mismatch. It compared the SCHEME as
+# well as the host, and this site is served over https through a proxy with
+# gunicorn on plain port 80 behind it -- so every browser sent
+# "https://host" while Flask computed "http://host/", and every POST in the
+# app was answered 403 {"error":"unavailable"}. Register, log in, send a
+# message, the map's writes: all of it, for everyone, until it was removed.
+#
+# SESSION_COOKIE_SAMESITE = "Lax" above is what actually stops a cross-site
+# write, and it needs to know nothing about the scheme, so no proxy can
+# confuse it. The Origin check was only ever a second layer, and it bought
+# less than it cost.
+#
+# If it comes back it needs ProxyFix (or X-Forwarded-Proto) so Flask knows
+# what scheme the browser used, and it needs tests/test_browser_posts.py --
+# which sends what a browser behind a proxy really sends. The old check was
+# untestable by construction: it returned early when Origin was absent, and
+# the Flask test client never sends one.
 
 
 @app.before_request
