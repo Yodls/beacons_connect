@@ -1,0 +1,143 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}{% if kind == "abuse" %}Report another user{% elif kind == "bug" %}Report a problem{% else %}Get in touch{% endif %}{% endblock %}
+
+{#
+  One page for all three: reporting somebody, reporting a problem, and
+  sending a message.
+
+  What is being reported is rendered read-only, from what the server
+  fetched. The form carries the target as hidden fields only so the POST
+  can resolve it again -- the route re-fetches and re-checks it, and builds
+  the copy the admin reads from the row rather than from here. A reporter
+  does not get to choose what the admin sees.
+#}
+
+{% block appstyle %}
+      .tellus { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+      .tellus label { display: block; color: var(--navy); font-size: .88rem; font-weight: 700; }
+      .tellus textarea {
+        width: 100%; min-height: 8rem; padding: 9px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .95rem/1.4 var(--sans); resize: vertical;
+      }
+      .tellus .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+      .tellus .row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .about {
+        margin: 0; padding: 10px 12px;
+        background: var(--paper); color: var(--navy);
+        border: 2px dashed var(--line); border-radius: var(--r-sm);
+      }
+      .about b { display: block; }
+      .about .said { margin: 6px 0 0; font-style: italic; }
+      .about .at { color: var(--muted); font-size: .86rem; }
+      .kinds { display: flex; flex-wrap: wrap; gap: 8px; }
+      .kinds a {
+        padding: 6px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .9rem; font-weight: 700; text-decoration: none;
+      }
+      .kinds a.on { background: var(--navy); color: var(--on-navy); }
+{% endblock %}
+
+{% block main %}
+  <div class="pagehead">
+    <h1>{% if kind == "abuse" %}Report another user{% elif kind == "bug" %}Report a problem{% else %}Get in touch{% endif %}</h1>
+    <p class="lede">
+      {# One line, deliberately. This said who would read it and what would
+         be attached, which was honest but read like a disclosure notice to
+         somebody who may well be upset -- and the thing being reported is
+         rendered directly below anyway, so the page shows it rather than
+         describing it. #}
+      {% if kind == "abuse" %}
+        Tell us what happened, in your own words.
+      {% elif kind == "bug" %}
+        Tell us what went wrong and we will look at it.
+      {% else %}
+        Anything at all &mdash; a question, an idea, or something that is
+        not working.
+      {% endif %}
+    </p>
+  </div>
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("talk") }}<span class="bar-title">
+      {%- if kind == "abuse" %}What are you reporting?{% else %}Your message{% endif -%}
+    </span><span class="grip"></span></div>
+
+    <form class="tellus" method="post" action="{{ url_for('report_new') }}">
+      <input type="hidden" name="kind" value="{{ kind }}" />
+      {% for field, value in carry.items() %}
+        {% if value %}<input type="hidden" name="{{ field }}" value="{{ value }}" />{% endif %}
+      {% endfor %}
+
+      {% if kind == "abuse" and about_user %}
+        <p class="about">
+          <b>{{ about_user.name }}</b>
+          {% if quoted %}
+            <span class="said">&ldquo;{{ quoted }}&rdquo;</span>
+          {% endif %}
+          {% if seen_in %}
+            <span class="at">in {{ seen_in }}</span>
+          {% endif %}
+        </p>
+      {% elif kind == "abuse" %}
+        {# Reached from the menu. Only people this student already knows:
+           naming anybody else is done from the Report link beside what
+           they posted, which tells us the thing as well as the person. #}
+        {% if choices %}
+          <label>Who are you reporting?
+            <select name="about" required>
+              <option value="">Choose somebody</option>
+              {% for person_id, person_name in choices %}
+                <option value="{{ person_id }}">{{ person_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <p class="hint">For anybody else &mdash; or to report a particular
+            message, meetup or pin &mdash; use the Report link beside it.
+            That tells us what was said as well as who said it.</p>
+        {% else %}
+          <p class="about">
+            <b>Use the Report link beside what you are reporting.</b>
+            <span class="said">It sits next to a person in your
+              conversations, and beside a message, a meetup or a map pin.
+              Reporting that way tells us what was said as well as who said
+              it, which is what we need to act on it.</span>
+          </p>
+          <p class="hint">If that is not what you need,
+            <a href="{{ url_for('report_new', kind='contact') }}">send us a
+            message</a> instead.</p>
+        {% endif %}
+      {% else %}
+        {# Only offered when nothing is being reported: a message about a
+           person is a report, and switching it to "a bug" would throw the
+           target away silently. #}
+        <div class="kinds">
+          <a href="{{ url_for('report_new', kind='contact') }}"
+             class="{{ 'on' if kind == 'contact' }}">A message</a>
+          <a href="{{ url_for('report_new', kind='bug') }}"
+             class="{{ 'on' if kind == 'bug' }}">Something is broken</a>
+        </div>
+      {% endif %}
+
+      <label>
+        {%- if kind == "abuse" %}What happened?
+        {%- elif kind == "bug" %}What went wrong?
+        {%- else %}Your message{% endif %}
+        <textarea name="detail" maxlength="{{ detail_max }}" required
+                  placeholder="{% if kind == 'abuse' %}As much as you want to say.{% else %}What were you doing, and what did you expect?{% endif %}"></textarea>
+      </label>
+      <p class="hint">Up to {{ detail_max }} characters. You will be told
+        when somebody has looked at it.</p>
+
+      <div class="row">
+        <button type="submit">Send</button>
+      </div>
+    </form>
+  </section>
+
+  <p class="nav"><a href="{{ url_for('index') }}">&larr; Back</a></p>
+{% endblock %}

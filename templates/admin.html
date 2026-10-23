@@ -133,6 +133,82 @@
     </p>
   </div>
 
+  {# Reports first: a complaint about somebody is more urgent than a hub
+     nobody has yet. Reuses .ask, .ask-top, .who, .pitch, .row and .done
+     from the hub section below -- a report row is the same shape (a
+     heading, who sent it, the quoted text in a dashed box, two buttons and
+     a note field), so it needs no new rules. #}
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("talk") }}<span class="bar-title">Reports</span><span class="grip"></span></div>
+    <div class="grid">
+      {% for said in reports_new %}
+        <div class="ask">
+          <div class="ask-top">
+            <h3>
+              {%- if said.kind == "abuse" %}{{ said.about_name }}
+              {%- elif said.kind == "bug" %}Something is broken
+              {%- else %}A message{% endif -%}
+            </h3>
+            <span class="who">
+              from {{ said.filed_by_name or "a student who has since left" }}
+              {%- if said.seen_in %}, in {{ said.seen_in }}{% endif %}
+              {%- if said.kind == "abuse" and seen_before.get(said.about_user_id, 0) > 1 %}
+                &mdash; reported {{ seen_before[said.about_user_id] }} times
+              {%- endif %}
+            </span>
+          </div>
+
+          {% if said.quoted %}
+            {# Copied when it was reported, so it still reads even if the
+               message or the person has since gone. #}
+            <p class="pitch">{{ said.quoted }}</p>
+          {% endif %}
+          <p class="pitch">{{ said.detail }}</p>
+
+          <form method="post"
+                action="{{ url_for('report_decide', report_id=said.id, action='actioned') }}">
+            <div class="row">
+              <textarea name="note" rows="1" maxlength="300"
+                        placeholder="What you did. This is what they are told."></textarea>
+            </div>
+            <div class="row"><button type="submit">Dealt with it</button></div>
+          </form>
+          <form method="post"
+                action="{{ url_for('report_decide', report_id=said.id, action='dismissed') }}">
+            <div class="row"><button type="submit" class="ghost">Nothing to do</button></div>
+          </form>
+        </div>
+      {% else %}
+        <div class="empty"><b>Nothing reported.</b> Reports from students
+          land here.</div>
+      {% endfor %}
+      {% if reports_new %}
+        {# Said once, here, so nobody expects the buttons to do more than
+           they do. There is no hide-this-content mechanism in the app. #}
+        <p class="done">Closing a report records that you looked at it. To
+          act, use the tools themselves &mdash; a chat owner can remove a
+          member, and an account can be deleted from the Database section.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if reports_done %}
+    <section class="win sec-place">
+      <div class="bar">{{ ui.icon("check") }}<span class="bar-title">Already handled</span><span class="grip"></span></div>
+      <div class="grid">
+        {% for said in reports_done %}
+          <p class="done">
+            <b>{%- if said.kind == "abuse" %}{{ said.about_name }}
+               {%- elif said.kind == "bug" %}A problem
+               {%- else %}A message{% endif -%}</b>
+            &mdash; {{ said.status }}
+            {%- if said.note %}: {{ said.note }}{% endif %}
+          </p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
   <section class="win sec-club">
     <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Hub requests</span><span class="grip"></span></div>
     <div class="grid">

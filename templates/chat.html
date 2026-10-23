@@ -856,6 +856,14 @@
             {%- include "_postcard.html" -%}
           {% endwith %}
         {% endif %}
+        {# Reporting what somebody said. Not on your own messages, and
+           added in the JS builder below as well -- a message that could
+           only be reported until the next live update would be worse than
+           one that could not be reported at all. #}
+        {% if not message.mine %}
+          <a class="report-link"
+             href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
+        {% endif %}
         <span class="at">{{ message.at }}</span>
       </div>
       {% endif %}
@@ -1354,6 +1362,16 @@
       }
       p.appendChild(span("who", message.name));
       p.appendChild(span("body", message.body));
+      if (message.user_id !== me) {
+        // The same link the server draws beside a message that is not
+        // yours. Built rather than pasted as markup: this file is checked
+        // file-wide for innerHTML.
+        var tell = document.createElement("a");
+        tell.className = "report-link";
+        tell.href = "/report?kind=abuse&message=" + encodeURIComponent(message.id);
+        tell.textContent = "Report";
+        p.appendChild(tell);
+      }
       p.appendChild(span("at", message.at || ""));
       log.appendChild(p);
     }

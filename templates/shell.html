@@ -67,7 +67,13 @@
         <div class="who-panel">
           <b>{{ current_user.name }}</b>
           <small>{{ current_user.email }}</small>
-          <a href="{{ url_for('onboarding') }}">Change your answers</a>
+          {# Was "Change your answers", pointing straight at /onboarding.
+             The answers are one of three things you can change about
+             yourself now, so this opens the page that holds all of them --
+             and leaving, which lives there rather than in this list because
+             a destructive action one click from the menu is a misclick
+             waiting to happen. /onboarding is still the first-time flow. #}
+          <a href="{{ url_for('account') }}">Your account</a>
           <a href="{{ url_for('people') }}">Find people</a>
           <a href="{{ url_for('chats') }}">Group chats{%
             if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
@@ -75,6 +81,18 @@
              items in about twenty characters; the page has the width to say
              what it is. The mismatch is the point, not drift. #}
           <a href="{{ url_for('fixtures') }}">Happening now</a>
+          {# Below the line: the three ways to tell us something. Separated
+             because they are not places you go, they are things you do, and
+             because the list is long enough now that Sign out needs to not
+             be the eighth indistinguishable row. #}
+          <div class="who-sep"></div>
+          <a href="{{ url_for('report_new', kind='abuse') }}">Report someone</a>
+          {# One entry for both, because they are the same errand: something
+             to tell us that is not about a person. The page it opens already
+             offers the choice between a message and something broken, so
+             the switch lives there rather than in a menu this narrow. #}
+          <a href="{{ url_for('report_new', kind='contact') }}">Get In Touch/Report Problem</a>
+          <div class="who-sep"></div>
           {% if current_user.is_admin %}
             <a href="{{ url_for('admin') }}">Admin</a>
           {% endif %}

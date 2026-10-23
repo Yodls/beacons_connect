@@ -176,6 +176,53 @@ def hub_decided(requester_id, name, approved, note=""):
                   f"{said} {note}".strip() if note else said, "/clubs")
 
 
+def report_filed(admin_id, what):
+    """Something was reported. Addressed to whoever reviews them.
+
+    No actor, for the reason hub_requested gives: the app is telling an
+    admin that a queue has something in it, and a null actor also means an
+    admin who reports something themselves still gets told rather than being
+    skipped by the no-self-notice rule.
+    """
+    return notify(admin_id, "report_filed",
+                  f"{what} was reported. It is waiting for review.",
+                  "/admin")
+
+
+def report_closed(filer_id, said):
+    """The thing somebody reported has been looked at.
+
+    Only called when the report still has a filer: one filed by somebody who
+    has since deleted their account has nobody to tell, and the route checks
+    that rather than relying on notify() to shrug.
+
+    Points at the home page. There is no per-report page to send anybody to,
+    and adding Notice.report_id would be a second migration on notices for a
+    link to something that does not exist.
+    """
+    return notify(filer_id, "report_closed", said, "/")
+
+
+def account_gone(friend_id, name):
+    """Somebody you were friends with has deleted their account.
+
+    This exists because of what deletion takes with it: the conversation,
+    the games you played together and the result cards in them all go, and
+    without this the other person just finds a hole where a friendship was.
+    One sentence is cheaper than preserving any of it, and more honest than
+    leaving them to guess.
+
+    actor_id is null deliberately, the way campus() does it -- the actor is
+    about to not exist, and Notice.actor_id is CASCADE, so a notice naming
+    them as the actor would be destroyed by the very deletion it describes.
+    """
+    return notify(friend_id, "account_gone",
+                  f"{name} has left Beacons Connect. Your conversation and "
+                  "any games you played together have gone with their "
+                  "account.",
+                  "/matches")
+
+
 def chat_invite(recipient_id, actor, chat):
     return notify(
         recipient_id, "chat_invite",

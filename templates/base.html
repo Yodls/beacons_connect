@@ -337,11 +337,29 @@
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .who-panel a {
-        display: flex; align-items: center; min-height: 46px; padding: 0 12px;
+        display: flex; align-items: center; min-height: 40px; padding: 0 12px;
         border-top: 2px dashed var(--line);
         color: var(--navy); font-size: .95rem;
       }
       .who-panel a:hover { background: var(--paper); text-decoration: none; }
+      /* The list grew past the six items this panel was drawn for, so it
+         scrolls rather than running off a short screen. The rows lost six
+         pixels of height to buy some of that back. */
+      .who-panel { max-height: min(78vh, 30rem); overflow-y: auto; }
+      /* A heavier rule than the dashed one between rows: the three ways to
+         tell us something are not places you go, and Sign out should not be
+         the eighth indistinguishable row. The next <a> draws its own dashed
+         top border, so this only has to add weight. */
+      .who-sep { height: 0; border-top: 2px solid var(--navy); }
+
+      /* The Report link beside a person or a post. Quiet on purpose: it has
+         to be findable when somebody needs it and not compete with the
+         thing they came to the page to do. */
+      .report-link {
+        flex: none; color: var(--muted); font-size: .82rem;
+        text-decoration: underline;
+      }
+      .report-link:hover { color: var(--navy); }
 
       /* ---------- the bell ---------- */
       .bell { position: relative; flex: none; }

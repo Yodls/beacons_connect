@@ -90,6 +90,12 @@
         <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
           <button type="submit" class="ghost">Cancel meetup</button>
         </form>
+      {% else %}
+        {# Not on your own meetup: cancelling is what you do to that. The
+           link carries the post, so the report names the meetup and its
+           author together -- which is what whoever reads it needs. #}
+        <a class="report-link"
+           href="{{ url_for('report_new', kind='abuse', post=post.id) }}">Report</a>
       {% endif %}
     {% endif %}
   </div>

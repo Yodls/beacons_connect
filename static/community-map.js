@@ -459,6 +459,16 @@
           takeDown(flag);
         }));
     }
+    if (!flag.mine) {
+      // Reporting somebody else's pin. An <a> rather than a button: it
+      // opens a page to write on, and the server re-checks that this pin is
+      // one you were allowed to see before it quotes it back to anybody.
+      // flag.id is the public_id -- row ids stay internal, and /report
+      // takes the same public one the delete endpoint does.
+      var tell = node("a", "map-button quiet", "Report");
+      tell.href = "/report?kind=abuse&flag=" + encodeURIComponent(flag.id);
+      actions.appendChild(tell);
+    }
     if (ev && !flag.mine && !ev.im_going && ev.open) {
       // A real form, so "I'm in" works the same as on the meetup's card.
       var form = node("form");

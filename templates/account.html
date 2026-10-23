@@ -1,0 +1,152 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Your account{% endblock %}
+
+{#
+  Everything about you, in one place.
+
+  Three separate forms, each carrying a hidden `section`, so saving your
+  name cannot silently rewrite your answers -- and so a submit that leaves
+  the pronouns field out does not reset it, which the route relies on.
+
+  The questions come from _questions.html, the same partial /onboarding
+  renders. That file exists for exactly this: onboarding.html's markup is
+  pinned by tests down to attribute order, so a second copy of the question
+  loop here would be a second thing to keep in step. Both pages render one
+  partial and the route reads one contract.
+
+  No .card class anywhere on this page. The name is counted against the
+  number of clubs on /clubs by two suites, and the habit is cheaper than
+  the surprise.
+#}
+
+{% block appstyle %}
+      .acct { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+      .acct label { display: block; color: var(--navy); font-size: .88rem; font-weight: 700; }
+      .acct input[type="text"], .acct input[type="password"], .acct select {
+        width: 100%; max-width: 22rem; padding: 9px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .95rem/1.35 var(--sans);
+      }
+      .acct .row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .acct .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+
+      .acct fieldset {
+        margin: 0; padding: 12px 14px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      .acct legend { padding: 0 6px; font-size: .9rem; font-weight: 700; }
+      .acct fieldset label {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin: 0 10px 6px 0; font-weight: 400;
+      }
+
+      /* The way out. Red, and visually separated, because it is the one
+         thing on this page that cannot be undone. */
+      .leaving { border-top: 3px double var(--line); margin-top: 4px; }
+      .leaving h3 { margin: 14px 0 6px; color: var(--navy); font-size: 1rem; }
+      .leaving ul { margin: 6px 0 0; padding-left: 20px; color: var(--navy); }
+      .leaving li { margin: 3px 0; font-size: .92rem; }
+      .leaving .heavy { font-weight: 700; }
+      .leaving button {
+        background: #a3281f; border-color: #a3281f; color: #fff;
+      }
+      .leaving .keeps { color: var(--muted); font-size: .88rem; }
+{% endblock %}
+
+{% block main %}
+  <div class="pagehead">
+    <h1>Your account</h1>
+    <p class="lede">Your name, how you are introduced, and what the
+      matcher reads.</p>
+  </div>
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Name and pronouns</span><span class="grip"></span></div>
+    <form class="acct" method="post" action="{{ url_for('account') }}">
+      <input type="hidden" name="section" value="who" />
+      <label>Your name
+        <input type="text" name="name" value="{{ current_user.name }}"
+               maxlength="{{ name_max }}" required autocomplete="name" />
+      </label>
+      <label>Pronouns
+        <select name="pronouns">
+          {% for slug, label in pronoun_options.items() %}
+            <option value="{{ slug }}"
+                    {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="hint">Your email address cannot be changed &mdash; it is how
+        you sign in, and it proves you are at UMass Boston.</p>
+      <div class="row"><button type="submit">Save</button></div>
+    </form>
+  </section>
+
+  <section class="win sec-club">
+    <div class="bar">{{ ui.icon("sparkle") }}<span class="bar-title">Your interests</span><span class="grip"></span></div>
+    <form class="acct" method="post" action="{{ url_for('account') }}">
+      <input type="hidden" name="section" value="answers" />
+      <p class="hint">These are what you are matched on. Changing them
+        changes who you are suggested, and who is suggested you.</p>
+      {% include "_questions.html" %}
+      <div class="row"><button type="submit">Save answers</button></div>
+    </form>
+  </section>
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Leaving</span><span class="grip"></span></div>
+    <div class="acct leaving">
+      <h3>Delete your account</h3>
+      <p class="heavy">This cannot be undone. Deleting your account removes:</p>
+      <ul>
+        <li>your answers, and your place in every hub</li>
+        <li>{{ counts.friends }} friendship{{ "" if counts.friends == 1 else "s" }},
+            and the conversation with each of them</li>
+        <li>{{ counts.messages }} message{{ "" if counts.messages == 1 else "s" }} you have
+            written, including in hub and group chats</li>
+        <li>{{ counts.meetups }} meetup{{ "" if counts.meetups == 1 else "s" }} you posted
+            and {{ counts.pins }} map pin{{ "" if counts.pins == 1 else "s" }}</li>
+        {# Said plainly because it is the one consequence that reaches
+           somebody else and nobody would guess it. #}
+        <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played
+            &mdash; <span class="heavy">these disappear from the other
+            player's history too</span></li>
+      </ul>
+
+      {% if counts.passing %}
+        <p class="keeps">
+          {{ "These group chats" if counts.passing | length > 1 else "This group chat" }}
+          will carry on without you, managed by whoever has been in
+          {{ "them" if counts.passing | length > 1 else "it" }} longest:
+          <b>{{ counts.passing | join(", ") }}</b>.
+        </p>
+      {% endif %}
+      {% if counts.closing %}
+        <p class="keeps">
+          {{ "These group chats have" if counts.closing | length > 1 else "This group chat has" }}
+          nobody else in {{ "them" if counts.closing | length > 1 else "it" }},
+          so {{ "they" if counts.closing | length > 1 else "it" }} will close:
+          <b>{{ counts.closing | join(", ") }}</b>.
+        </p>
+      {% endif %}
+      <p class="keeps">What other people wrote in hub, group and campus
+        chats stays where it is. Your name comes off anything you reported.</p>
+
+      <form class="acct" method="post" action="{{ url_for('account_delete') }}">
+        {# The password, not the email: shell.html prints your address on
+           every page, so it would not be a confirmation of anything. #}
+        <label>Type your password to confirm
+          <input type="password" name="password" required
+                 autocomplete="current-password" />
+        </label>
+        <div class="row">
+          <button type="submit">Delete my account</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <p class="nav"><a href="{{ url_for('index') }}">&larr; Back</a></p>
+{% endblock %}

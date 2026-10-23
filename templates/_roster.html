@@ -60,6 +60,18 @@
         <button type="submit" class="ghost">Remove</button>
       </form>
     {% endif %}
+
+    {# Reporting somebody you are in a room with. Inside the "not you"
+       branch, like every other action here, so the list never offers you
+       the chance to report yourself -- the route refuses it anyway, but
+       being offered it at all would be odd.
+
+       A link rather than a form: it opens a page to write on, and a
+       one-click report with nothing said is no use to whoever reads it. #}
+    {% if state != "you" %}
+      <a class="dock-quiet report-link"
+         href="{{ url_for('report_new', kind='abuse', about=person.id) }}">Report</a>
+    {% endif %}
   </div>
 {% else %}
   <p class="dock-quiet">Nobody here yet.</p>

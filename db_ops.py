@@ -1883,10 +1883,14 @@ def _work_fixtures(cur, dbname, say):
     # fixture_id to a half-built map_flags would leave a table that matches
     # neither models.py nor the upgrader.
     if not column_exists(cur, "map_flags", "post_id"):
+        # The original said to serve a request with the app or run `flask
+        # --app app upgrade-map-flags`. Both of those only ever reach
+        # DATABASE_URL, so against live that advice could not work -- which
+        # is why the add_map_flags migration exists. Point at it instead.
         raise Refuse("map_flags has no post_id, so this database has not had "
-                     "the map schema upgrade yet. Serve one request with the "
-                     "app, or run `flask --app app upgrade-map-flags`, then "
-                     "re-run this.")
+                     "the map schema upgrade yet. Run the add_map_flags "
+                     "migration against this database first; `migrate --all` "
+                     "does them in that order.")
 
     before = count(cur, "user")
     flags_before = count(cur, "map_flags")
@@ -2227,6 +2231,267 @@ def _applied_drop_ufind(cur):
             and not column_exists(cur, "map_flags", "price"))
 
 
+def _work_fix_hub_decided(cur, dbname, say):
+    """Restate ck_hub_request_decided so a cascade cannot forbid a row.
+
+    The constraint said:
+
+        (status = 'pending') = (decided_by IS NULL AND decided_at IS NULL)
+
+    and `decided_by` is ON DELETE SET NULL. Postgres does not re-check a
+    CHECK when a cascade nulls one of its columns, so deleting the admin who
+    approved a hub left that row as status='approved' with decided_by NULL --
+    a state the constraint forbids. It read back fine and failed on the next
+    UPDATE touching it, which is why nothing noticed.
+
+    The fix is to say the same thing over `decided_at`, which is written in
+    the same breath by hub_approve and hub_decline and which no cascade can
+    reach. Every row the old rule forbade, the new one accepts, so there is
+    no data to repair: an approved row with a timestamp and no decider is
+    'not pending' = 'not null', which is true.
+
+    ADD CONSTRAINT validates what is already there, so if that reasoning is
+    wrong anywhere this refuses rather than passing quietly -- and the count
+    below names the problem instead of leaving Postgres to quote it.
+    """
+    if not table_exists(cur, "hub_requests"):
+        say(f"  = {dbname} has no hub_requests table; nothing to restate.")
+        return 0
+
+    rows = count(cur, "hub_requests")
+    say(f"  {dbname}: {rows} hub request(s)")
+
+    wanted = "(status = 'pending') = (decided_at IS NULL)"
+    current = constraint_def(cur, "ck_hub_request_decided")
+
+    # The one shape the new rule rejects and the old one allowed. Nothing
+    # can produce it -- both routes write the timestamp -- but a refusal
+    # that says so beats a constraint violation from the ALTER.
+    stuck = count(cur, "hub_requests",
+                  "status <> 'pending' AND decided_at IS NULL")
+    if stuck:
+        raise Refuse(f"{stuck} decided request(s) have no decided_at, which "
+                     "the restated rule would reject. Give them a timestamp "
+                     "or return them to pending first.")
+
+    # How many rows the old rule was already forbidding, which is the thing
+    # this migration exists to stop happening again.
+    broken = count(cur, "hub_requests",
+                   "status <> 'pending' AND decided_by IS NULL")
+    if broken:
+        say(f"  . {broken} row(s) are currently in a state the old rule "
+            "forbids; the restated one accepts them")
+
+    if current is not None and "decided_by" not in current:
+        say("  = ck_hub_request_decided already leaves decided_by out")
+        return 0
+
+    changed = 0
+    if current is not None:
+        cur.execute("ALTER TABLE hub_requests "
+                    "DROP CONSTRAINT ck_hub_request_decided")
+        say("  - dropped the old ck_hub_request_decided")
+        changed += 1
+    cur.execute("ALTER TABLE hub_requests ADD CONSTRAINT "
+                f"ck_hub_request_decided CHECK ({wanted})")
+    say("  + added ck_hub_request_decided over decided_at")
+    changed += 1
+
+    # Prove the new rule bites both ways, and that it accepts the row the
+    # old one forbade -- which is the whole behaviour change.
+    cur.execute('SELECT id FROM "user" ORDER BY id LIMIT 1')
+    row = cur.fetchone()
+    if row:
+        who = row[0]
+        probes = (
+            ("INSERT INTO hub_requests (name, pitch, requested_by, status) "
+             "VALUES ('Probe', 'Probe', %s, 'approved')", (who,), True,
+             "a decided request with no timestamp is refused"),
+            ("INSERT INTO hub_requests (name, pitch, requested_by, status, "
+             "decided_at) VALUES ('Probe', 'Probe', %s, 'pending', now())",
+             (who,), True,
+             "a pending request with a timestamp is refused"),
+            ("INSERT INTO hub_requests (name, pitch, requested_by, status, "
+             "decided_at, decided_by) VALUES ('Probe', 'Probe', %s, "
+             "'approved', now(), NULL)", (who,), False,
+             "a decided request whose decider has gone is accepted"),
+        )
+        for sql, params, must_reject, what in probes:
+            refused = rejects(cur, sql, params, what)
+            if refused != must_reject:
+                raise Refuse(f"{what}: it did not")
+            say(f"  . {what}")
+
+    after = count(cur, "hub_requests")
+    if after != rows:
+        raise Refuse(f"hub_requests changed {rows} -> {after}")
+    return changed
+
+
+def _applied_fix_hub_decided(cur):
+    if not table_exists(cur, "hub_requests"):
+        return True
+    body = constraint_def(cur, "ck_hub_request_decided")
+    # By what the body no longer names. Postgres rewrites a CHECK body, but
+    # the column identifiers in it survive the rewrite. The `is not None`
+    # half matters: "decided_by" not in "" is True, so a missing constraint
+    # would otherwise report as applied.
+    return body is not None and "decided_by" not in body
+
+
+_REPORT_NOTICE_KINDS = _FIXTURE_NOTICE_KINDS + (
+    "report_filed", "report_closed", "account_gone")
+
+_REPORT_KINDS = ("abuse", "bug", "contact")
+_REPORT_STATUSES = ("new", "actioned", "dismissed")
+_REPORT_PIECES = "num_nonnulls(message_id, post_id, flag_id)"
+
+
+def _work_reports(cur, dbname, say):
+    """The reports queue, and the three notice kinds that go with it.
+
+    Every link out of this table is ON DELETE SET NULL and no CHECK names a
+    foreign key, which is the lesson of fix_hub_decided above applied to a
+    new table rather than learned again later. models.py's Report docstring
+    has the reasoning; this is the same shape in raw DDL.
+    """
+    for needed in ("user", "messages", "game_posts", "notices"):
+        if not table_exists(cur, needed):
+            raise Refuse(f"{dbname} has no {needed!r} table.")
+    if not table_exists(cur, "map_flags"):
+        raise Refuse("map_flags is missing, so a report cannot point at a "
+                     "map pin. Run the add_map_flags migration first; "
+                     "`migrate --all` does them in that order.")
+
+    before = count(cur, "user")
+    say(f"  {dbname}: {before} account(s)")
+
+    changed = 0
+    if table_exists(cur, "reports"):
+        say("  = reports already exists")
+    else:
+        cur.execute(f"""
+            CREATE TABLE reports (
+                id            SERIAL PRIMARY KEY,
+                kind          VARCHAR(12) NOT NULL,
+                filed_by      INTEGER
+                              REFERENCES "user"(id) ON DELETE SET NULL,
+                filed_by_name TEXT,
+                about_user_id INTEGER
+                              REFERENCES "user"(id) ON DELETE SET NULL,
+                about_name    TEXT,
+                message_id    INTEGER
+                              REFERENCES messages(id) ON DELETE SET NULL,
+                post_id       INTEGER
+                              REFERENCES game_posts(id) ON DELETE SET NULL,
+                flag_id       INTEGER
+                              REFERENCES map_flags(id) ON DELETE SET NULL,
+                quoted        TEXT,
+                seen_in       TEXT,
+                detail        TEXT NOT NULL,
+                created_at    TIMESTAMP NOT NULL
+                              DEFAULT (now() AT TIME ZONE 'utc'),
+                status        VARCHAR(12) NOT NULL DEFAULT 'new',
+                reviewed_by   INTEGER
+                              REFERENCES "user"(id) ON DELETE SET NULL,
+                reviewed_at   TIMESTAMP,
+                note          TEXT,
+                CONSTRAINT ck_report_kind
+                    CHECK (kind IN ({quoted(_REPORT_KINDS)})),
+                CONSTRAINT ck_report_status
+                    CHECK (status IN ({quoted(_REPORT_STATUSES)})),
+                CONSTRAINT ck_report_about
+                    CHECK ((kind = 'abuse' AND about_name IS NOT NULL
+                            AND {_REPORT_PIECES} <= 1)
+                           OR (kind <> 'abuse' AND about_name IS NULL
+                               AND {_REPORT_PIECES} = 0)),
+                CONSTRAINT ck_report_reviewed
+                    CHECK ((status = 'new') = (reviewed_at IS NULL)),
+                CONSTRAINT ck_report_detail
+                    CHECK (length(btrim(detail)) > 0)
+            )
+        """)
+        say("  + created reports")
+        changed += 1
+
+    for name, target in (("ix_reports_queue", "reports (status, id)"),
+                         ("ix_reports_about", "reports (about_user_id)")):
+        if index_exists(cur, name):
+            say(f"  = index {name} already exists")
+        else:
+            cur.execute(f"CREATE INDEX {name} ON {target}")
+            say(f"  + created index {name}")
+            changed += 1
+
+    # Three calls with the same body and a different `allows` each time.
+    # After the first succeeds the others find their value present and say
+    # so; one call with one value would accept a half-widened body that
+    # named only the first kind.
+    for kind in ("report_filed", "report_closed", "account_gone"):
+        changed += widen(cur, "notices", "ck_notice_kind",
+                         f"kind IN ({quoted(_REPORT_NOTICE_KINDS)})",
+                         kind, say)
+
+    # Prove every rule means something, including the one positive probe
+    # that is the reason the table is shaped this way.
+    cur.execute('SELECT id FROM "user" ORDER BY id LIMIT 1')
+    row = cur.fetchone()
+    if row is None:
+        say("  . no accounts, so the probes below are skipped")
+    else:
+        who = row[0]
+        probes = (
+            ("INSERT INTO reports (kind, detail, about_name) "
+             "VALUES ('bug', 'x', 'Somebody')", True,
+             "ck_report_about refuses a bug report about a person"),
+            ("INSERT INTO reports (kind, detail) VALUES ('abuse', 'x')", True,
+             "ck_report_about refuses a complaint about nobody"),
+            ("INSERT INTO reports (kind, detail, about_name, message_id, "
+             "post_id) VALUES ('abuse', 'x', 'Somebody', 1, 1)", True,
+             "ck_report_about refuses two pieces of content at once"),
+            ("INSERT INTO reports (kind, detail, status) "
+             "VALUES ('bug', 'x', 'dismissed')", True,
+             "ck_report_reviewed refuses a decision at no time"),
+            ("INSERT INTO reports (kind, detail, reviewed_at) "
+             "VALUES ('bug', 'x', now())", True,
+             "ck_report_reviewed refuses a new report with a timestamp"),
+            ("INSERT INTO reports (kind, detail) VALUES ('bug', '   ')", True,
+             "ck_report_detail refuses a blank report"),
+            ("INSERT INTO reports (kind, detail) VALUES ('nonsense', 'x')",
+             True, "ck_report_kind refuses an unknown kind"),
+            ("INSERT INTO notices (user_id, kind, body, url, created_at) "
+             f"VALUES ({who}, 'not_a_kind', 'x', '/', now())", True,
+             "ck_notice_kind still refuses an unknown kind"),
+            # The one that must be ACCEPTED: a complaint whose reporter,
+            # subject and reviewer have all been deleted must still store.
+            # If this is ever refused, the table has stopped being able to
+            # outlive the people in it, which is its whole job.
+            ("INSERT INTO reports (kind, detail, about_name, filed_by, "
+             "about_user_id, status, reviewed_by, reviewed_at) "
+             "VALUES ('abuse', 'x', 'Somebody', NULL, NULL, 'dismissed', "
+             "NULL, now())", False,
+             "a report outliving its reporter, subject and reviewer is kept"),
+        )
+        for sql, must_reject, what in probes:
+            if rejects(cur, sql, (), what) != must_reject:
+                raise Refuse(f"{what}: it did not")
+            say(f"  . {what}")
+
+    after = count(cur, "user")
+    if after != before:
+        raise Refuse(f'"user" changed {before} -> {after}')
+    return changed
+
+
+def _applied_reports(cur):
+    kinds = constraint_def(cur, "ck_notice_kind") or ""
+    return (table_exists(cur, "reports")
+            and index_exists(cur, "ix_reports_queue")
+            and index_exists(cur, "ix_reports_about")
+            and "report_filed" in kinds and "report_closed" in kinds
+            and "account_gone" in kinds)
+
+
 # ---------------------------------------------------------- the registry
 #
 # In the order they were written, which is the order they have to run in:
@@ -2290,6 +2555,13 @@ MIGRATIONS = [
      _work_post_starts_at, _applied_post_starts_at),
     ("drop_ufind", "takes the U-Find category and price back out",
      _work_drop_ufind, _applied_drop_ufind),
+    # A schema bug rather than a feature: ck_hub_request_decided named a
+    # column a SET NULL cascade could null behind it.
+    ("fix_hub_decided", "ck_hub_request_decided, restated over decided_at",
+     _work_fix_hub_decided, _applied_fix_hub_decided),
+    # After add_map_flags, because a report can point at a map pin.
+    ("add_reports", "the reports queue and three new notice kinds",
+     _work_reports, _applied_reports),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]
@@ -2966,6 +3238,36 @@ def delete_account_work(cur, dbname, say, email=None):
                      "nothing to delete.")
 
     user_id, name, verified = row
+
+    # The one thing a bare DELETE gets badly wrong. Chat.owner_id is
+    # CASCADE, so deleting somebody who made a group chat destroys the chat,
+    # its members, its invites and every message anybody ever wrote in it.
+    # The app's own /account/delete hands such a chat to its longest-standing
+    # member instead; that logic is Flask and SQLAlchemy and cannot be
+    # reached from here, so rather than writing a second copy that would
+    # drift, this refuses and says where to do it properly -- the same choice
+    # take_backup makes when something is attached to the database.
+    cur.execute("""
+        SELECT c.name, count(m.user_id) - 1
+          FROM chats c
+          JOIN chat_members m ON m.chat_id = c.id
+         WHERE c.owner_id = %s AND c.post_id IS NULL
+         GROUP BY c.id, c.name
+        HAVING count(m.user_id) > 1
+         ORDER BY c.name
+    """, (user_id,))
+    shared = cur.fetchall()
+    if shared:
+        say(f"  {name} owns {len(shared)} group chat(s) with other people "
+            "in them:")
+        for chat_name, others in shared:
+            say(f"    {chat_name}  ({others} other member(s))")
+        raise Refuse(
+            "deleting this account here would destroy those chats and every "
+            "message in them. Have them delete their own account from the "
+            "account page, which hands each chat to its longest-standing "
+            "member -- or hand the chats over first.")
+
     before = {
         "answers": count(cur, "user_answers", "user_id = %s", (user_id,)),
         "clubs": count(cur, "club_members", "user_id = %s", (user_id,)),

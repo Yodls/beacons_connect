@@ -69,6 +69,8 @@ from models import (
     PRONOUNS,
     Question,
     QuestionOption,
+    REPORT_KINDS,
+    Report,
     User,
     UserAnswer,
     db,
@@ -131,6 +133,25 @@ app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "").lower() == "true
 app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
 app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
+
+# Cross-site request forgery, in three lines, for every form in the app.
+#
+# There is no CSRF token anywhere here: every form is raw HTML read through
+# request.form. SameSite="Lax" means the browser does not send the session
+# cookie on a cross-site POST at all, so a forged write arrives
+# unauthenticated and @login_required turns it into a redirect. Nothing in
+# the app wants a cross-site POST -- /live/away's sendBeacon is same-site --
+# so this costs nothing and covers the thirty-odd POST routes that were
+# written before anybody thought about it, not just the new ones.
+#
+# Secure follows the same switch as the mail TLS flag rather than being
+# hard-coded: set it on a site served over https, and leave it off for a
+# development server on http, which would otherwise drop the cookie and make
+# signing in impossible.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.environ.get("SESSION_COOKIE_SECURE", "").lower() == "true")
 
 # A development database is one whose name ends in _dev, and the UI says so
 # when it is on one. Asked this way round, the same code drops onto a live
@@ -260,6 +281,31 @@ ONBOARDING_EXEMPT = {
 # matters: login() accepts POST, and login_user() would otherwise let someone
 # already signed in submit the form and land on whichever account it named.
 GUEST_ONLY = {"login", "register", "verify", "resend_code"}
+
+
+@app.before_request
+def same_origin():
+    """Refuse a write that a different site asked for.
+
+    The check behind SESSION_COOKIE_SAMESITE, for anything that does not
+    honour it. A browser cannot be made to omit or forge Origin on a
+    cross-origin POST, so this is the real guard; the cookie setting is what
+    makes a forged request harmless even before it gets here.
+
+    A request with neither header is let through, which is what the test
+    suites and curl send, and is the same choice every framework's referer
+    check makes. Answered as JSON because the map and the live channel
+    already understand a 403 and a genuine user never sees this.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    came = request.headers.get("Origin") or request.headers.get("Referer")
+    if came is None:
+        return None
+    parts = urlsplit(came)
+    if (parts.scheme, parts.netloc) == urlsplit(request.host_url)[:2]:
+        return None
+    return jsonify({"error": "unavailable"}), 403
 
 
 @app.before_request
@@ -3628,8 +3674,30 @@ def admin():
             .where(Question.key == matching.SHOWN_QUESTION)
             .order_by(QuestionOption.sort_order)).all(),
         tag_max=HUB_TAGS_MAX,
+        **admin_reports(),
         **admin_db_context(),
     )
+
+
+def admin_reports():
+    """The report queue, split the way admin() splits hub requests.
+
+    `seen_before` answers the first question anybody asks about a complaint
+    -- has this person been reported before? -- counted per account rather
+    than left to be eyeballed down the page.
+    """
+    rows = db.session.scalars(
+        db.select(Report).order_by(Report.id.desc())).all()
+    seen_before = {}
+    for row in rows:
+        if row.about_user_id is not None:
+            seen_before[row.about_user_id] = (
+                seen_before.get(row.about_user_id, 0) + 1)
+    return {
+        "reports_new": [r for r in rows if r.status == "new"],
+        "reports_done": [r for r in rows if r.status != "new"][:20],
+        "seen_before": seen_before,
+    }
 
 
 def admin_db_context():
@@ -3743,6 +3811,239 @@ def hub_decline(request_id):
     notices.hub_decided(asked.requested_by, asked.name, False, asked.note)
     db.session.commit()
     flash(f"{asked.name} was turned down.")
+    return redirect(url_for("admin"))
+
+
+# ------------------------------------------------------------- reporting
+# Three things a student might need to tell us -- somebody behaving badly,
+# something broken, or just a message -- and one queue for all three,
+# because whoever looks after the site wants one list and not three pages.
+#
+# The rule that matters in here is that nothing is quoted back to anybody
+# who could not already read it. Every target is re-fetched and
+# access-checked on the way in AND on the way out, and the copy stored for
+# the admin is built from the row the server fetched, never from the form.
+# Without that, /report?message=<guess> is a way to read other people's
+# private messages on a page whose whole purpose is safety.
+
+REPORT_DETAIL_MAX = 600
+
+
+def message_home(message):
+    """The conversation a message hangs off, as (kind, target_id).
+
+    Read off models.MESSAGE_PARENTS rather than an if/elif chain, so a new
+    chat kind does not mean remembering this function separately. A match's
+    target is the OTHER student, because that is what the chat route is
+    keyed by.
+    """
+    for kind, column in MESSAGE_PARENTS.items():
+        value = getattr(message, column.key)
+        if value is None:
+            continue
+        if kind == "match":
+            match = db.session.get(Match, value)
+            if match is None:
+                return None, None
+            other = (match.user_hi if match.user_lo == current_user.id
+                     else match.user_lo)
+            return kind, other
+        return kind, value
+    if message.room:
+        return COMMUNITY, 0
+    return None, None
+
+
+def report_subject():
+    """Resolve what is being reported, or (None, ...) if it may not be seen.
+
+    Returns (column, row, about_user, quoted, seen_in). `column` is one of
+    REPORT_CONTENT_COLUMNS or None.
+
+    Every branch checks readability through the check that already governs
+    the thing itself -- chat_target for a message, the meetup's audience,
+    map_flag_visible_to for a pin -- so this cannot become a second,
+    weaker door to the same content.
+    """
+    raw_message = request.values.get("message", "")
+    raw_post = request.values.get("post", "")
+    raw_flag = request.values.get("flag", "")
+
+    if raw_message.isdigit():
+        message = db.session.get(Message, int(raw_message))
+        if message is None:
+            return None, None, None, None, None
+        kind, target_id = message_home(message)
+        if kind is None:
+            return None, None, None, None, None
+        parent, title = chat_target(kind, target_id)
+        if parent is None:
+            return None, None, None, None, None
+        author = db.session.get(User, message.user_id)
+        return ("message_id", message, author, message.body, title)
+
+    if raw_post.isdigit():
+        post = db.session.get(GamePost, int(raw_post))
+        if post is None:
+            return None, None, None, None, None
+        # A chat-only meetup is readable by the people in its chat, which is
+        # its RSVP list. Anything else is campus-wide.
+        if post.audience != "campus":
+            rsvp = db.session.get(GamePostRsvp, (post.id, current_user.id))
+            if rsvp is None and post.author_id != current_user.id:
+                return None, None, None, None, None
+        author = db.session.get(User, post.author_id)
+        said = " ".join(p for p in (post.game, post.note) if p)
+        return ("post_id", post, author, said, "a meetup")
+
+    if raw_flag:
+        flag = db.session.scalar(
+            db.select(MapFlag).where(MapFlag.public_id == raw_flag,
+                                     map_flag_visible_to(current_user.id)))
+        if flag is None:
+            return None, None, None, None, None
+        owner = db.session.get(User, flag.owner_id)
+        said = " ".join(p for p in (flag.title, flag.description) if p)
+        return ("flag_id", flag, owner, said, flag.location_name)
+
+    return None, None, None, None, None
+
+
+@app.route("/report", methods=["GET", "POST"])
+@login_required
+def report_new():
+    """Report somebody, report a bug, or send us a message.
+
+    One page for all three. The kind comes from the form on a POST and from
+    the query on a GET, so the same template can arrive pre-aimed at a
+    person or a message from a Report link, or empty from the account menu.
+    """
+    column, row, about_user, quoted, seen_in = report_subject()
+
+    kind = request.values.get("kind", "")
+    if kind not in REPORT_KINDS:
+        # Anything named makes this a complaint. Inferring from `about`
+        # alone sent somebody who clicked Report beside a message to the
+        # "get in touch" form with the message silently dropped, which is
+        # the kind of quiet wrong thing that only shows up in the queue a
+        # week later as a report about nothing.
+        named = (request.values.get("about") or column is not None)
+        kind = "abuse" if named else "contact"
+
+    # A person can be named directly, or inferred from the thing reported.
+    raw_about = request.values.get("about", "")
+    if about_user is None and raw_about.isdigit():
+        about_user = db.session.get(User, int(raw_about))
+
+    # Reached from the menu with nobody named: offer the people this student
+    # already knows, rather than a search over every account. The Report
+    # link beside a message or a meetup is the way to name anybody else, and
+    # it carries the thing itself along with the person -- which is what an
+    # admin actually needs. Deliberately not a name search: a report form
+    # that will look anybody up is an account enumerator.
+    choices = []
+    if kind == "abuse" and about_user is None:
+        choices = [(f["user_id"], f["name"])
+                   for f in matching.active_matches(current_user.id)]
+
+    if kind == "abuse" and about_user is not None \
+            and about_user.id == current_user.id:
+        flash("You cannot report yourself.")
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        detail = request.form.get("detail", "").strip()
+        if kind == "abuse" and about_user is None:
+            flash("Choose who you are reporting.")
+        elif not detail:
+            flash("Please say what happened.")
+        elif len(detail) > REPORT_DETAIL_MAX:
+            flash(f"Please keep it under {REPORT_DETAIL_MAX} characters.")
+        else:
+            report = Report(
+                kind=kind,
+                detail=detail[:REPORT_DETAIL_MAX],
+                filed_by=current_user.id,
+                filed_by_name=current_user.name,
+                # Both built from what the server fetched, never from the
+                # form: otherwise the person reporting chooses what the
+                # admin reads.
+                about_name=about_user.name if kind == "abuse" else None,
+                about_user_id=about_user.id if kind == "abuse" else None,
+                quoted=quoted if kind == "abuse" else None,
+                seen_in=seen_in if kind == "abuse" else None,
+            )
+            if kind == "abuse" and column is not None:
+                setattr(report, column, row.id)
+            db.session.add(report)
+
+            what = {"abuse": about_user.name if about_user else "Somebody",
+                    "bug": "A problem",
+                    "contact": "A message"}[kind]
+            for admin_id in admin_ids():
+                notices.report_filed(admin_id, what)
+            db.session.commit()
+            # The sentence the student sees a click after the form, so it
+            # keeps the form's register rather than going back to
+            # "whoever looks after the site has been told". The second half
+            # is a promise the app keeps: report_closed notifies them.
+            flash("Thanks for telling us. Someone will take a look, and "
+                  "you'll hear back when they have.")
+            return dock_back() or redirect(url_for("index"))
+
+    return render_template(
+        "report.html",
+        kind=kind,
+        about_user=about_user,
+        quoted=quoted,
+        seen_in=seen_in,
+        choices=choices,
+        detail_max=REPORT_DETAIL_MAX,
+        carry={k: request.values.get(k, "") for k in
+               ("about", "message", "post", "flag", "back")},
+    )
+
+
+@app.route("/admin/reports/<int:report_id>/<any(actioned, dismissed):action>",
+           methods=["POST"])
+@login_required
+def report_decide(report_id, action):
+    """Mark a report dealt with, or looked at and left.
+
+    Deciding does not itself remove anything: there is no hide-this-content
+    mechanism in the app, and inventing one is a larger feature than a
+    report queue. "Actioned" records that somebody dealt with it; the tools
+    to act are the ones that already exist.
+    """
+    away = not_admin()
+    if away:
+        return away
+
+    report = db.session.get(Report, report_id)
+    if report is None:
+        flash("That report no longer exists.")
+        return redirect(url_for("admin"))
+    if report.status != "new":
+        # The idempotence hub_approve has, against a double-submitted form.
+        flash("That report has already been dealt with.")
+        return redirect(url_for("admin"))
+
+    report.status = action
+    report.reviewed_by = current_user.id
+    report.reviewed_at = datetime.utcnow()
+    report.note = request.form.get("note", "").strip()[:REPORT_DETAIL_MAX]
+
+    # Only when there is still somebody to tell: a report filed by an
+    # account that has since been deleted has no reader.
+    if report.filed_by is not None:
+        said = ("What you reported has been dealt with."
+                if action == "actioned"
+                else "What you reported has been looked at.")
+        notices.report_closed(report.filed_by,
+                              f"{said} {report.note}".strip()
+                              if report.note else said)
+    db.session.commit()
+    flash("Thank you. The report is closed.")
     return redirect(url_for("admin"))
 
 
@@ -4570,6 +4871,49 @@ def chat_invite_respond(chat_id, action):
     return dock_back() or redirect(url_for("chats"))
 
 
+def hand_over_chat(chat, successor):
+    """Point a chat at a new owner, or close it when there is nobody.
+
+    `successor` is a member already checked not to be the person leaving, or
+    None meaning there is nobody left -- in which case the chat goes, because
+    an empty chat is just clutter.
+
+    Never commits, and never touches the leaver's own ChatMember row:
+    leaving deletes exactly one of those and deleting an account has the
+    cascade do it, so the two callers own that part themselves.
+
+    Shared with /account/delete so the two cannot drift. Without a handover
+    there, Chat.owner_id's CASCADE destroys the chat, its members, its
+    invites and every message anyone ever wrote in it.
+    """
+    if successor is None:
+        db.session.delete(chat)
+        return None
+    chat.owner_id = successor.id
+    return successor
+
+
+def longest_standing_member(chat_id, excluding):
+    """Who has been in a chat longest, not counting one person.
+
+    This is who an owner's chat passes to when their account is deleted:
+    there is nobody to ask, so the rule has to be in the code, and "whoever
+    has been here longest" is the one rule that needs no judgement.
+
+    Ordered by joined_at and then by id, so the answer is the same every
+    time. Two people added inside one request share a timestamp, and a tie
+    broken by whatever the planner happened to return first would make this
+    untestable.
+    """
+    return db.session.scalars(
+        db.select(User)
+        .join(ChatMember, ChatMember.user_id == User.id)
+        .where(ChatMember.chat_id == chat_id, ChatMember.user_id != excluding)
+        .order_by(ChatMember.joined_at, User.id)
+        .limit(1)
+    ).first()
+
+
 @app.route("/chats/<int:chat_id>/leave", methods=["POST"])
 @login_required
 def chat_leave(chat_id):
@@ -4606,7 +4950,7 @@ def chat_leave(chat_id):
     if not others:
         # Nobody to hand it to, and an empty chat is just clutter.
         name = chat.name
-        db.session.delete(chat)
+        hand_over_chat(chat, None)
         db.session.commit()
         flash(f"You left and closed {name}.")
         return redirect(url_for("chats"))
@@ -4618,7 +4962,7 @@ def chat_leave(chat_id):
         flash(f"Choose who should take over {chat.name} before you leave.")
         return redirect(url_for("chat", kind="group", target_id=chat_id))
 
-    chat.owner_id = successor.id
+    hand_over_chat(chat, successor)
     db.session.delete(membership)
     db.session.commit()
     flash(f"{successor.name} now manages {chat.name}. You have left.")
@@ -4973,6 +5317,116 @@ def logout():
     return redirect(url_for("login"))
 
 
+def read_answers(questions):
+    """Read a questionnaire submission. Returns (picks, selected, complaint).
+
+    `complaint` is a finished sentence to flash, or None when the submission
+    is good. Shared by /onboarding and /account because the two forms post
+    the same fields -- `_questions.html` is the partial both render -- and a
+    second copy of these three checks is a second place for the one that
+    matters to go missing.
+
+    That one is `stray`: it refuses option ids that do not belong to the
+    question they were posted under, which is what stops a crafted form
+    answering one question with another's options.
+    """
+    picks = {
+        question.id: [
+            int(value)
+            for value in request.form.getlist(f"q{question.id}")
+            if value.isdigit()
+        ]
+        for question in questions
+    }
+    selected = {option_id for ids in picks.values() for option_id in ids}
+
+    missing = [
+        q for q in questions
+        if q.key not in OPTIONAL_QUESTIONS and not picks[q.id]
+    ]
+    doubled = [q for q in questions if not q.allows_multiple and len(picks[q.id]) > 1]
+    stray = [
+        q for q in questions
+        if not set(picks[q.id]) <= {option.id for option in q.options}
+    ]
+
+    if missing:
+        complaint = "Please answer: " + "; ".join(q.prompt for q in missing)
+    elif doubled:
+        complaint = "Please pick just one answer for each single-choice question."
+    elif stray:
+        complaint = "Please choose from the listed options."
+    else:
+        complaint = None
+    return picks, selected, complaint
+
+
+def save_answers(questions, picks, selected):
+    """Replace the current user's answers. Returns the hubs they joined.
+
+    Does not commit: the caller owns the transaction, so the answers, the
+    pronouns and the hub memberships all land together or not at all.
+    """
+    # What they had before the delete below, which is the only place
+    # "newly picked" is answerable from. Without it, a hub somebody left by
+    # hand would be rejoined every time they touched their answers, quietly
+    # undoing a decision they had already made.
+    had = set(db.session.scalars(
+        db.select(UserAnswer.option_id)
+        .filter_by(user_id=current_user.id)))
+    db.session.execute(db.delete(UserAnswer).filter_by(user_id=current_user.id))
+    for question in questions:
+        for option_id in picks[question.id]:
+            db.session.add(
+                UserAnswer(
+                    user_id=current_user.id,
+                    question_id=question.id,
+                    option_id=option_id,
+                )
+            )
+
+    # An answer can put somebody into a hub. Only when it is newly given,
+    # and nothing here ever takes anybody out: dropping the answer must not
+    # pull somebody out of a conversation they are in the middle of, and
+    # leaving a hub by hand has to stick.
+    # (question key, answer) -> option id, walked in Python rather than
+    # queried: `stray` in read_answers already reads every question's
+    # options, so they are in the session and this costs nothing.
+    ids = {(q.key, o.label): o.id for q in questions for o in q.options}
+    joined = []
+    for (key, label), hub in JOINS_HUB.items():
+        option_id = ids.get((key, label))
+        if (option_id is None or option_id in had
+                or option_id not in selected):
+            continue
+        club = db.session.scalar(db.select(Club).filter_by(name=hub))
+        # A hub that has been renamed or removed is a quiet no-op. This runs
+        # on the one page nobody can skip, so a missing row here must not be
+        # the thing that stops somebody signing up.
+        if club is None:
+            app.logger.warning("JOINS_HUB names %r, which is not a hub", hub)
+            continue
+        # Already in it, by hand or from an earlier answer. The primary key
+        # is (user_id, club_id), so a second row would raise.
+        if db.session.get(ClubMember, (current_user.id, club.id)):
+            continue
+        db.session.add(ClubMember(user_id=current_user.id, club_id=club.id))
+        joined.append(club.name)
+    return joined
+
+
+def set_pronouns():
+    """Write pronouns from the form, if the form actually sent them.
+
+    Only when the field came back, and only then if it is one we offer: a
+    submit that leaves it out must not reset somebody's pronouns to
+    "unspecified" as a side effect.
+    """
+    choice = request.form.get("pronouns")
+    if choice in PRONOUNS:
+        current_user.pronouns = choice
+
+
 @app.route("/onboarding", methods=["GET", "POST"])
 @login_required
 def onboarding():
@@ -4984,96 +5438,19 @@ def onboarding():
     )
 
     if request.method == "POST":
-        picks = {
-            question.id: [
-                int(value)
-                for value in request.form.getlist(f"q{question.id}")
-                if value.isdigit()
-            ]
-            for question in questions
-        }
-        selected = {option_id for ids in picks.values() for option_id in ids}
-
-        missing = [
-            q for q in questions
-            if q.key not in OPTIONAL_QUESTIONS and not picks[q.id]
-        ]
-        doubled = [q for q in questions if not q.allows_multiple and len(picks[q.id]) > 1]
-        stray = [
-            q for q in questions
-            if not set(picks[q.id]) <= {option.id for option in q.options}
-        ]
-
-        if missing:
-            flash("Please answer: " + "; ".join(q.prompt for q in missing))
-        elif doubled:
-            flash("Please pick just one answer for each single-choice question.")
-        elif stray:
-            flash("Please choose from the listed options.")
+        picks, selected, complaint = read_answers(questions)
+        if complaint:
+            flash(complaint)
         else:
-            # Asked before the delete below, which is what makes it an answer
+            # Asked before save_answers, which is what makes it an answer
             # about the student rather than about this submit.
             #
             # First time only: somebody editing answers they gave in
             # September is not being welcomed, and sending them to a page
             # that says so would be odd. They go where they always went.
             first_time = not has_onboarded(current_user.id)
-            # What they had before this submit, for the same reason as above:
-            # the delete on the next line throws it away, so "newly picked"
-            # is only answerable from here. Without it, a hub somebody left
-            # by hand would be rejoined every time they touched their
-            # answers, quietly undoing a decision they had already made.
-            had = set(db.session.scalars(
-                db.select(UserAnswer.option_id)
-                .filter_by(user_id=current_user.id)))
-            db.session.execute(db.delete(UserAnswer).filter_by(user_id=current_user.id))
-            for question in questions:
-                for option_id in picks[question.id]:
-                    db.session.add(
-                        UserAnswer(
-                            user_id=current_user.id,
-                            question_id=question.id,
-                            option_id=option_id,
-                        )
-                    )
-            # Only written when the field actually came back, and only then if
-            # it is one we offer. A submit that leaves it out must not reset
-            # someone's pronouns to "unspecified" as a side effect.
-            choice = request.form.get("pronouns")
-            if choice in PRONOUNS:
-                current_user.pronouns = choice
-
-            # An answer can put somebody into a hub. Only when it is newly
-            # given, and nothing here ever takes anybody out: dropping the
-            # answer must not pull somebody out of a conversation they are in
-            # the middle of, and leaving a hub by hand has to stick.
-            # (question key, answer) -> option id, walked in Python rather
-            # than queried: `stray` above already reads every question's
-            # options, so they are in the session and this costs nothing.
-            ids = {(q.key, o.label): o.id for q in questions for o in q.options}
-            joined = []
-            for (key, label), hub in JOINS_HUB.items():
-                option_id = ids.get((key, label))
-                if (option_id is None or option_id in had
-                        or option_id not in selected):
-                    continue
-                club = db.session.scalar(
-                    db.select(Club).filter_by(name=hub))
-                # A hub that has been renamed or removed is a quiet no-op.
-                # This runs on the one page nobody can skip, so a missing row
-                # here must not be the thing that stops somebody signing up.
-                if club is None:
-                    app.logger.warning("JOINS_HUB names %r, which is not a hub", hub)
-                    continue
-                # Already in it, by hand or from an earlier answer. The
-                # primary key is (user_id, club_id), so adding a second row
-                # would raise rather than be ignored.
-                if db.session.get(ClubMember, (current_user.id, club.id)):
-                    continue
-                db.session.add(ClubMember(user_id=current_user.id,
-                                          club_id=club.id))
-                joined.append(club.name)
-
+            joined = save_answers(questions, picks, selected)
+            set_pronouns()
             db.session.commit()
             # Said out loud. Being put into a conversation nobody asked to
             # join is a surprise worth one sentence.
@@ -5090,6 +5467,195 @@ def onboarding():
         pronoun_options=PRONOUNS,
         pronouns_now=current_user.pronouns,
     )
+
+
+# =====================================================================
+# Your account
+# ---------------------------------------------------------------------
+# One page for everything about you: your name, your pronouns, the answers
+# the matcher reads, and the way out. /onboarding is still the first-time
+# flow -- it asks the same questions through the same partial, and it is the
+# page nobody can skip -- but once you are in, this is where you change
+# anything, including leaving.
+
+
+def account_counts():
+    """What deleting this account would take with it, counted not guessed.
+
+    Shown before anybody confirms, because the cascade is wide and some of
+    it reaches other people: the games go from the other player's history
+    too, which is the part nobody would expect.
+    """
+    me = current_user.id
+    owned = db.session.scalars(
+        db.select(Chat).where(Chat.owner_id == me, Chat.post_id.is_(None))
+    ).all()
+    passing, closing = [], []
+    for chat in owned:
+        if longest_standing_member(chat.id, excluding=me) is None:
+            closing.append(chat.name)
+        else:
+            passing.append(chat.name)
+    count = lambda model, clause: db.session.scalar(
+        db.select(db.func.count()).select_from(model).where(clause))
+    return {
+        "friends": len(matching.active_matches(me)),
+        "messages": count(Message, Message.user_id == me),
+        "games": count(Game, db.or_(Game.player_a == me, Game.player_b == me)),
+        "meetups": count(GamePost, GamePost.author_id == me),
+        "pins": count(MapFlag, MapFlag.owner_id == me),
+        "passing": passing,
+        "closing": closing,
+    }
+
+
+@app.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    """Your name, your pronouns and your answers, in three separate forms.
+
+    Three forms rather than one, so saving your name cannot silently rewrite
+    answers a half-loaded page had wrong -- and so each section can be
+    submitted without the others being present.
+
+    Not in ONBOARDING_EXEMPT, and that is not a style choice: inject_dock
+    returns {} for exempt endpoints, _noticelist.html iterates notice_rows,
+    and iterating a Jinja Undefined raises -- so any page extending
+    shell.html that is added to that set fails to render. The consequence is
+    that a verified-but-not-onboarded account answers the questions before it
+    can reach this page, which is one page away and worth saying out loud.
+    """
+    questions = db.session.scalars(db.select(Question).order_by(Question.id)).all()
+    selected = set(
+        db.session.scalars(
+            db.select(UserAnswer.option_id).filter_by(user_id=current_user.id)
+        )
+    )
+
+    if request.method == "POST":
+        section = request.form.get("section", "")
+
+        if section == "who":
+            name = " ".join(request.form.get("name", "").split())
+            if not name:
+                flash("Your name cannot be blank.")
+            elif len(name) > NAME_MAX:
+                flash(f"Please keep your name under {NAME_MAX} characters.")
+            else:
+                current_user.name = name
+                set_pronouns()
+                db.session.commit()
+                flash("Saved.")
+                return redirect(url_for("account"))
+
+        elif section == "answers":
+            picks, selected, complaint = read_answers(questions)
+            if complaint:
+                flash(complaint)
+            else:
+                joined = save_answers(questions, picks, selected)
+                db.session.commit()
+                if joined:
+                    flash(f"Saved. You have been added to "
+                          f"{', '.join(joined)}, because of what you said "
+                          "about studying.")
+                else:
+                    flash("Saved.")
+                return redirect(url_for("account"))
+
+        else:
+            flash("That form did not say what it was for.")
+
+    return render_template(
+        "account.html",
+        questions=questions,
+        selected=selected,
+        optional=OPTIONAL_QUESTIONS,
+        pronoun_options=PRONOUNS,
+        pronouns_now=current_user.pronouns,
+        counts=account_counts(),
+        name_max=NAME_MAX,
+    )
+
+
+@app.route("/account/delete", methods=["POST"])
+@login_required
+def account_delete():
+    """Delete your own account, permanently.
+
+    The password is required, and it is doing two jobs. It is the "are you
+    sure" an irreversible action needs, and it is the thing an attacker who
+    forged this POST cannot supply -- the email would not do, because
+    shell.html prints it on every page and the addresses are formulaic.
+
+    The order below matters more than it looks. Everything that has to be
+    read is read before anything is written, because the cascade makes it
+    unreadable; the reports scrub runs before the delete, because afterwards
+    `filed_by` is already NULL and the WHERE finds nothing; and the flush
+    before the delete is explicit so that handing a chat over does not
+    depend on the unit of work happening to emit the UPDATE before the
+    DELETE. If it ever did not, Chat.owner_id's CASCADE would destroy a
+    handed-over chat for everybody in it.
+    """
+    me = current_user.id
+    # Plain values, not attributes: current_user is unusable after the row
+    # goes and the password hash is needed before that.
+    my_name = current_user.name
+    my_email = current_user.email
+    my_hash = current_user.password_hash
+
+    if not check_password_hash(my_hash, request.form.get("password", "")):
+        flash("That password is not right. Nothing has been deleted.")
+        return redirect(url_for("account"))
+
+    # The same door admin_set_admin refuses to shut. Deleting the last
+    # admin's account locks the admin page, and the admin page is the only
+    # way to appoint another one.
+    if current_user.is_admin:
+        others = db.session.scalar(
+            db.select(db.func.count()).select_from(User)
+            .where(User.is_admin, User.id != me))
+        if not others:
+            flash("You are the only admin. Make somebody else one before "
+                  "you delete your account.")
+            return redirect(url_for("account"))
+
+    # Read now; the cascade makes both unreadable in a moment.
+    friends = [f["user_id"] for f in matching.active_matches(me)]
+    owned = db.session.scalars(
+        db.select(Chat).where(Chat.owner_id == me, Chat.post_id.is_(None))
+    ).all()
+
+    # Told before they are unreachable. A meetup's chat is deliberately not
+    # in `owned`: its membership IS the RSVP list, so it goes with the
+    # meetup rather than being handed to somebody who only said they would
+    # come.
+    for friend_id in friends:
+        notices.account_gone(friend_id, my_name)
+
+    for chat in owned:
+        hand_over_chat(chat, longest_standing_member(chat.id, excluding=me))
+
+    # Their name comes off the reports they filed; the reports stay. Reports
+    # ABOUT them keep `about_name`, which is the asymmetry the Report
+    # docstring argues for.
+    db.session.execute(
+        db.update(Report).where(Report.filed_by == me)
+        .values(filed_by_name=None))
+
+    db.session.flush()
+    db.session.delete(db.session.get(User, me))
+    db.session.commit()
+
+    # After the commit and before anything renders: Flask-Login caches the
+    # resolved user on `g`, so a deleted row with a still-"authenticated"
+    # request would be bounced into /onboarding by require_onboarding.
+    logout_user()
+    session.pop("pending_user_id", None)
+    app.logger.info("account deleted: %s", my_email)
+    flash("Your account and everything on it has been deleted. "
+          "That address is free to register again.")
+    return redirect(url_for("login"))
 
 
 # =====================================================================
@@ -5498,6 +6064,31 @@ def from_the_map():
 
 # ---------- the endpoints ----------
 
+def map_flag_visible_to(me):
+    """The clause that says which flags one student may see.
+
+    Public ones, their own, their clubs', ones a friend shared with them, and
+    the flags of meetups they said they were in for.
+
+    Extracted because /report has to ask the same question before it will
+    quote a pin back to somebody: a second copy of this rule would drift,
+    and the direction it would drift in is showing a private pin to a
+    stranger on a page whose whole purpose is safety.
+    """
+    joined_club_ids = db.select(ClubMember.club_id).where(ClubMember.user_id == me)
+    shared_with_me = db.select(MapFlagViewer.flag_id).where(MapFlagViewer.user_id == me)
+    my_meetups = db.select(GamePostRsvp.post_id).where(GamePostRsvp.user_id == me)
+    return db.or_(
+        MapFlag.visibility == "public",
+        MapFlag.owner_id == me,
+        MapFlag.club_id.in_(joined_club_ids),
+        db.and_(MapFlag.visibility == "friends",
+                MapFlag.id.in_(shared_with_me)),
+        db.and_(MapFlag.visibility == "going",
+                MapFlag.post_id.in_(my_meetups)),
+    )
+
+
 @app.route("/api/map-flags")
 @login_required
 def map_flags_list():
@@ -5511,9 +6102,6 @@ def map_flags_list():
         db.session.commit()
 
     me = current_user.id
-    joined_club_ids = db.select(ClubMember.club_id).where(ClubMember.user_id == me)
-    shared_with_me = db.select(MapFlagViewer.flag_id).where(MapFlagViewer.user_id == me)
-    my_meetups = db.select(GamePostRsvp.post_id).where(GamePostRsvp.user_id == me)
     rows = db.session.execute(
         db.select(MapFlag, User.name, Club.name)
         .join(User, User.id == MapFlag.owner_id)
@@ -5523,15 +6111,7 @@ def map_flags_list():
             MapFlag.expires_at > now,
             # an event flag goes with a cancelled meetup
             db.or_(MapFlag.post_id.is_(None), GamePost.status == "open"),
-            db.or_(
-                MapFlag.visibility == "public",
-                MapFlag.owner_id == me,
-                MapFlag.club_id.in_(joined_club_ids),
-                db.and_(MapFlag.visibility == "friends",
-                        MapFlag.id.in_(shared_with_me)),
-                db.and_(MapFlag.visibility == "going",
-                        MapFlag.post_id.in_(my_meetups)),
-            ),
+            map_flag_visible_to(me),
         )
         .order_by(MapFlag.expires_at, MapFlag.id)
     ).all()

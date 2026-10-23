@@ -228,12 +228,25 @@ class HubRequest(db.Model):
             "status IN (" + ", ".join(f"'{s}'" for s in HUB_REQUEST_STATUSES) + ")",
             name="ck_hub_request_status",
         ),
-        # A decided request names who decided it and when; a pending one names
-        # neither. Written as a rule rather than left to the route, because
-        # "approved by nobody at no time" is the shape a half-finished branch
-        # would leave behind.
+        # A decided request says when it was decided; a pending one does not.
+        # Written as a rule rather than left to the route, because "decided
+        # at no time" is the shape a half-finished branch would leave behind.
+        #
+        # Over `decided_at` alone, and deliberately NOT over `decided_by`.
+        # That column is `ondelete="SET NULL"`, and Postgres does not
+        # re-check a CHECK when a cascade nulls one of its columns -- so the
+        # older form of this rule, which named both, silently left every
+        # decided request forbidden the moment the admin who decided it
+        # deleted their account. The row read back fine and failed on the
+        # next UPDATE. `decided_at` is written in the same breath as
+        # `decided_by` by hub_approve and hub_decline, so this says what the
+        # rule meant to say, and no cascade can reach it.
+        #
+        # The migration that restates this on an existing database is
+        # fix_hub_decided in db_ops.py. tests/test_schema_rules.py refuses
+        # any CHECK that names a column a SET NULL cascade can null.
         db.CheckConstraint(
-            "(status = 'pending') = (decided_by IS NULL AND decided_at IS NULL)",
+            "(status = 'pending') = (decided_at IS NULL)",
             name="ck_hub_request_decided",
         ),
         db.CheckConstraint("length(btrim(name)) > 0", name="ck_hub_request_name"),
@@ -243,6 +256,144 @@ class HubRequest(db.Model):
         db.Index("uq_hub_request_pending", db.text("lower(name)"),
                  unique=True, postgresql_where=db.text("status = 'pending'")),
         db.Index("ix_hub_requests_status", "status", "id"),
+    )
+
+
+# What a report is about. One queue and three kinds, because somebody looking
+# at "things students have told us" wants one list and not three pages -- and
+# because a bug and a message to us are the same reviewing gesture as a
+# complaint, with nothing to look up.
+REPORT_KINDS = (
+    "abuse",     # a person, and at most one thing they posted
+    "bug",       # something is broken
+    "contact",   # get in touch with us
+)
+
+# HubRequest's lifecycle, with its two outcomes named for what they mean
+# here: something was done about it, or it was looked at and nothing was.
+REPORT_STATUSES = ("new", "actioned", "dismissed")
+
+# The one piece of content a report may name. Order is kept for the reason
+# MESSAGE_PARENT_COLUMNS gives: the rendered CHECK body is what
+# `dbtool.py status` compares between databases, so reordering this makes a
+# fresh database look as though it had drifted.
+REPORT_CONTENT_COLUMNS = ("message_id", "post_id", "flag_id")
+ONE_PIECE = "num_nonnulls(" + ", ".join(REPORT_CONTENT_COLUMNS) + ")"
+
+
+class Report(db.Model):
+    """Something a student told us, and what was done about it.
+
+    HubRequest's shape -- a queue with the decision written back onto the row
+    -- with one difference that drives everything else in here: a hub request
+    is about a hub that does not exist yet, and a report is about people and
+    messages that can both be deleted while it waits.
+
+    So every link out of this table is ON DELETE SET NULL, following
+    HubRequest.club_id, and beside each link sits the text that link pointed
+    at. `about_name` and `quoted` are the report; `about_user_id` and
+    `message_id` are only shortcuts to the originals while they last. That is
+    the split Notice.body makes, and Fixture.when_text, for the same reason: a
+    record that outlives its subject has to carry its own words.
+
+    And -- the rule to keep -- no CHECK in here names a foreign key. They are
+    stated over `about_name`, `reviewed_at` and num_nonnulls of the content
+    columns instead. A CHECK that names a SET NULL column is a row the
+    database will quietly leave in a state it forbids; ck_hub_request_decided
+    did exactly that for a while, and this table was drafted twice with the
+    same mistake before it was caught.
+
+    One asymmetry, on purpose: a reported person's name is kept when they
+    leave, and a reporting person's name is scrubbed. The record of a
+    complaint about you is not yours to erase by leaving, and the record of
+    your complaint about somebody else does not need your name on it to be
+    useful.
+    """
+
+    __tablename__ = "reports"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(12), nullable=False)
+
+    # ---- who filed it ---------------------------------------------------
+    # SET NULL rather than CASCADE, and the reason is the point of the
+    # table: a common reason to delete an account is the thing you just
+    # reported. A CASCADE here would let a complaint disappear with the
+    # person who made it.
+    filed_by = db.Column(db.Integer,
+                         db.ForeignKey("user.id", ondelete="SET NULL"))
+    # Their name, so the queue still reads. Nulled deliberately by the delete
+    # route -- permanent means permanent -- so the report survives without
+    # the reporter's name surviving with it. Nothing checks it.
+    filed_by_name = db.Column(db.Text)
+
+    # ---- who it is about ------------------------------------------------
+    about_user_id = db.Column(db.Integer,
+                              db.ForeignKey("user.id", ondelete="SET NULL"))
+    # NOT nulled when they go: this is the half of the record that has to
+    # survive a reported account being deleted, which is the case this table
+    # exists for.
+    about_name = db.Column(db.Text)
+
+    # ---- the one thing they posted, if the report names one -------------
+    message_id = db.Column(db.Integer,
+                           db.ForeignKey("messages.id", ondelete="SET NULL"))
+    post_id = db.Column(db.Integer,
+                        db.ForeignKey("game_posts.id", ondelete="SET NULL"))
+    flag_id = db.Column(db.Integer,
+                        db.ForeignKey("map_flags.id", ondelete="SET NULL"))
+    # What it said and where it was, as both read when it was reported.
+    # Uncapped on purpose: the one job of this column is to still be true
+    # after the original has gone, and a truncated quote of the message that
+    # got somebody removed is the wrong thing to economise on.
+    quoted = db.Column(db.Text)
+    seen_in = db.Column(db.Text)
+
+    # ---- what the student typed -----------------------------------------
+    detail = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # ---- the review ------------------------------------------------------
+    status = db.Column(db.String(12), nullable=False, default="new",
+                       server_default="new")
+    reviewed_by = db.Column(db.Integer,
+                            db.ForeignKey("user.id", ondelete="SET NULL"))
+    reviewed_at = db.Column(db.DateTime)
+    note = db.Column(db.Text)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "kind IN (" + ", ".join(f"'{k}'" for k in REPORT_KINDS) + ")",
+            name="ck_report_kind",
+        ),
+        db.CheckConstraint(
+            "status IN (" + ", ".join(f"'{s}'" for s in REPORT_STATUSES) + ")",
+            name="ck_report_status",
+        ),
+        # The shape of a report in one rule, written the way
+        # ck_map_flag_audience writes its cases: a complaint names somebody
+        # and at most one thing they posted; the other two kinds name
+        # neither. Over `about_name`, so a reported account being deleted
+        # cannot put the row into a state the database forbids -- and
+        # `<= 1` rather than `= 1` because nulling an FK only lowers the
+        # count, which this has to survive.
+        db.CheckConstraint(
+            f"(kind = 'abuse' AND about_name IS NOT NULL AND {ONE_PIECE} <= 1)"
+            f" OR (kind <> 'abuse' AND about_name IS NULL AND {ONE_PIECE} = 0)",
+            name="ck_report_about",
+        ),
+        # A reviewed report says when; a new one does not. The reviewer's id
+        # is deliberately not in here -- see the class docstring.
+        db.CheckConstraint(
+            "(status = 'new') = (reviewed_at IS NULL)",
+            name="ck_report_reviewed",
+        ),
+        db.CheckConstraint("length(btrim(detail)) > 0", name="ck_report_detail"),
+        # The queue. ix_hub_requests_status' shape.
+        db.Index("ix_reports_queue", "status", "id"),
+        # "Has this person been reported before?" -- the first question asked
+        # about a complaint, and the only query here that is not the queue.
+        db.Index("ix_reports_about", "about_user_id"),
     )
 
 
@@ -806,6 +957,9 @@ NOTICE_KINDS = (
     "hub_request",       # a student asked for a hub; for whoever reviews them
     "hub_decision",      # the hub you asked for was created, or was not
     "fixture",           # a home game was announced to everybody on campus
+    "report_filed",      # something was reported; for whoever reviews them
+    "report_closed",     # the thing you reported has been looked at
+    "account_gone",      # somebody you were friends with has deleted theirs
 )
 
 
