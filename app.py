@@ -2,8 +2,10 @@ import hashlib
 import mimetypes
 import os
 import secrets
+import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal, InvalidOperation
 from math import isfinite
 from uuid import uuid4
@@ -56,6 +58,7 @@ from models import (
     GamePostRsvp,
     GameQueue,
     GAME_EVENTS,
+    Fixture,
     HubRequest,
     Match,
     MAP_FLAG_KINDS,
@@ -79,6 +82,21 @@ load_dotenv()
 CODE_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
+
+# Answers that put somebody straight into a hub. Somebody who says they are
+# forming a study group should not then have to go and find the hub for it.
+#
+# Keyed by the question and the answer rather than by option id: ids differ
+# from one database to the next, and this has to mean the same thing on dev
+# and on live. A dict rather than an `if`, so the second one of these is an
+# entry rather than another branch buried in the route.
+#
+# Joining happens only when the answer is newly given, and nothing here ever
+# removes anybody -- see the save block in onboarding() for why.
+JOINS_HUB = {
+    ("study_style", "I'm forming a study group with my classmates"):
+        "Accountability Groups",
+}
 # How many people to suggest in the home rail. The friends page asks for more.
 #
 # Paired with HOME_CHATS below, and the pairing is the reason for the number.
@@ -474,6 +492,47 @@ MEETUP_CHAT_GRACE = timedelta(hours=12)
 # instead. A meetup with no date still has to stop at some point, or its chat
 # would be the one thing on the site that lives for ever.
 MEETUP_CHAT_DEFAULT = timedelta(hours=36)
+
+# How many meetups the board shows. It listed every open one -- thirty-six
+# here, and an open meetup never closed itself, so the number only ever grew.
+FIND_POSTS = 10
+
+# How long a meetup stays on the board once it has started. Nobody says how
+# long they will be there, so this is a guess, and it is deliberately on the
+# generous side: dropping somebody's meetup while they are still at it is a
+# worse mistake than leaving a finished one up for an afternoon.
+MEETUP_OVER_AFTER = timedelta(hours=3)
+
+
+def still_on(now=None):
+    """A clause matching the meetups that have not been and gone.
+
+    Three cases, because a meetup carries its "when" in up to three ways and
+    older ones carry fewer:
+
+      * it named a start time  -- over MEETUP_OVER_AFTER past it;
+      * it named only a day    -- over at the end of that day in Boston;
+      * it named neither       -- over MEETUP_CHAT_DEFAULT after it was
+        posted, which is exactly the horizon its own chat already uses, so
+        the board and the conversation stop at the same moment.
+
+    A clause rather than a Python filter so the board can still ask the
+    database for ten rows instead of reading every open meetup and throwing
+    most of them away.
+    """
+    now = now or datetime.utcnow()
+    # The Boston day a meetup's date is still "today" for. Computed here
+    # rather than in SQL, which has no idea where the campus is.
+    today = utc_to_boston(now).date()
+    return db.or_(
+        db.and_(GamePost.starts_at.is_not(None),
+                GamePost.starts_at > now - MEETUP_OVER_AFTER),
+        db.and_(GamePost.starts_at.is_(None),
+                GamePost.when_on.is_not(None),
+                GamePost.when_on >= today),
+        db.and_(GamePost.starts_at.is_(None), GamePost.when_on.is_(None),
+                GamePost.created_at > now - MEETUP_CHAT_DEFAULT),
+    )
 
 
 def meetup_chat_deadline(post):
@@ -1755,7 +1814,18 @@ def live_reply(kind, target_id):
                 or crowd != group_token or deck != card_token):
             rows = []
             if watching:
+                # Resolved again, because this wait has been held for up to
+                # LIVE_WAIT seconds and the session was released between
+                # probes. In that window the conversation can go: a pairing
+                # closed or deleted, a friendship ended, somebody removed
+                # from a group. It then comes back None, and passing that to
+                # chat_rows raised AttributeError on parent.id -- a 500 on
+                # the one endpoint every open tab calls, several times a
+                # minute. The same answer the check at the top gives, which
+                # the client already knows how to handle.
                 parent, _ = chat_target(kind, target_id)
+                if parent is None:
+                    return jsonify({"error": "unavailable"}), 403
                 rows = chat_rows(kind, parent, after=after)
             return jsonify({
                 "after": max([r["id"] for r in rows], default=after),
@@ -2023,6 +2093,13 @@ def game_payload(game, seat):
 # A game in play. One at a time per pair, so "the game with them" is never
 # ambiguous and the chat pane never has to choose.
 LIVE_GAME = ("invited", "active")
+
+# How many finished games the lobby shows. It listed every one ever played --
+# 141 on one account here -- and each row costs a lookup to find the chat it
+# lives in, so the page got slower the more somebody played. Games still being
+# played are not capped: there are never many, and losing one would lose the
+# way back to the board.
+GAMES_DONE = 5
 OVER_GAME = ("finished", "declined")
 
 
@@ -2386,12 +2463,23 @@ def finish_game(game, outcome, winner_id=None, ended_by=None):
 @app.route("/games")
 @login_required
 def game_lobby():
-    mine = db.session.scalars(
+    # Two queries rather than one, so the cut happens in the database. Reading
+    # every finished game and then showing five is the same cost with a
+    # tidier page, and the per-row lookup below is what makes it hurt.
+    playing = db.or_(Game.player_a == current_user.id,
+                     Game.player_b == current_user.id)
+    live = db.session.scalars(
         db.select(Game)
-        .where(db.or_(Game.player_a == current_user.id,
-                      Game.player_b == current_user.id))
+        .where(playing, Game.status.in_(LIVE_GAME))
         .order_by(Game.updated_at.desc())
     ).all()
+    over = db.session.scalars(
+        db.select(Game)
+        .where(playing, Game.status.not_in(LIVE_GAME))
+        .order_by(Game.updated_at.desc())
+        .limit(GAMES_DONE)
+    ).all()
+    mine = live + over
 
     rows = []
     for game in mine:
@@ -2896,8 +2984,12 @@ def find_game():
         # the two people in it and has no business on a public board -- this
         # is the filter that makes "private" mean anything.
         .where(GamePost.mode == "inperson", GamePost.status == "open",
-               GamePost.audience == "campus")
+               GamePost.audience == "campus", still_on())
+        # Most recently posted first, and only a screenful: the board is for
+        # finding something to do now, not an archive of everything anybody
+        # ever suggested.
         .order_by(GamePost.created_at.desc())
+        .limit(FIND_POSTS)
     ).all()
 
     pairings = []
@@ -3192,6 +3284,11 @@ def post_new():
             location=(location if mode == "inperson" else None),
             when_text=when_label(on, hour, minute, ampm),
             when_on=on,
+            # Kept now, rather than only rendered into when_text. Without it
+            # nothing can tell a meetup that has happened from one that has
+            # not. Null when no hour was picked, which the form allows.
+            starts_at=(boston_to_utc(on, hour, minute, ampm)
+                       if on and hour and ampm else None),
             max_players=players,
             audience="chat" if here else "campus",
         )
@@ -3335,13 +3432,16 @@ def post_close(post_id):
 @app.route("/clubs")
 @login_required
 def clubs():
-    """Every club, with the ones the student's answers point at first.
+    """Every club, with the ones the student's answers point at in a band
+    above them.
 
-    Ordered rather than listed twice. A "suggested" band above the full list
-    would show the same four clubs on the same page in two places, and the
-    count this page is checked by -- one card per club -- would stop meaning
-    anything. So a suggestion is a position and a reason on the one card the
-    club already has.
+    This used to argue the opposite -- that a band would put the same clubs
+    on the page twice and make the one-card-per-club count meaningless -- and
+    both halves of that are still true. The band was asked for anyway, so the
+    clubs are drawn twice on purpose and the two suites that count cards
+    expect clubs + recommended rather than clubs. The reason and the badge
+    stay on the card either way, so a club carries its "because you picked"
+    wherever it is shown.
     """
     joined = joined_clubs(current_user.id)
     # Keyed by club, because the template asks "is this one suggested, and
@@ -3363,6 +3463,9 @@ def clubs():
         # The same clubs, bucketed into the categories in club_catalog.py
         # (each keeps the order above: suggestions first, then A to Z).
         groups=club_catalog.grouped(ordered),
+        # The band at the top. Best first, which is the order `ordered`
+        # already puts them in.
+        recommended=[c for c in ordered if c.id in picks],
         picks=picks,
         joined_ids={club.id for club in joined},
     )
@@ -3403,7 +3506,7 @@ def leave_club(club_id):
 
 # ----------------------------------------------------------- hub requests
 # The catalogue is seeded by hand, so until now the only way to get a hub was
-# to know somebody who could edit db/seed_clubs.py. These three routes are the
+# to know somebody who could edit the hub list in db_ops.py. These three routes are the
 # way in for everybody else: ask, and one person decides.
 
 HUB_NAME_MAX = 60
@@ -3430,7 +3533,7 @@ def not_admin():
     """
     if current_user.is_admin:
         return None
-    flash("That page is for whoever reviews hub requests.")
+    flash("That page is for whoever looks after the site.")
     return redirect(url_for("clubs"))
 
 
@@ -3481,12 +3584,28 @@ def hub_request():
     return redirect(url_for("clubs"))
 
 
-@app.route("/admin/hubs")
+@app.route("/admin")
 @login_required
-def admin_hubs():
+def admin():
+    """Everything one person looks after, on one page.
+
+    Hub requests and who may post were two pages, which meant two links in
+    the account menu and two places to look for "the admin bit". They are
+    two sections now.
+    """
     away = not_admin()
     if away:
         return away
+
+    term = request.args.get("q", "").strip()
+    who = db.select(User).order_by(User.name)
+    if term:
+        who = who.where(User.name.ilike(f"%{term}%")
+                        | User.email.ilike(f"%{term}%"))
+    else:
+        # Without a search, only the people who already hold something: a
+        # list of every account on campus is not a useful page.
+        who = who.where(User.is_admin | User.can_post_fixtures)
 
     rows = db.session.scalars(
         db.select(HubRequest).order_by(HubRequest.id.desc())).all()
@@ -3494,10 +3613,12 @@ def admin_hubs():
         db.select(User).where(User.id.in_(
             [r.requested_by for r in rows] or [0])))}
     return render_template(
-        "adminhubs.html",
+        "admin.html",
         pending=[r for r in rows if r.status == "pending"],
         decided=[r for r in rows if r.status != "pending"],
-        people=people,
+        asked_by=people,
+        people=db.session.scalars(who).all(),
+        term=term,
         # What a new hub may be tagged with. The question a hub is placed by
         # is the one whose answers people are shown -- so the admin is
         # choosing from the same words a student saw.
@@ -3507,7 +3628,36 @@ def admin_hubs():
             .where(Question.key == matching.SHOWN_QUESTION)
             .order_by(QuestionOption.sort_order)).all(),
         tag_max=HUB_TAGS_MAX,
+        **admin_db_context(),
     )
+
+
+def admin_db_context():
+    """The Database section's facts: where we are, and what it can run.
+
+    Host and database name only -- never the URL, never the user, never the
+    password. Nothing here opens a connection: the name comes from the URL
+    the app already holds, so a database that is down does not stop the
+    admin page rendering. Whether dev and live agree is a command you run,
+    not something computed on every page load.
+    """
+    import db_ops
+
+    try:
+        here, host = db_ops.where(False)
+        live_name, live_host = db_ops.where(True)
+    except db_ops.Refuse as exc:
+        return {"db_here": "?", "db_host": "?", "db_live": None,
+                "db_why": str(exc), "db_commands": [], "db_job": DB_JOB}
+    return {
+        "db_here": here,
+        "db_host": host,
+        "db_live": live_name,
+        "db_live_host": live_host,
+        "db_why": None,
+        "db_commands": db_commands(),
+        "db_job": DB_JOB,
+    }
 
 
 @app.route("/admin/hubs/<int:request_id>/approve", methods=["POST"])
@@ -3520,7 +3670,7 @@ def hub_approve(request_id):
     asked = db.session.get(HubRequest, request_id)
     if asked is None or asked.status != "pending":
         flash("That request has already been decided.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
 
     picked = [int(v) for v in request.form.getlist("tag") if v.isdigit()]
     # Refused rather than allowed through, because an untagged hub is not
@@ -3530,10 +3680,10 @@ def hub_approve(request_id):
     if not picked:
         flash("Pick at least one interest, or the hub will never be "
               "suggested to anyone.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
     if len(picked) > HUB_TAGS_MAX:
         flash(f"Pick at most {HUB_TAGS_MAX} interests.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
 
     # Checked against the offered set rather than trusted: these are small
     # integers in a posted form, and a tag naming another question's option
@@ -3546,7 +3696,7 @@ def hub_approve(request_id):
                QuestionOption.id.in_(picked))).all()
     if len(options) != len(set(picked)):
         flash("That is not one of the interests on offer.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
 
     club = Club(name=asked.name, description=asked.pitch)
     db.session.add(club)
@@ -3556,7 +3706,7 @@ def hub_approve(request_id):
         # Somebody seeded a hub with this name between the request and now.
         db.session.rollback()
         flash(f"{asked.name} already exists as a hub.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
 
     for option in options:
         db.session.add(ClubTag(club_id=club.id,
@@ -3571,7 +3721,7 @@ def hub_approve(request_id):
     db.session.commit()
     flash(f"{club.name} is open, tagged with "
           f"{', '.join(o.label for o in options)}.")
-    return redirect(url_for("admin_hubs"))
+    return redirect(url_for("admin"))
 
 
 @app.route("/admin/hubs/<int:request_id>/decline", methods=["POST"])
@@ -3584,7 +3734,7 @@ def hub_decline(request_id):
     asked = db.session.get(HubRequest, request_id)
     if asked is None or asked.status != "pending":
         flash("That request has already been decided.")
-        return redirect(url_for("admin_hubs"))
+        return redirect(url_for("admin"))
 
     asked.status = "declined"
     asked.decided_by = current_user.id
@@ -3593,7 +3743,579 @@ def hub_decline(request_id):
     notices.hub_decided(asked.requested_by, asked.name, False, asked.note)
     db.session.commit()
     flash(f"{asked.name} was turned down.")
-    return redirect(url_for("admin_hubs"))
+    return redirect(url_for("admin"))
+
+
+# ------------------------------------------------- campus-wide meetups
+# Something the university is putting on here, posted by somebody trusted.
+# Everybody is told, the campus room carries it, and a pin sits on the map
+# until the end of its day.
+#
+# Called a fixture in the code and a campus-wide meetup in the interface. Not
+# a "game", because this file already has Game, GamePost, GamePairing,
+# GameQueue, GameSeek and a "game" map category; not a "meetup" either,
+# because GamePost is what the interface has always called one of those.
+
+FIXTURE_TITLE_MAX = 80
+FIXTURE_SPORT_MAX = 60
+FIXTURE_OPPONENT_MAX = 80
+FIXTURE_VENUE_MAX = 120
+FIXTURE_NOTE_MAX = 300
+
+# Where the university is. Every stored datetime in this app is naive UTC, so
+# a kick-off typed as "7:00 PM" has to be converted from here -- and it is a
+# real zone rather than a fixed offset because Boston is UTC-5 for half the
+# year and UTC-4 for the other half. An hour out on a 7pm fixture is the
+# difference between arriving and missing it.
+#
+# zoneinfo reads the operating system's database, and Windows has none: there
+# the `tzdata` package supplies it, which is why it is in requirements.txt.
+# The fallback below exists because this is resolved at import -- without it,
+# a server missing that package would not start at all, and a whole site
+# being down is a much worse failure than an hour's drift on one page.
+class _Eastern(tzinfo):
+    """US Eastern, by the rule in force since 2007.
+
+    Only a fallback. The rule is law rather than physics -- Congress has
+    debated ending the change more than once -- so the packaged database is
+    what should normally answer this, and does wherever it is installed.
+    """
+
+    @staticmethod
+    def _second_sunday(year, month):
+        first = datetime(year, month, 1)
+        return 1 + (6 - first.weekday()) % 7
+
+    def _summer(self, when):
+        # Second Sunday in March to the first Sunday in November, 2am local.
+        starts = datetime(when.year, 3, self._second_sunday(when.year, 3) + 7, 2)
+        ends = datetime(when.year, 11, self._second_sunday(when.year, 11), 2)
+        return starts <= when.replace(tzinfo=None) < ends
+
+    def utcoffset(self, when):
+        return timedelta(hours=-4 if when and self._summer(when) else -5)
+
+    def dst(self, when):
+        return timedelta(hours=1 if when and self._summer(when) else 0)
+
+    def tzname(self, when):
+        return "EDT" if when and self._summer(when) else "EST"
+
+
+try:
+    CAMPUS_TZ = ZoneInfo("America/New_York")
+except ZoneInfoNotFoundError:          # pragma: no cover - depends on the host
+    CAMPUS_TZ = _Eastern()
+
+
+def boston_to_utc(on, hour, minute, ampm):
+    """A date and a 12-hour clock time in Boston, as a naive UTC datetime."""
+    hour = int(hour) % 12
+    if ampm == "PM":
+        hour += 12
+    local = datetime(on.year, on.month, on.day, hour, int(minute),
+                     tzinfo=CAMPUS_TZ)
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def utc_to_boston(moment):
+    """A naive UTC datetime, back in Boston time. For reading one out."""
+    return moment.replace(tzinfo=timezone.utc).astimezone(CAMPUS_TZ)
+
+
+def fixture_flag_deadline(starts_at):
+    """When a fixture's pin comes down: the end of its day in Boston."""
+    local = utc_to_boston(starts_at)
+    midnight = datetime(local.year, local.month, local.day,
+                        23, 59, 59, tzinfo=CAMPUS_TZ) + timedelta(seconds=1)
+    return midnight.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def not_poster():
+    """The redirect to send somebody without the privilege away with, or None.
+
+    not_admin()'s shape exactly: a flash naming who may do this and a
+    redirect, never an abort, because no page in this app aborts. Admin is
+    deliberately not enough on its own -- the two privileges are separate so
+    one can be handed out without the other.
+    """
+    if current_user.can_post_fixtures:
+        return None
+    flash("Posting campus-wide meetups is for whoever looks after them.")
+    return redirect(url_for("fixtures"))
+
+
+def make_fixture_flag(fixture):
+    """Drop the map pin for a fixture, inside the caller's transaction.
+
+    make_event_flag's shape, with three differences: the point comes from
+    whoever posted it rather than from a landmark lookup, it is public from
+    the start because the whole campus is being told anyway, and it carries
+    fixture_id -- which is what keeps it out of the poster's own flag count.
+    """
+    now = datetime.utcnow()
+    expires = fixture_flag_deadline(fixture.starts_at)
+    if expires <= now:
+        return None
+    flag = MapFlag(
+        public_id=str(uuid4()),
+        owner_id=fixture.posted_by,
+        title=fixture.title[:100],
+        description=(f"{fixture.billing()} {fixture.when_text}. "
+                     f"{fixture.note or ''}").strip()[:300],
+        category="home",
+        visibility="public",
+        fixture_id=fixture.id,
+        location_key="custom",
+        location_name=fixture.venue[:120],
+        latitude=fixture.latitude,
+        longitude=fixture.longitude,
+        created_at=now,
+        expires_at=expires,
+    )
+    db.session.add(flag)
+    return flag
+
+
+@app.route("/fixtures")
+@login_required
+def fixtures():
+    """What is coming up, and what has just been. Everybody may read this."""
+    now = datetime.utcnow()
+    rows = db.session.scalars(
+        db.select(Fixture)
+        .where(Fixture.starts_at > now - timedelta(days=1))
+        .order_by(Fixture.starts_at)
+    ).all()
+    flags = {
+        fixture_id: public_id
+        for fixture_id, public_id in db.session.execute(
+            db.select(MapFlag.fixture_id, MapFlag.public_id)
+            .where(MapFlag.fixture_id.in_([f.id for f in rows] or [0]),
+                   MapFlag.expires_at > now))
+    }
+    return render_template(
+        "fixtures.html",
+        fixtures=[f for f in rows if f.status == "scheduled"],
+        called_off=[f for f in rows if f.status != "scheduled"],
+        flags=flags,
+        can_post=current_user.can_post_fixtures,
+    )
+
+
+@app.route("/fixtures/new", methods=["GET", "POST"])
+@login_required
+def fixture_new():
+    away = not_poster()
+    if away:
+        return away
+
+    if request.method == "GET":
+        return render_template("fixture_new.html", bounds=MAP_FLAG_BOUNDS,
+                               title_max=FIXTURE_TITLE_MAX,
+                               places=APPROVED_MAP_LOCATIONS,
+                               hours=WHEN_HOURS, minutes=WHEN_MINUTES,
+                               meridiem=WHEN_MERIDIEM)
+
+    title = request.form.get("title", "").strip()
+    sport = request.form.get("sport", "").strip()
+    opponent = request.form.get("opponent", "").strip()
+    venue = request.form.get("venue", "").strip()
+    note = request.form.get("note", "").strip()
+    on_text = request.form.get("when_on", "").strip()
+    hour = request.form.get("when_hour", "").strip()
+    minute = request.form.get("when_minute", "").strip() or WHEN_MINUTES[0]
+    ampm = request.form.get("when_ampm", "").strip()
+
+    on = None
+    if on_text:
+        try:
+            on = datetime.strptime(on_text, "%Y-%m-%d").date()
+        except ValueError:
+            on = None
+
+    # Read before the checks, so a refused post can hand the point back to
+    # the form rather than making somebody place the pin twice.
+    try:
+        latitude = float(request.form.get("latitude", ""))
+        longitude = float(request.form.get("longitude", ""))
+    except (TypeError, ValueError):
+        latitude = longitude = None
+
+    if not title:
+        flash("Give it a title, so people know what it is.")
+    elif len(title) > FIXTURE_TITLE_MAX:
+        flash(f"Keep the title under {FIXTURE_TITLE_MAX} characters.")
+    elif len(sport) > FIXTURE_SPORT_MAX:
+        flash(f"Keep the sport under {FIXTURE_SPORT_MAX} characters.")
+    elif len(opponent) > FIXTURE_OPPONENT_MAX:
+        flash(f"Keep the opponent under {FIXTURE_OPPONENT_MAX} characters.")
+    elif on is None:
+        flash("Pick the date of the game.")
+    elif hour not in WHEN_HOURS or ampm not in WHEN_MERIDIEM \
+            or minute not in WHEN_MINUTES:
+        flash("Pick what time it starts.")
+    elif not venue:
+        flash("Name the venue.")
+    elif len(venue) > FIXTURE_VENUE_MAX:
+        flash(f"Keep the venue under {FIXTURE_VENUE_MAX} characters.")
+    elif len(note) > FIXTURE_NOTE_MAX:
+        flash(f"Keep the note under {FIXTURE_NOTE_MAX} characters.")
+    elif latitude is None or longitude is None:
+        flash("Put the pin on the map so people can find it.")
+    # The same rule a student's flag obeys, checked with the same function.
+    elif not map_flag_point_is_allowed(latitude, longitude):
+        flash("Put the pin inside the campus boundary.")
+    else:
+        starts_at = boston_to_utc(on, hour, minute, ampm)
+        fixture = Fixture(
+            title=title, sport=sport or None, opponent=opponent or None,
+            starts_at=starts_at,
+            when_text=when_label(on, hour, minute, ampm) or "",
+            venue=venue, latitude=latitude, longitude=longitude,
+            note=note or None, posted_by=current_user.id,
+        )
+        db.session.add(fixture)
+        db.session.flush()
+        flag = make_fixture_flag(fixture)
+
+        # The campus room carries it, with the flag's own link in the
+        # sentence: chat.html already unfurls a /find?flag=... link into a
+        # card, so this needs no markup of its own and cannot drift from what
+        # the map says.
+        said = " ".join(p for p in (f"{fixture.title}:", fixture.billing(),
+                                    f"{fixture.when_text}.") if p)
+        if flag is not None:
+            said += " " + url_for("find_game", flag=flag.public_id,
+                                  _external=False)
+        announcement = Message(user_id=current_user.id, body=said)
+        attach_parent(announcement, COMMUNITY, None)
+        db.session.add(announcement)
+
+        told = notices.fixture_posted(fixture.title, fixture.billing(),
+                                      fixture.when_text)
+        db.session.commit()
+        flash(f"Posted. {told} student{'' if told == 1 else 's'} told.")
+        return redirect(url_for("fixtures"))
+
+    return redirect(url_for("fixture_new"))
+
+
+@app.route("/fixtures/<int:fixture_id>/cancel", methods=["POST"])
+@login_required
+def fixture_cancel(fixture_id):
+    away = not_poster()
+    if away:
+        return away
+
+    fixture = db.session.get(Fixture, fixture_id)
+    if fixture is None or fixture.status != "scheduled":
+        flash("That game is not on the list.")
+        return redirect(url_for("fixtures"))
+
+    fixture.status = "cancelled"
+    # Its pin comes down with it, the way post_close takes a meetup's.
+    db.session.execute(db.delete(MapFlag).where(MapFlag.fixture_id == fixture.id))
+    db.session.commit()
+    flash(f"{fixture.title} called off.")
+    return redirect(url_for("fixtures"))
+
+
+# ----------------------------------------------------------- who may do what
+
+# The two addresses these pages used to live at. Kept, because a notice
+# stores its url as a finished string: every "waiting for review" already in
+# somebody's bell points at /admin/hubs, and dropping it would turn those
+# into dead ends years before they are read.
+@app.route("/admin/hubs")
+@app.route("/admin/people")
+@login_required
+def admin_moved():
+    # Only when there is one: url_for with an empty q appends "?q=", which
+    # makes a bookmarked address look like it carries a search it does not.
+    term = request.args.get("q", "").strip()
+    return redirect(url_for("admin", q=term) if term else url_for("admin"))
+
+
+@app.route("/admin/people/<int:user_id>/admin", methods=["POST"])
+@login_required
+def admin_set_admin(user_id):
+    """Make somebody an admin, or stop them being one.
+
+    `python dbtool.py admin --email a@umb.edu --apply` is still the way to
+    appoint the first one on a fresh database -- there has to be a way in
+    before anybody can reach this page.
+    """
+    away = not_admin()
+    if away:
+        return away
+
+    person = db.session.get(User, user_id)
+    if person is None:
+        flash("That account no longer exists.")
+        return redirect(url_for("admin"))
+
+    grant = request.form.get("grant") == "yes"
+    # The rail. A script that leaves a database with no admin can be run
+    # again; a page that does it has shut the only door back in. Counted
+    # rather than assumed, because "surely there is another one" is exactly
+    # the thought that ends with nobody being able to review anything.
+    if not grant and person.is_admin:
+        others = db.session.scalar(
+            db.select(db.func.count()).select_from(User)
+            .where(User.is_admin, User.id != person.id))
+        if not others:
+            flash("That is the only admin. Make somebody else one first, "
+                  "or run `python dbtool.py admin --email ... --apply`.")
+            return redirect(url_for("admin", q=request.args.get("q", "")))
+
+    person.is_admin = grant
+    db.session.commit()
+    flash(f"{person.name} "
+          f"{'is now an admin' if grant else 'is no longer an admin'}.")
+    return redirect(url_for("admin", q=request.args.get("q", "")))
+
+
+@app.route("/admin/people/<int:user_id>/fixtures", methods=["POST"])
+@login_required
+def admin_set_poster(user_id):
+    away = not_admin()
+    if away:
+        return away
+
+    person = db.session.get(User, user_id)
+    if person is None:
+        flash("That account no longer exists.")
+        return redirect(url_for("admin"))
+
+    person.can_post_fixtures = request.form.get("grant") == "yes"
+    db.session.commit()
+    flash(f"{person.name} "
+          f"{'can now post' if person.can_post_fixtures else 'can no longer post'}"
+          " home games.")
+    return redirect(url_for("admin", q=request.args.get("q", "")))
+
+
+# ------------------------------------------------------------ the database
+# The same functions dbtool.py runs, from the admin page, so the terminal is
+# optional. db_ops is imported lazily: it reads .env and opens psycopg2
+# connections of its own, and nothing else in the app needs it.
+#
+# Two commands cannot run from here against the database the app is using,
+# and no amount of confirmation changes that. `wipe` and `clone` both take a
+# backup with CREATE DATABASE ... TEMPLATE, which Postgres refuses while
+# anything is connected to the source -- and this request IS a connection. A
+# handler cannot close the pool it is running inside. For those two, against
+# the current database, the panel shows the command to paste and says why.
+
+# One job at a time, in a thread, polled by the page. The live channel has
+# the same shape. A second job is refused rather than queued: these are
+# database-wide operations and two at once is never what was meant.
+DB_JOB = {"running": False, "command": "", "output": "", "summary": "",
+          "ok": None, "started": None, "who": ""}
+DB_JOB_LOCK = threading.Lock()
+
+
+def db_commands():
+    """What the panel offers, and what each one needs before it runs.
+
+    `writes` means it needs the typed confirmation; a read-only command runs
+    on one click. `local_only` marks the two that cannot act on the database
+    this process is connected to.
+    """
+    return [
+        {"id": "status", "label": "Compare dev and live",
+         "note": "Structure only, read-only in both directions.",
+         "writes": False, "live": False, "local_only": False},
+        {"id": "migrate-list", "label": "List migrations",
+         "note": "Every migration, applied or pending.",
+         "writes": False, "live": True, "local_only": False},
+        {"id": "migrate-all", "label": "Run every pending migration",
+         "note": "In order, each in its own transaction.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "admin-list", "label": "List admins",
+         "note": "Who reviews hub requests.",
+         "writes": False, "live": True, "local_only": False},
+        {"id": "seed-questions", "label": "Seed the questionnaire",
+         "note": "Adds or updates; removes nothing.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "seed-clubs", "label": "Seed the hubs",
+         "note": "Adds or updates; removes nothing.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "seed-activities", "label": "Seed the activities",
+         "note": "Adds or updates; removes nothing.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "seed-demo", "label": "Seed the demo students",
+         "note": "32 accounts that cluster, for the matcher. Slow: it "
+                 "hashes a password each.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "clear-demo", "label": "Remove the demo students",
+         "note": "Deletes them and everything they made.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "clear-dead-invites", "label": "Clear unanswerable invites",
+         "note": "Game invites with no message and no notice.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "reset-catalogue", "label": "Replace questions and hubs",
+         "note": "Clears every answer, so everybody is asked again.",
+         "writes": True, "live": True, "local_only": False},
+        {"id": "delete-account", "label": "Delete one account",
+         "note": "By email. Takes everything attached with it.",
+         "writes": True, "live": True, "local_only": False,
+         "needs": "email"},
+        {"id": "wipe", "label": "Clear it for real students",
+         "note": "Keeps the catalogue and whichever accounts you name. "
+                 "Backs up first.",
+         "writes": True, "live": True, "local_only": True},
+        {"id": "clone", "label": "Refresh the dev copy of live",
+         "note": "CREATE DATABASE ... TEMPLATE. Replaces dev entirely.",
+         "writes": True, "live": False, "local_only": True},
+    ]
+
+
+def run_db_command(command, live, apply_, email=None):
+    """Call into db_ops. Returns a Result. Runs on the job thread."""
+    import db_ops
+
+    if command == "status":
+        return db_ops.status(echo=False)
+    if command == "migrate-list":
+        rows, text = db_ops.migration_status(live, echo=False)
+        waiting = [n for n, _, done in rows if not done]
+        return db_ops.Result(True, 0, False,
+                             f"{len(waiting)} pending" if waiting
+                             else "all applied", text)
+    if command == "migrate-all":
+        return db_ops.run_pending(live, apply_, echo=False)
+    if command == "admin-list":
+        return db_ops.admin_list(live, echo=False)
+    if command in ("seed-questions", "seed-clubs", "seed-activities"):
+        what = command.split("-", 1)[1]
+        summary, work = db_ops.SEEDERS[what]
+        return db_ops.run_op(f"seed {what}: {summary}", work, live, apply_,
+                             echo=False)
+    if command == "seed-demo":
+        return db_ops.run_op("seed demo", db_ops.seed_demo_work, live,
+                             apply_, echo=False)
+    if command == "clear-demo":
+        return db_ops.run_op("clear demo", db_ops.clear_demo_work, live,
+                             apply_, echo=False)
+    if command == "clear-dead-invites":
+        return db_ops.run_op("clear dead invites",
+                             db_ops.clear_dead_invites_work, live, apply_,
+                             echo=False)
+    if command == "reset-catalogue":
+        return db_ops.run_op("reset catalogue", db_ops.reset_catalogue_work,
+                             live, apply_, echo=False)
+    if command == "delete-account":
+        return db_ops.run_op("delete account", db_ops.delete_account_work,
+                             live, apply_, echo=False, email=email)
+    if command == "wipe":
+        return db_ops.wipe(live=live, apply_=apply_, echo=False)
+    if command == "clone":
+        return db_ops.clone(apply_=apply_, echo=False)
+    raise ValueError(f"no such command {command!r}")
+
+
+def db_job_thread(command, live, apply_, email):
+    """The worker. Writes its result into DB_JOB and clears `running`."""
+    import db_ops
+
+    try:
+        result = run_db_command(command, live, apply_, email)
+        output, summary, ok = result.output, result.summary, result.ok
+    except db_ops.Refuse as exc:
+        output, summary, ok = f"  REFUSED: {exc}", str(exc), False
+    except Exception as exc:                        # noqa: BLE001
+        # Never leave the panel stuck on "running" because something threw.
+        app.logger.exception("database command %r failed", command)
+        output, summary, ok = f"  FAILED: {exc}", str(exc), False
+    with DB_JOB_LOCK:
+        DB_JOB.update(running=False, output=output, summary=summary, ok=ok)
+
+
+@app.route("/admin/db/run", methods=["POST"])
+@login_required
+def admin_db_run():
+    """Start one database command, after the confirmation is typed right."""
+    away = not_admin()
+    if away:
+        return away
+    import db_ops
+
+    command = request.form.get("command", "")
+    known = {c["id"]: c for c in db_commands()}
+    spec = known.get(command)
+    if spec is None:
+        return jsonify({"error": "no such command"}), 400
+
+    live = spec["live"] and request.form.get("live") == "yes"
+    apply_ = request.form.get("apply") == "yes"
+    typed = request.form.get("confirm", "").strip()
+    email = request.form.get("email", "").strip() or None
+
+    # The typed confirmation guards anything that would write. A dry run
+    # changes nothing, so it does not need one -- which is what makes "look
+    # first, then apply" the easy path rather than a discipline.
+    if apply_ and spec["writes"]:
+        name, _ = db_ops.where(live)
+        if typed != name:
+            return jsonify({
+                "error": f"type {name} exactly to confirm",
+            }), 400
+        if live and request.form.get("live_sure") != "yes":
+            return jsonify({"error": "tick the live box as well"}), 400
+
+    # The two that cannot act on the database this process is holding open.
+    if spec["local_only"] and apply_:
+        target, _ = db_ops.where(live)
+        here, _ = db_ops.where(False)
+        if command == "clone" or target == here:
+            flags = []
+            if command == "wipe" and live:
+                flags.append("--live")
+            flags.append("--apply")
+            return jsonify({
+                "blocked": True,
+                "command": f"python dbtool.py {command} "
+                           + " ".join(flags),
+                "why": "This takes a backup with CREATE DATABASE ... "
+                       "TEMPLATE, which Postgres refuses while anything is "
+                       "connected to the source. This page is itself a "
+                       "connection, so it cannot be run from here. Paste "
+                       "the command above into a terminal with the app "
+                       "stopped.",
+            }), 409
+
+    with DB_JOB_LOCK:
+        if DB_JOB["running"]:
+            return jsonify({"error": f"{DB_JOB['command']} is still "
+                                     "running"}), 409
+        DB_JOB.update(running=True, command=command, output="", summary="",
+                      ok=None, started=datetime.utcnow(),
+                      who=current_user.email)
+
+    worker = threading.Thread(
+        target=db_job_thread, args=(command, live, apply_, email),
+        name=f"db-{command}", daemon=True)
+    worker.start()
+    return jsonify({"started": command, "apply": apply_, "live": live})
+
+
+@app.route("/admin/db/output")
+@login_required
+def admin_db_output():
+    """What the running (or last) command has said. Polled by the page."""
+    away = not_admin()
+    if away:
+        return away
+    with DB_JOB_LOCK:
+        return jsonify({
+            "running": DB_JOB["running"],
+            "command": DB_JOB["command"],
+            "output": DB_JOB["output"],
+            "summary": DB_JOB["summary"],
+            "ok": DB_JOB["ok"],
+        })
 
 
 # ---------------------------------------------------------------- group chats
@@ -4296,6 +5018,14 @@ def onboarding():
             # September is not being welcomed, and sending them to a page
             # that says so would be odd. They go where they always went.
             first_time = not has_onboarded(current_user.id)
+            # What they had before this submit, for the same reason as above:
+            # the delete on the next line throws it away, so "newly picked"
+            # is only answerable from here. Without it, a hub somebody left
+            # by hand would be rejoined every time they touched their
+            # answers, quietly undoing a decision they had already made.
+            had = set(db.session.scalars(
+                db.select(UserAnswer.option_id)
+                .filter_by(user_id=current_user.id)))
             db.session.execute(db.delete(UserAnswer).filter_by(user_id=current_user.id))
             for question in questions:
                 for option_id in picks[question.id]:
@@ -4312,7 +5042,44 @@ def onboarding():
             choice = request.form.get("pronouns")
             if choice in PRONOUNS:
                 current_user.pronouns = choice
+
+            # An answer can put somebody into a hub. Only when it is newly
+            # given, and nothing here ever takes anybody out: dropping the
+            # answer must not pull somebody out of a conversation they are in
+            # the middle of, and leaving a hub by hand has to stick.
+            # (question key, answer) -> option id, walked in Python rather
+            # than queried: `stray` above already reads every question's
+            # options, so they are in the session and this costs nothing.
+            ids = {(q.key, o.label): o.id for q in questions for o in q.options}
+            joined = []
+            for (key, label), hub in JOINS_HUB.items():
+                option_id = ids.get((key, label))
+                if (option_id is None or option_id in had
+                        or option_id not in selected):
+                    continue
+                club = db.session.scalar(
+                    db.select(Club).filter_by(name=hub))
+                # A hub that has been renamed or removed is a quiet no-op.
+                # This runs on the one page nobody can skip, so a missing row
+                # here must not be the thing that stops somebody signing up.
+                if club is None:
+                    app.logger.warning("JOINS_HUB names %r, which is not a hub", hub)
+                    continue
+                # Already in it, by hand or from an earlier answer. The
+                # primary key is (user_id, club_id), so adding a second row
+                # would raise rather than be ignored.
+                if db.session.get(ClubMember, (current_user.id, club.id)):
+                    continue
+                db.session.add(ClubMember(user_id=current_user.id,
+                                          club_id=club.id))
+                joined.append(club.name)
+
             db.session.commit()
+            # Said out loud. Being put into a conversation nobody asked to
+            # join is a surprise worth one sentence.
+            if joined:
+                flash(f"You have been added to {', '.join(joined)}, "
+                      "because of what you said about studying.")
             return redirect(url_for("welcome" if first_time else "index"))
 
     return render_template(
@@ -4359,7 +5126,7 @@ MAP_FLAG_CATEGORIES = {
     "social": "Social",
     "club": "Club",
     "event": "Event",
-    "ufind": "U-Find",   # selling something on campus
+    "home": "Home game",
 }
 assert tuple(MAP_FLAG_CATEGORIES) == MAP_FLAG_KINDS
 
@@ -4372,8 +5139,6 @@ HAND_FLAG_AUDIENCES = ("public", "friends", "club")
 EVENT_FLAG_AUDIENCES = ("going", "public")
 # The friend picker's ceiling, so a request cannot list the whole school.
 MAP_FLAG_FRIENDS_MAX = 50
-# U-Find asking prices, in dollars.
-MAP_FLAG_PRICE_MAX = Decimal("99999.99")
 
 # An event flag stays up until the end of its meetup's day in Boston. Times
 # here are naive UTC like the rest of the app; Boston's midnight is 04:00 or
@@ -4448,13 +5213,6 @@ def map_flag_point_is_allowed(latitude, longitude):
         and MAP_FLAG_BOUNDS["south"] <= latitude <= MAP_FLAG_BOUNDS["north"]
         and MAP_FLAG_BOUNDS["west"] <= longitude <= MAP_FLAG_BOUNDS["east"]
     )
-
-
-def price_text(price):
-    """A U-Find price as people write it: "40", "12.50"; None when free."""
-    if price is None:
-        return None
-    return str(int(price)) if price == price.to_integral_value() else f"{price:.2f}"
 
 
 # ---------- event flags: one per in-person meetup ----------
@@ -4574,7 +5332,6 @@ def map_flag_payloads(rows):
             "description": flag.description or "",
             "category": flag.category,
             "category_label": MAP_FLAG_CATEGORIES[flag.category],
-            "price": price_text(flag.price),
             "visibility": flag.visibility,
             "club_name": club_name,
             "club_id": flag.club_id if is_mine else None,
@@ -4647,26 +5404,7 @@ def read_flag_fields(data, flag=None):
         category = str(data.get("category") or "")
         if category not in MAP_FLAG_CATEGORIES:
             raise FlagError("Choose a valid flag category.")
-        if event and category == "ufind":
-            raise FlagError("A meetup's flag can't be a U-Find listing.")
         changes["category"] = category
-
-    # A price belongs to U-Find flags only, and goes when the kind changes.
-    kind = changes.get("category", flag.category if flag else None)
-    if kind == "ufind" and sent("price"):
-        raw = str(data.get("price") or "").strip().lstrip("$").replace(",", "")
-        if raw:
-            try:
-                price = Decimal(raw)
-            except InvalidOperation:
-                raise FlagError("Enter a price like 15 or 12.50, or leave it empty if it's free.")
-            if not price.is_finite() or price < 0 or price > MAP_FLAG_PRICE_MAX:
-                raise FlagError("Enter a price between $0 and $99,999.")
-            changes["price"] = price.quantize(Decimal("0.01"))
-        else:
-            changes["price"] = None
-    elif kind != "ufind" and "category" in changes:
-        changes["price"] = None
 
     if sent("location_name"):
         location_name = str(data.get("location_name") or "").strip()
@@ -4735,7 +5473,7 @@ def read_flag_fields(data, flag=None):
 def apply_flag_changes(flag, changes, now):
     """Write checked changes onto a flag. The flag must already have an id
     when its friends list changes (flush a new one first)."""
-    for key in ("title", "description", "category", "price", "location_name",
+    for key in ("title", "description", "category", "location_name",
                 "latitude", "longitude"):
         if key in changes:
             setattr(flag, key, changes[key])
@@ -4801,7 +5539,7 @@ def map_flags_list():
         db.select(db.func.count())
         .select_from(MapFlag)
         .where(MapFlag.owner_id == me, MapFlag.expires_at > now,
-               MapFlag.post_id.is_(None))
+               MapFlag.post_id.is_(None), MapFlag.fixture_id.is_(None))
     )
     clubs = db.session.execute(
         db.select(Club.id, Club.name)
@@ -4858,7 +5596,7 @@ def map_flag_create():
         db.select(db.func.count())
         .select_from(MapFlag)
         .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now,
-               MapFlag.post_id.is_(None))
+               MapFlag.post_id.is_(None), MapFlag.fixture_id.is_(None))
     )
     if active_count >= MAP_FLAG_LIMIT:
         db.session.rollback()
@@ -4960,7 +5698,7 @@ def purge_expired_flags_command():
 # The CHECK constraints this version widened. On an older table each is
 # replaced with the model's own text, so the two cannot disagree.
 MAP_FLAG_WIDENED_CHECKS = ("ck_map_flag_category", "ck_map_flag_visibility",
-                           "ck_map_flag_audience", "ck_map_flag_price")
+                           "ck_map_flag_audience")
 # Any number, as long as nothing else in the app uses it: serialises the
 # upgrade when several workers start at once.
 MAP_SCHEMA_LOCK = 4207311
@@ -4973,15 +5711,15 @@ def map_flags_need_upgrade(inspector):
     if not inspector.has_table("map_flags"):
         return False
     columns = {c["name"] for c in inspector.get_columns("map_flags")}
-    return (not {"price", "post_id", "updated_at"} <= columns
+    return (not {"post_id", "updated_at"} <= columns
             or not inspector.has_table("map_flag_viewers"))
 
 
 def upgrade_map_flags_schema(force=False):
     """Bring an older map_flags table up to this version. Safe to repeat.
 
-    Adds the price, post_id and updated_at columns, widens the CHECK
-    constraints (U-Find; friends and going audiences), adds the one-flag-per-
+    Adds the post_id and updated_at columns, widens the CHECK
+    constraints (friends and going audiences), adds the one-flag-per-
     meetup rule and the map_flag_viewers table, then drops a flag for every
     open in-person meetup that is still to come. Leaves every existing row as
     it was. Returns a short report, or None when nothing needed doing.
@@ -4998,8 +5736,6 @@ def upgrade_map_flags_schema(force=False):
 
         columns = {c["name"] for c in inspector.get_columns("map_flags")}
         added_post_link = "post_id" not in columns
-        if "price" not in columns:
-            conn.execute(text("ALTER TABLE map_flags ADD COLUMN price NUMERIC(7, 2)"))
         if added_post_link:
             conn.execute(text(
                 "ALTER TABLE map_flags ADD COLUMN post_id INTEGER "
@@ -5054,7 +5790,7 @@ def map_schema_ready():
 
 @app.cli.command("upgrade-map-flags")
 def upgrade_map_flags_command():
-    """Bring map_flags up to date (event flags, U-Find, friends). Safe to repeat."""
+    """Bring map_flags up to date (event flags, friends). Safe to repeat."""
     report = upgrade_map_flags_schema(force=True)
     print(report or "Nothing to upgrade: map_flags is missing (run the app once) "
                     "or already up to date.")

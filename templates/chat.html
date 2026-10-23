@@ -199,7 +199,6 @@
       }
       .cardpane .tags .chip { margin-top: 0; }
       .cardpane .chip.light { background: #fff; color: var(--navy); border: 2px solid var(--navy); padding: 1px 6px; }
-      .cardpane .chip.price { background: var(--gold); color: var(--navy); }
 
       .post { --bar: var(--navy); --bar-ink: #fff; }
 
@@ -1049,7 +1048,6 @@
     var log = document.getElementById("log");
     if (!log) { return; }
     var FLAGS_URL = {{ url_for("map_flags_list") | tojson }};
-    var UFIND = {{ url_for("static", filename="ufind.svg") | tojson }};
     var FLAG_LINK = /\S*\/find\?flag=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\S*/i;
     // The map's colours and icons, so a flag looks the same here as there.
     var KINDS = {
@@ -1058,7 +1056,7 @@
       social: { bar: "#78afe9", ink: "#132245", icon: "talk" },
       club:   { bar: "#fede42", ink: "#132245", icon: "club" },
       event:  { bar: "#132245", ink: "#ffffff", icon: "star" },
-      ufind:  { bar: "#0b3159", ink: "#ffffff", icon: null }
+      home:   { bar: "#fede42", ink: "#132245", icon: "stadium" }
     };
 
     function el(tag, cls, text) {
@@ -1143,12 +1141,8 @@
       card.style.setProperty("--bar", look.bar);
       card.style.setProperty("--bar-ink", look.ink);
       var bar = el("div", "cardbar");
-      if (flag.category === "ufind") {
-        var img = el("img"); img.src = UFIND; img.alt = "U-Find"; bar.appendChild(img);
-      } else {
-        bar.appendChild(icon(look.icon));
-        bar.appendChild(el("span", "", flag.category_label || "Flag"));
-      }
+      bar.appendChild(icon(look.icon));
+      bar.appendChild(el("span", "", flag.category_label || "Flag"));
       card.appendChild(bar);
       var pane = el("div", "cardpane");
       pane.appendChild(el("b", "", flag.title));
@@ -1156,7 +1150,6 @@
       pane.appendChild(el("span", "meta", whoLine(flag)));
       if (flag.description) { pane.appendChild(el("span", "note", flag.description)); }
       var tags = el("span", "tags");
-      if (flag.category === "ufind") { tags.appendChild(el("span", "chip price", flag.price ? "$" + flag.price : "Free")); }
       if (flag.event) {
         if (flag.event.when) { tags.appendChild(el("span", "chip", flag.event.when)); }
         tags.appendChild(el("span", "chip", flag.event.going + " of " + flag.event.max + " going"));

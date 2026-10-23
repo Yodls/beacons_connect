@@ -1,0 +1,99 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}What's happening around campus{% endblock %}
+
+{#
+  Campus-wide meetups, soonest first.
+
+  Everybody may read this page; only somebody with the privilege sees the
+  two buttons. Each one links to its pin, which is the same deep link the
+  campus room's announcement carries and the same one /find answers.
+
+  A title is the headline; the sport and the opponent are optional, so they
+  are folded into the line under it by Fixture.billing() rather than being
+  pasted together here -- which is how "Men's Basketball vs None" gets onto
+  a page.
+
+  No .card class here. It is counted against the number of clubs on /clubs
+  by two suites, and keeping the habit is cheaper than the surprise.
+#}
+
+{% block appstyle %}
+      .fix { margin-top: 18px; }
+      .fix-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .fix-top h3 { margin: 0; font-size: 1.1rem; }
+      .fix .when {
+        padding: 3px 8px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .86rem; font-weight: 700;
+      }
+      .fix .where { color: var(--muted); font-size: .9rem; }
+      .fix .note { display: block; margin-top: 6px; color: var(--navy); }
+      .fix .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .off { color: var(--muted); }
+      .off b { color: var(--navy); text-decoration: line-through; }
+{% endblock %}
+
+{% block main %}
+  <div class="pagehead">
+    <h1>What's happening around campus</h1>
+    <p class="lede">
+      What the university is putting on, and where to find it.
+      <span class="counter">{{ fixtures | length }} coming up</span>
+    </p>
+  </div>
+
+  {% if can_post %}
+    <p class="nav"><a href="{{ url_for('fixture_new') }}">Post a campus-wide meetup &rarr;</a></p>
+  {% endif %}
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("meet") }}<span class="bar-title">Coming up</span><span class="grip"></span></div>
+    <div class="grid">
+      {% for fixture in fixtures %}
+        <div class="fix">
+          <div class="fix-top">
+            <h3>{{ fixture.title }}</h3>
+            <span class="when">{{ fixture.when_text }}</span>
+          </div>
+          <span class="where">
+            {%- if fixture.billing() %}{{ fixture.billing() }} {% endif -%}
+            {{ fixture.venue }}</span>
+          {% if fixture.note %}<span class="note">{{ fixture.note }}</span>{% endif %}
+          <div class="row">
+            {% if flags.get(fixture.id) %}
+              <a class="maplink" data-flag="{{ flags[fixture.id] }}"
+                 href="{{ url_for('find_game', flag=flags[fixture.id]) }}">See on map</a>
+            {% endif %}
+            {% if can_post %}
+              <form method="post" action="{{ url_for('fixture_cancel', fixture_id=fixture.id) }}">
+                <button type="submit" class="ghost">Call it off</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">
+          <b>Nothing on the list.</b> Campus-wide meetups show up here once
+          somebody posts them.
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if called_off %}
+    <section class="win sec-place">
+      <div class="bar">{{ ui.icon("meet") }}<span class="bar-title">Called off</span><span class="grip"></span></div>
+      <div class="grid">
+        {% for fixture in called_off %}
+          <p class="off">
+            <b>{{ fixture.title }}</b> &mdash; {{ fixture.when_text }}
+          </p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <p class="nav"><a href="{{ url_for('find_game') }}">&larr; Back to the map</a></p>
+{% endblock %}

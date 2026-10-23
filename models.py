@@ -74,6 +74,16 @@ class User(UserMixin, db.Model):
     # they are, and lets the suites keep building User(...) without naming it.
     is_admin = db.Column(db.Boolean, nullable=False, default=False,
                          server_default="false")
+    # Whether this account may post home fixtures. Separate from is_admin on
+    # purpose: somebody who posts the basketball schedule has no business
+    # approving hub requests, and an admin should be able to hand this out
+    # without handing out everything they have.
+    #
+    # Two booleans rather than a role table, for the reason is_admin gives:
+    # there are two things to be allowed to do, and a permission system for
+    # two things is more machinery than the things.
+    can_post_fixtures = db.Column(db.Boolean, nullable=False, default=False,
+                                  server_default="false")
 
     __table_args__ = (
         db.CheckConstraint(
@@ -381,7 +391,7 @@ GAME_EVENTS = ("invited", "accepted", "declined", "ended", "abandoned")
 
 # The columns a message may hang off, in the order they appear inside the live
 # CHECK constraint. Keep that order: the rendered constraint text is what
-# db/schema_diff.py compares between databases, so reordering here would make a
+# `dbtool.py status` compares between databases, so reordering here would make a
 # freshly created database look like it had drifted from a migrated one.
 MESSAGE_PARENT_COLUMNS = ("match_id", "club_id", "room", "pairing_id", "chat_id")
 
@@ -470,6 +480,16 @@ class GamePost(db.Model):
     # meant. This is here so the meetup's chat has a date to end after; when
     # it is null the chat falls back to a fixed horizon.
     when_on = db.Column(db.Date)
+    # When it actually begins. The form has always asked for an hour, a
+    # minute and AM or PM and has always discarded them -- the time survived
+    # only inside when_text's prose -- so nothing could tell whether a meetup
+    # had already happened, and the board listed every one ever posted.
+    #
+    # Nullable, because every meetup posted before this has no stored time
+    # and guessing one out of when_text would be a guess about prose written
+    # by somebody else. Without it the board falls back to the date, and
+    # failing that to the same 36-hour horizon the meetup's chat uses.
+    starts_at = db.Column(db.DateTime)
     max_players = db.Column(db.Integer, nullable=False, default=2)
     status = db.Column(db.Text, nullable=False, default="open")
     # Who this meetup is for. 'campus' is the posting /find has always done:
@@ -785,6 +805,7 @@ NOTICE_KINDS = (
     "message",           # new messages in a chat you were not reading
     "hub_request",       # a student asked for a hub; for whoever reviews them
     "hub_decision",      # the hub you asked for was created, or was not
+    "fixture",           # a home game was announced to everybody on campus
 )
 
 
@@ -861,10 +882,102 @@ class Notice(db.Model):
         return self.read_at is not None
 
 
+FIXTURE_STATUSES = ("scheduled", "cancelled")
+
+
+class Fixture(db.Model):
+    """What the app calls a campus-wide meetup: something the university is
+    putting on here, announced to everybody.
+
+    Called a Fixture in the code and a campus-wide meetup in the interface,
+    which is deliberate in both directions.
+
+    Not a "game", because this file already holds Game (an online board
+    game), GamePost, GamePairing, GameQueue, GameSeek and GamePostRsvp, and
+    MapFlag has a "game" category -- the bare word already means three
+    things. Not a "meetup" either, because GamePost is what the interface
+    has always called a meetup, and two models answering to the same word is
+    exactly how the game* family became hard to read.
+
+    `starts_at` is the first real instant in this schema. Everywhere else a
+    time of day is either absent (GamePost.when_on is a bare date) or lives
+    inside prose (GamePost.when_text). A fixture has to be sortable and
+    alertable by its kick-off, so this is a true UTC datetime, converted from
+    Boston time when it is posted. `when_text` is the sentence that was true
+    on the day, stored beside it so a notice written last week still reads
+    correctly -- the same split Notice.body makes, and for the same reason.
+    """
+
+    __tablename__ = "fixtures"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # What it is called -- "Home Game", "Spring Carnival", anything. The
+    # headline everywhere: the list, the notice, the pin on the map.
+    title = db.Column(db.String(80), nullable=False)
+    # The details, for when it is a game. Optional, because not every
+    # campus-wide meetup has a sport or somebody to play.
+    sport = db.Column(db.String(60))
+    opponent = db.Column(db.String(80))
+    # Naive UTC, like every other datetime here.
+    starts_at = db.Column(db.DateTime, nullable=False)
+    # How the kick-off read in Boston when it was posted.
+    when_text = db.Column(db.String(60), nullable=False)
+    venue = db.Column(db.String(120), nullable=False)
+    latitude = db.Column(db.Numeric(9, 6), nullable=False)
+    longitude = db.Column(db.Numeric(9, 6), nullable=False)
+    note = db.Column(db.String(300))
+    posted_by = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    status = db.Column(db.String(12), nullable=False, default="scheduled",
+                       server_default="scheduled")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def billing(self):
+        """The sport and the opponent as one phrase, or an empty string.
+
+        Both are optional now, so there are four cases and every place that
+        shows them would otherwise have to handle all four -- which is how
+        "Men's Basketball vs None" reaches a notice that was phrased once and
+        stored forever.
+        """
+        if self.sport and self.opponent:
+            said = f"{self.sport} vs {self.opponent}"
+        elif self.sport or self.opponent:
+            said = self.sport or self.opponent
+        else:
+            return ""
+        # Not twice. A title backfilled from these two reads exactly like
+        # this, so without this every meetup that predates the title column
+        # printed its own heading again on the line underneath it.
+        if said.strip().casefold() == (self.title or "").strip().casefold():
+            return ""
+        return f"{said},"
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN (" + ", ".join(f"'{s}'" for s in FIXTURE_STATUSES) + ")",
+            name="ck_fixture_status",
+        ),
+        db.CheckConstraint("length(btrim(title)) > 0", name="ck_fixture_title"),
+        # Absent is allowed; blank is not. A field somebody left empty and a
+        # field they filled with spaces are different mistakes.
+        db.CheckConstraint("sport IS NULL OR length(btrim(sport)) > 0",
+                           name="ck_fixture_sport"),
+        db.CheckConstraint("opponent IS NULL OR length(btrim(opponent)) > 0",
+                           name="ck_fixture_opponent"),
+        # What is coming up, which is every read this table has.
+        db.Index("ix_fixtures_when", "status", "starts_at"),
+    )
+
+
 # What a map flag can be, and who may see it. Kept beside the CHECK
 # constraints below so the values the database accepts and the ones the app
 # offers cannot drift apart; app.py reads these for its labels and checks.
-MAP_FLAG_KINDS = ("game", "study", "social", "club", "event", "ufind")
+# "home" is a home fixture: a scheduled game the university is playing here,
+# posted by somebody trusted rather than dropped by a student. It is its own
+# kind so a fixture is not dressed as somebody's pick-up game.
+MAP_FLAG_KINDS = ("game", "study", "social", "club", "event", "home")
 MAP_FLAG_AUDIENCES = (
     "public",    # every signed-in student
     "club",      # members of one club (club_id)
@@ -897,9 +1010,6 @@ class MapFlag(db.Model):
     title = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(300))
     category = db.Column(db.String(20), nullable=False)
-    # U-Find (selling something) only: the asking price. Null means free or
-    # not given; the CHECK below keeps it off every other kind of flag.
-    price = db.Column(db.Numeric(7, 2))
     visibility = db.Column(db.String(12), nullable=False, default="public")
     club_id = db.Column(
         db.Integer, db.ForeignKey("clubs.id", ondelete="CASCADE")
@@ -908,6 +1018,15 @@ class MapFlag(db.Model):
     # deletes its flag; one meetup has at most one flag.
     post_id = db.Column(
         db.Integer, db.ForeignKey("game_posts.id", ondelete="CASCADE")
+    )
+    # The home fixture this flag belongs to, for fixture flags. Mirrors
+    # post_id above, and exists for the same two reasons: cancelling the
+    # fixture takes its pin with it, and a flag the app dropped must not
+    # count against the poster's own handful. Without this a fixture flag is
+    # indistinguishable from a hand-dropped one, and somebody posting a
+    # season would be locked out of the map after three.
+    fixture_id = db.Column(
+        db.Integer, db.ForeignKey("fixtures.id", ondelete="CASCADE")
     )
     location_key = db.Column(db.String(40), nullable=False)
     location_name = db.Column(db.String(120), nullable=False)
@@ -938,13 +1057,10 @@ class MapFlag(db.Model):
             name="ck_map_flag_audience",
         ),
         db.CheckConstraint(
-            "price IS NULL OR (category = 'ufind' AND price >= 0)",
-            name="ck_map_flag_price",
-        ),
-        db.CheckConstraint(
             "expires_at > created_at", name="ck_map_flag_expiration"
         ),
         db.UniqueConstraint("post_id", name="uq_map_flag_post"),
+        db.UniqueConstraint("fixture_id", name="uq_map_flag_fixture"),
         db.Index("ix_map_flags_expires", "expires_at"),
         db.Index("ix_map_flags_owner_expires", "owner_id", "expires_at"),
         db.Index("ix_map_flags_club_expires", "club_id", "expires_at"),

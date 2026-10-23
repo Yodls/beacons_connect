@@ -1,0 +1,414 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Admin{% endblock %}
+
+{#
+  The one page not everybody can open.
+
+  Two sections, which used to be two pages: the hub requests waiting for a
+  decision, and who is allowed to do what. Splitting them meant two links in
+  the account menu and two places to look for "the admin bit".
+
+  Approving a hub needs at least one interest ticked, because a hub with no
+  tags can never be suggested to anybody -- recommend_clubs reaches clubs
+  only through club_tags -- so the route refuses it and this says why.
+
+  Both privileges are handed out here. Admin used to be script-only, on the
+  grounds that somebody who can review requests should not also be able to
+  appoint the next reviewer -- that was asked for, so it is a button now, and
+  dbtool.py's admin command says the same thing the other way round.
+
+  No .card class on this page. The name is counted against the number of
+  clubs on /clubs by two suites, and the habit is cheaper than the surprise.
+#}
+
+{% block appstyle %}
+      .ask { margin-top: 18px; }
+      .ask-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .ask-top h3 { margin: 0; font-size: 1.1rem; }
+      .ask .who { color: var(--muted); font-size: .88rem; }
+      .ask .pitch {
+        margin: 8px 0 0; padding: 10px 12px;
+        background: var(--paper);
+        border: 2px dashed var(--line); border-radius: var(--r-sm);
+        color: var(--navy);
+      }
+      .ask fieldset {
+        margin: 12px 0 0; padding: 10px 12px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      .ask legend { padding: 0 6px; font-size: .88rem; font-weight: 700; }
+      .picks { display: flex; flex-wrap: wrap; gap: 8px; }
+      .picks label {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 9px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .9rem; font-weight: 700;
+      }
+      .ask .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .ask textarea {
+        width: 100%; padding: 8px 10px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .92rem/1.35 var(--sans);
+      }
+      .done { color: var(--muted); }
+      .done b { color: var(--navy); }
+
+      .who-row {
+        display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        padding: 10px 14px;
+        border-top: 2px dashed var(--line);
+      }
+      .who-row:first-child { border-top: 0; }
+      .who-row .grow { flex: 1 1 auto; min-width: 0; }
+      .who-row b { display: block; color: var(--navy); }
+      .who-row small { color: var(--muted); }
+      .holds {
+        padding: 3px 8px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font-size: .82rem; font-weight: 700;
+      }
+      .dbwhere, .dbnote { margin: 0; padding: 12px 14px 0; }
+      .dbwhere b { color: var(--navy); }
+      .dbnote { color: var(--muted); font-size: .88rem; }
+      .dbrows { padding: 10px 0 0; }
+      .dbrow {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding: 10px 14px;
+        border-top: 2px dashed var(--line);
+      }
+      .dbrow .grow { flex: 1 1 16rem; min-width: 0; }
+      .dbrow b { display: block; color: var(--navy); }
+      .dbrow small { color: var(--muted); }
+      .dbrow input.dbarg {
+        flex: 0 1 13rem; padding: 7px 9px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .9rem/1.3 var(--sans);
+      }
+      .dblive {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: .85rem; font-weight: 700; color: var(--navy);
+      }
+      .dbout {
+        margin: 12px 14px; padding: 10px 12px;
+        max-height: 22rem; overflow: auto;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap; word-break: break-word;
+      }
+      .dbapply {
+        margin: 0 14px 14px; padding: 12px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      .dbapply p { margin: 0 0 8px; }
+      .dbapply b { color: var(--navy); }
+      .dbapply input.dbconfirm {
+        width: 100%; max-width: 18rem; padding: 8px 10px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .92rem/1.35 var(--sans);
+      }
+      .dbsure {
+        display: block; margin: 8px 0;
+        font-size: .88rem; font-weight: 700; color: var(--navy);
+      }
+
+      .findwho { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; }
+      .findwho input {
+        flex: 1 1 14rem; padding: 9px 10px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .95rem/1.35 var(--sans);
+      }
+{% endblock %}
+
+{% block main %}
+  <div class="pagehead">
+    <h1>Admin</h1>
+    <p class="lede">
+      What students have asked for, and who is allowed to do what.
+      <span class="counter">{{ pending | length }} waiting</span>
+    </p>
+  </div>
+
+  <section class="win sec-club">
+    <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Hub requests</span><span class="grip"></span></div>
+    <div class="grid">
+      {% for ask in pending %}
+        <div class="ask">
+          <div class="ask-top">
+            <h3>{{ ask.name }}</h3>
+            <span class="who">asked by
+              {{ asked_by[ask.requested_by].name if ask.requested_by in asked_by
+                 else "a student who has since left" }}</span>
+          </div>
+          <p class="pitch">{{ ask.pitch }}</p>
+
+          <form method="post" action="{{ url_for('hub_approve', request_id=ask.id) }}">
+            <fieldset>
+              <legend>Tag it, so it can be suggested (up to {{ tag_max }})</legend>
+              <div class="picks">
+                {% for tag in tags %}
+                  <label><input type="checkbox" name="tag" value="{{ tag.id }}" />{{ tag.label }}</label>
+                {% endfor %}
+              </div>
+            </fieldset>
+            <div class="row"><button type="submit">Approve and open it</button></div>
+          </form>
+
+          <form method="post" action="{{ url_for('hub_decline', request_id=ask.id) }}">
+            <div class="row">
+              <textarea name="note" rows="1" maxlength="300"
+                        placeholder="Why not? This is what they are told."></textarea>
+            </div>
+            <div class="row"><button type="submit" class="ghost">Turn it down</button></div>
+          </form>
+        </div>
+      {% else %}
+        <div class="empty"><b>Nothing waiting.</b> Requests from the clubs page land here.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if decided %}
+    <section class="win sec-club">
+      <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Already decided</span><span class="grip"></span></div>
+      <div class="grid">
+        {% for ask in decided %}
+          <p class="done">
+            <b>{{ ask.name }}</b> &mdash; {{ ask.status }}
+            {%- if ask.note %}: {{ ask.note }}{% endif %}
+          </p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("people") }}<span class="bar-title">Who may do what</span><span class="grip"></span></div>
+    <form class="findwho" method="get" action="{{ url_for('admin') }}">
+      <input name="q" value="{{ term }}" maxlength="120" autocomplete="off"
+             placeholder="Name or email" aria-label="Search for somebody" />
+      <button type="submit">Search</button>
+    </form>
+    <div class="grid">
+      {% for person in people %}
+        <div class="who-row">
+          <div class="grow">
+            <b>{{ person.name }}</b>
+            <small>{{ person.email }}</small>
+          </div>
+          {% if person.is_admin %}<span class="holds">Admin</span>{% endif %}
+          {% if person.can_post_fixtures %}<span class="holds">Posts meetups</span>{% endif %}
+          <form method="post"
+                action="{{ url_for('admin_set_poster', user_id=person.id, q=term) }}">
+            <input type="hidden" name="grant"
+                   value="{{ 'no' if person.can_post_fixtures else 'yes' }}" />
+            <button type="submit"
+                    class="{{ 'ghost' if person.can_post_fixtures else '' }}">
+              {{ "Take it away" if person.can_post_fixtures
+                 else "Let them post campus-wide meetups" }}
+            </button>
+          </form>
+          {# Admin is handed out here too now. The route refuses to remove
+             the last one: this page is the only way back, so an admin who
+             demoted themselves would have shut the door behind them. #}
+          <form method="post"
+                action="{{ url_for('admin_set_admin', user_id=person.id, q=term) }}">
+            <input type="hidden" name="grant"
+                   value="{{ 'no' if person.is_admin else 'yes' }}" />
+            <button type="submit"
+                    class="{{ 'ghost' if person.is_admin else '' }}">
+              {{ "Remove admin" if person.is_admin else "Make admin" }}
+            </button>
+          </form>
+        </div>
+      {% else %}
+        <div class="empty">
+          {% if term %}
+            <b>Nobody matches that.</b> Try part of a name or an address.
+          {% else %}
+            <b>Nobody holds anything yet.</b> Search for somebody to let them
+            post campus-wide meetups.
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="win sec-place">
+    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Database</span><span class="grip"></span></div>
+    {% if db_why %}
+      <div class="empty"><b>No database configured.</b> {{ db_why }}</div>
+    {% else %}
+      <p class="dbwhere">
+        This app is on <b>{{ db_here }}</b> at {{ db_host }}.
+        Live is <b>{{ db_live }}</b>{% if db_live_host != db_host %} at {{ db_live_host }}{% endif %}.
+      </p>
+      {# Dry run first, always. Every Run shows what would happen and
+         leaves an Apply button underneath -- the existing discipline of
+         these commands made visible rather than a new one. #}
+      <p class="dbnote">
+        Every command runs as a dry run first: it does the work and throws
+        the transaction away, so you see real numbers before anything is
+        kept. Applying asks you to type the database name.
+      </p>
+      <div class="dbrows">
+        {% for cmd in db_commands %}
+          <div class="dbrow" data-command="{{ cmd.id }}"
+               data-writes="{{ 'yes' if cmd.writes else 'no' }}"
+               data-live="{{ 'yes' if cmd.live else 'no' }}"
+               data-needs="{{ cmd.needs | default('') }}">
+            <div class="grow">
+              <b>{{ cmd.label }}</b>
+              <small>{{ cmd.note }}</small>
+            </div>
+            {% if cmd.needs == "email" %}
+              <input class="dbarg" name="email" type="email" maxlength="120"
+                     placeholder="email" aria-label="Which account" />
+            {% endif %}
+            {% if cmd.live %}
+              <label class="dblive">
+                <input type="checkbox" class="dbtarget" /> live
+              </label>
+            {% endif %}
+            <button type="button" class="dbgo{{ ' ghost' if not cmd.writes }}">
+              {{ "Dry run" if cmd.writes else "Run" }}
+            </button>
+          </div>
+        {% endfor %}
+      </div>
+      <pre class="dbout" aria-live="polite">Nothing has been run yet.</pre>
+      <div class="dbapply" hidden>
+        <p>
+          To keep this, type <b class="dbname">{{ db_here }}</b> exactly:
+        </p>
+        <input class="dbconfirm" autocomplete="off" aria-label="Confirm the database name" />
+        <label class="dbsure" hidden>
+          <input type="checkbox" class="dbsurebox" />
+          yes, against live
+        </label>
+        <button type="button" class="dbkeep">Apply it</button>
+      </div>
+    {% endif %}
+  </section>
+
+  <p class="nav"><a href="{{ url_for('clubs') }}">&larr; Back to the hubs</a></p>
+
+<script>
+/* The Database section.
+ *
+ * Runs one command at a time against /admin/db/run and polls
+ * /admin/db/output until it stops. Dry run first: the Apply panel only
+ * appears once a dry run has come back, and it carries the same command
+ * and target forward, so what you apply is what you just read.
+ */
+(function () {
+  const out = document.querySelector(".dbout");
+  if (!out) return;
+  const applyBox = document.querySelector(".dbapply");
+  const confirmField = document.querySelector(".dbconfirm");
+  const nameLabel = document.querySelector(".dbname");
+  const sureWrap = document.querySelector(".dbsure");
+  const sureBox = document.querySelector(".dbsurebox");
+  const keepButton = document.querySelector(".dbkeep");
+  const here = {{ db_here | tojson }};
+  const liveName = {{ db_live | tojson }};
+  let last = null;
+  let polling = null;
+
+  function show(text) { out.textContent = text || "(no output)"; }
+
+  function poll() {
+    fetch("{{ url_for('admin_db_output') }}")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.output) show(data.output);
+        if (data.running) return;
+        clearInterval(polling);
+        polling = null;
+        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
+        /* Offer Apply only after a dry run that worked and would change
+           something. A refusal is not something to confirm past. */
+        if (last && last.writes && !last.apply && data.ok) {
+          nameLabel.textContent = last.live ? liveName : here;
+          sureWrap.hidden = !last.live;
+          confirmField.value = "";
+          if (sureBox) sureBox.checked = false;
+          applyBox.hidden = false;
+        }
+      })
+      .catch(() => {
+        clearInterval(polling);
+        polling = null;
+        show("The page could not reach the server. Nothing was committed.");
+        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
+      });
+  }
+
+  function send(body, pending) {
+    document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = true; });
+    applyBox.hidden = true;
+    show("running " + pending.command + "...");
+    fetch("{{ url_for('admin_db_run') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body),
+    })
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          if (data.blocked) {
+            show(data.why + "\n\n    " + data.command);
+          } else {
+            show(data.error || "That did not start.");
+          }
+          document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
+          return;
+        }
+        last = pending;
+        if (!polling) polling = setInterval(poll, 700);
+        poll();
+      })
+      .catch(() => {
+        show("The page could not reach the server.");
+        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
+      });
+  }
+
+  document.querySelectorAll(".dbrow").forEach((row) => {
+    row.querySelector(".dbgo").addEventListener("click", () => {
+      const target = row.querySelector(".dbtarget");
+      const arg = row.querySelector(".dbarg");
+      const pending = {
+        command: row.dataset.command,
+        writes: row.dataset.writes === "yes",
+        live: !!(target && target.checked),
+        apply: false,
+        email: arg ? arg.value.trim() : "",
+      };
+      send({
+        command: pending.command,
+        live: pending.live ? "yes" : "no",
+        apply: "no",
+        email: pending.email,
+      }, pending);
+    });
+  });
+
+  keepButton.addEventListener("click", () => {
+    if (!last) return;
+    send({
+      command: last.command,
+      live: last.live ? "yes" : "no",
+      apply: "yes",
+      confirm: confirmField.value,
+      live_sure: sureBox && sureBox.checked ? "yes" : "no",
+      email: last.email,
+    }, Object.assign({}, last, { apply: true }));
+  });
+})();
+</script>
+{% endblock %}

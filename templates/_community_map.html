@@ -25,7 +25,6 @@
 <section class="campus-map-card" id="campusMapCard"
          data-flags-url="{{ url_for('map_flags_list') }}"
          data-umb-logo="{{ url_for('static', filename='bc-umb-logo.svg') }}"
-         data-ufind-logo="{{ url_for('static', filename='ufind.svg') }}"
          data-chat-url="{{ url_for('chat', kind='group', target_id=0) }}"
          data-rsvp-url="{{ url_for('post_rsvp', post_id=0) }}"
          data-focus="{{ request.args.get('flag', '') }}">
@@ -73,13 +72,6 @@
                placeholder="Pickup frisbee after class" />
       </label>
 
-      {# U-Find only. #}
-      <label id="mapPriceWrap" hidden>Price
-        <span class="price-field"><span aria-hidden="true">$</span><input name="price"
-          inputmode="decimal" maxlength="9" autocomplete="off"
-          placeholder="Leave empty if it's free" /></span>
-      </label>
-
       {# Filled in by the script as the draft flag moves. #}
       <div class="map-point-picker">
         <span class="map-field-label">Flag position</span>
@@ -123,8 +115,6 @@
                   placeholder="How to find you, what to bring, who can join"></textarea>
       </label>
 
-      <p class="safe" id="mapUfindSafety" hidden>Meet somewhere busy, like the Campus
-        Center, and check the item before you pay.</p>
       <p class="draft-error" id="mapFormError" role="alert" hidden></p>
 
       <div class="draft-actions">

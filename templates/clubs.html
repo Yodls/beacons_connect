@@ -1,5 +1,58 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
+
+{#
+  One club, as a card. A macro because the Recommended band and the club's
+  own category both draw it, and two copies of thirty-five lines drift --
+  the copy that drifts being always the one nobody is looking at.
+
+  Everything it needs is an argument: a Jinja macro cannot see the variables
+  render_template was given, so a forgotten one would silently render blank
+  rather than fail.
+#}
+{% macro clubcard(club, joined_ids, picks) -%}
+      <div class="card" id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
+        <div class="card-top">
+          {{ ui.club_badge(club.name, club.description) }}
+          <div class="grow">
+            <h3>{{ club.name }}</h3>
+            {% if club.id in joined_ids %}
+              <span class="joined">Joined</span>
+            {% elif club.id in picks %}
+              <span class="pick">Suggested for you</span>
+            {% endif %}
+          </div>
+        </div>
+        <p class="why">{{ club.description }}</p>
+        {# The reason, on the card the club already has. A separate
+           "suggested" band would put the same clubs on this page twice
+           and make the one-card-per-club count mean nothing. #}
+        {% if club.id in picks %}
+          <p class="why-lead">Because you picked:</p>
+          <div class="shared">
+            {% for item in picks[club.id].shared %}<i>{{ item }}</i>{% endfor %}
+          </div>
+        {% endif %}
+        <div class="actions">
+          {% if club.id in joined_ids %}
+            <form method="get"
+                  action="{{ url_for('chat', kind='club', target_id=club.id) }}">
+              <button type="submit">Club space</button>
+            </form>
+            <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+              <input type="hidden" name="back" value="clubs" />
+              <button type="submit" class="ghost">Leave</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
+              <input type="hidden" name="back" value="clubs" />
+              <button type="submit">Join</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+{%- endmacro %}
+
 {% block title %}All clubs{% endblock %}
 
 {#
@@ -18,11 +71,11 @@
   The <h1> is compared by exact textContent, so it stays bare -- no icon, no
   span, nothing nested.
 
-  And the card class below is counted by literal string across the whole page
-  and must come out equal to the number of clubs. So nothing else here may
-  carry that class, and a club card must carry it alone -- the count includes
-  the closing quote, so adding a second class to the same attribute hides the
-  card from it.
+  And the card class below is counted by literal string across the whole page.
+  It equals the number of clubs PLUS the number in the Recommended band, which
+  draws the same cards again. So nothing else here may carry that class, and a
+  club card must carry it alone -- the count includes the closing quote, so
+  adding a second class to the same attribute hides the card from it.
 #}
 
 {% block appstyle %}
@@ -127,6 +180,9 @@
   {# Links to each window. The script turns them into a filter. #}
   <nav class="catbar" id="catbar" aria-label="Club categories">
     <a class="catkey" href="#cat-all" data-cat="all">All <b>{{ clubs | length }}</b></a>
+    {% if recommended %}
+      <a class="catkey" href="#cat-recommended" data-cat="recommended">Recommended <b>{{ recommended | length }}</b></a>
+    {% endif %}
     {% for cat, members in groups %}
       <a class="catkey" href="#cat-{{ cat.key }}" data-cat="{{ cat.key }}">{{ cat.label }} <b>{{ members | length }}</b></a>
     {% endfor %}
@@ -139,6 +195,30 @@
   <p class="empty nomatch" id="nomatch" hidden>No clubs match that. Try another word, or pick a category.</p>
 
   <span id="cat-all"></span>
+
+  {# The ones this student's answers point at, above everything else.
+
+     These clubs are also listed under their own category further down, so
+     four of them appear on this page twice. That is deliberate: the band is
+     what was asked for. It does mean the card count on this page is the
+     number of clubs plus the number recommended, which two suites assert --
+     they were changed to match rather than loosened. #}
+  {% if recommended %}
+    <section class="sec-club clubcat" id="cat-recommended" data-cat="recommended">
+      <div class="sec sec-club">
+        <span class="tag-dot"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="{{ club_icon_href('star') }}" /></svg></span>
+        <h2>Recommended</h2>
+        <span class="count">{{ recommended | length }}</span>
+      </div>
+      <p class="cathome">Picked from what you told us you like.</p>
+      <div class="clubgrid">
+        {% for club in recommended %}
+          {{ clubcard(club, joined_ids, picks) }}
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
   {% for cat, members in groups %}
     <section class="sec-club clubcat" id="cat-{{ cat.key }}" data-cat="{{ cat.key }}">
       {# Written out rather than ui.section(): the bar carries the category's
@@ -151,46 +231,7 @@
       <p class="cathome">{{ cat.home }}</p>
       <div class="clubgrid">
         {% for club in members %}
-          <div class="card" id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
-            <div class="card-top">
-              {{ ui.club_badge(club.name, club.description) }}
-              <div class="grow">
-                <h3>{{ club.name }}</h3>
-                {% if club.id in joined_ids %}
-                  <span class="joined">Joined</span>
-                {% elif club.id in picks %}
-                  <span class="pick">Suggested for you</span>
-                {% endif %}
-              </div>
-            </div>
-            <p class="why">{{ club.description }}</p>
-            {# The reason, on the card the club already has. A separate
-               "suggested" band would put the same clubs on this page twice
-               and make the one-card-per-club count mean nothing. #}
-            {% if club.id in picks %}
-              <p class="why-lead">Because you picked:</p>
-              <div class="shared">
-                {% for item in picks[club.id].shared %}<i>{{ item }}</i>{% endfor %}
-              </div>
-            {% endif %}
-            <div class="actions">
-              {% if club.id in joined_ids %}
-                <form method="get"
-                      action="{{ url_for('chat', kind='club', target_id=club.id) }}">
-                  <button type="submit">Club space</button>
-                </form>
-                <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
-                  <input type="hidden" name="back" value="clubs" />
-                  <button type="submit" class="ghost">Leave</button>
-                </form>
-              {% else %}
-                <form method="post" action="{{ url_for('join_club', club_id=club.id) }}">
-                  <input type="hidden" name="back" value="clubs" />
-                  <button type="submit">Join</button>
-                </form>
-              {% endif %}
-            </div>
-          </div>
+          {{ clubcard(club, joined_ids, picks) }}
         {% endfor %}
       </div>
     </section>

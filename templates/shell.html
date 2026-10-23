@@ -71,8 +71,12 @@
           <a href="{{ url_for('people') }}">Find people</a>
           <a href="{{ url_for('chats') }}">Group chats{%
             if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
+          {# Shorter than the page it opens, on purpose. This panel fits six
+             items in about twenty characters; the page has the width to say
+             what it is. The mismatch is the point, not drift. #}
+          <a href="{{ url_for('fixtures') }}">Happening now</a>
           {% if current_user.is_admin %}
-            <a href="{{ url_for('admin_hubs') }}">Hub requests</a>
+            <a href="{{ url_for('admin') }}">Admin</a>
           {% endif %}
           <a href="{{ url_for('logout') }}">Sign out</a>
         </div>

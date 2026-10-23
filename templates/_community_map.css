@@ -5,7 +5,7 @@
 
          Pin colours by flag type (UMass Boston palette):
            game = Orange   study = Beacon Blue   social = Sky
-           club = Yellow   event = Navy          U-Find = its own navy
+           club = Yellow   event = Navy          home = Gold
          ================================================================= */
 
       /* ---------- the window ---------- */
@@ -83,10 +83,6 @@
         background: var(--flag-color);
         border: 2px solid var(--navy); border-radius: 4px;
       }
-      .map-key-ufind {
-        display: block; height: 16px; width: auto; padding: 4px 7px; box-sizing: content-box;
-        background: #0b3159; border: 2px solid var(--navy); border-radius: 4px;
-      }
 
       /* the flag you tapped */
       .flag-detail {
@@ -109,9 +105,6 @@
       .fd-tags { display: flex; flex-wrap: wrap; gap: 6px; }
       .fd-tags .tag { background: #fff; color: var(--navy); }
       .fd-tags .tag.kind { background: var(--flag-color); color: var(--flag-ink, #fff); }
-      .fd-tags .tag.ufind { padding: 0 6px; background: #0b3159; }
-      .fd-tags .tag.ufind img { display: block; height: 14px; width: auto; }
-      .fd-tags .tag.price { background: var(--gold); }
       .fd-event {
         display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
         padding: 8px 10px; background: #fff;
@@ -160,7 +153,6 @@
       .draft-note { margin-top: -4px; color: var(--muted); font-size: .9rem; }
       .draftbox label { color: var(--navy); font-size: .92rem; }
       .draftbox label > input, .draftbox label > select, .draftbox label > textarea,
-      .draftbox .price-field { margin-top: 6px; }
       .draftbox textarea { min-height: 5rem; }
       /* the type chips: radios drawn as keys */
       .draftbox .draft-kinds { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
@@ -185,17 +177,6 @@
       .kind-chip input:checked + span i { border-color: #fff; }
       .kind-chip input:focus-visible + span { outline: 3px solid var(--orange); outline-offset: 2px; }
       .kind-chip input:disabled + span { opacity: .45; cursor: not-allowed; }
-      /* the U-Find price, with a $ in front */
-      .price-field {
-        display: flex; align-items: center; gap: 6px;
-        min-height: 46px; padding: 0 12px;
-        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: inset 3px 3px 0 var(--paper);
-        font-weight: 700;
-      }
-      .price-field:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
-      .price-field input { min-height: 0; padding: 0; border: 0; box-shadow: none; background: none; }
-      .price-field input:focus { outline: none; }
       /* where the draft is: dashed, like the draft flag itself */
       .map-point-picker {
         padding: 10px 12px; background: #fff;
@@ -288,7 +269,6 @@
         display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
         width: 36px; height: 52px;
       }
-      .beacon-flag-pin.ufind { width: 80px; }
       .flag-head {
         min-width: 32px; height: 32px; padding: 0 2px;
         display: grid; place-items: center;

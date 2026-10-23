@@ -20,7 +20,7 @@ nothing else.
 """
 from datetime import datetime
 
-from models import Notice, db
+from models import Notice, User, db
 
 # The sequence behind Notice.bump. Spelled through literal_column so it reaches
 # Postgres as nextval('notices_bump_seq') and not as a bare identifier.
@@ -89,6 +89,65 @@ def friend_accepted(recipient_id, actor):
     )
 
 
+def campus(kind, body, url, exclude=()):
+    """Tell every student the same finished sentence, in one statement.
+
+    The only notice in the app addressed to everybody, and the only one that
+    does not go through notify(). That is deliberate on both counts.
+
+    Everywhere else the rule is the opposite -- chat_audience answers with
+    nobody for the campus room, "because one post there would notify every
+    student on the site at once" -- so this is the carve-out, and it is for
+    announcements the university makes rather than anything a student does.
+
+    One INSERT with many rows, not a loop. notify() writes a row at a time,
+    and the only other fan-out here is `for admin_id in admin_ids()`, whose
+    docstring says "usually one person". Several thousand students at one
+    round trip each is a different thing entirely, and a loop would still
+    look correct in every test that only counted the rows afterwards.
+
+    `actor_id` stays null: the app is announcing, not a person. That also
+    means whoever posted it is told too, rather than being quietly skipped by
+    the no-self-notice rule -- which is right, because they are a student as
+    well and the notice is not about them.
+
+    `bump` is left out so notices_bump_seq fires per row as its server
+    default; naming it here would give every row the same value and the live
+    channel would carry one toast for all of them.
+
+    Returns how many were told.
+    """
+    recipients = [
+        user_id for (user_id,) in db.session.execute(
+            db.select(User.id).where(User.email_verified.is_(True)))
+        if user_id not in set(exclude)
+    ]
+    if not recipients:
+        return 0
+
+    now = datetime.utcnow()
+    db.session.execute(db.insert(Notice), [
+        {"user_id": user_id, "actor_id": None, "kind": kind, "body": body,
+         "url": url, "count": 1, "created_at": now}
+        for user_id in recipients
+    ])
+    return len(recipients)
+
+
+def fixture_posted(title, billing, when_text):
+    """A campus-wide meetup, told to everybody. Returns how many were told.
+
+    `billing` is the sport and opponent as one phrase and may be empty, so
+    the sentence is joined rather than formatted -- otherwise a meetup with
+    no game in it reads "Spring Carnival:  Sat 2 May".
+    """
+    return campus(
+        "fixture",
+        " ".join(p for p in (f"{title}:", billing, f"{when_text}.") if p),
+        "/fixtures",
+    )
+
+
 def hub_requested(admin_id, name):
     """Somebody asked for a hub. Addressed to whoever reviews them.
 
@@ -99,7 +158,7 @@ def hub_requested(admin_id, name):
     """
     return notify(admin_id, "hub_request",
                   f"{name} was requested. It is waiting for review.",
-                  "/admin/hubs")
+                  "/admin")
 
 
 def hub_decided(requester_id, name, approved, note=""):

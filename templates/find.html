@@ -208,8 +208,7 @@
         </form>
       {% else %}
         <h3>Get paired with someone</h3>
-        <p>You'll be matched with the next student who picks the same game.
-          Capitals don't matter.</p>
+        <p>You'll be matched with the next student who picks the same game.</p>
         <form method="post" action="{{ url_for('find_queue') }}">
           <select name="game" required class="act">
             {% for game in games %}

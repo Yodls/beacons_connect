@@ -1,6 +1,10 @@
 .env
 .env.*
-.env.example
+# ...but not the template, which is meant to be committed and is. An ignore
+# rule never applies to a file already in the index, so listing it here did
+# not keep it private -- it only meant `git status` would stay silent if
+# real values were ever typed into it.
+!.env.example
 __pycache__/
 *.pyc
 .venv/

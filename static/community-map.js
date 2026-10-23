@@ -41,14 +41,15 @@
   var SVG_NS = "http://www.w3.org/2000/svg";
 
   // How each kind of flag looks: pin colour, icon colour, sprite icon.
-  // U-Find shows its own wordmark instead of an icon.
   var KINDS = {
     game:   { color: "#ff791f", ink: "#132245", icon: "game" },
     study:  { color: "#005a8b", ink: "#ffffff", icon: "book" },
     social: { color: "#78afe9", ink: "#132245", icon: "talk" },
     club:   { color: "#fede42", ink: "#132245", icon: "club" },
     event:  { color: "#132245", ink: "#ffffff", icon: "star" },
-    ufind:  { color: "#0b3159", ink: "#ffffff", icon: null }
+    // A home fixture. Gold, because it is the one pin the university put
+    // there rather than a student, and nothing else on the map is.
+    home:   { color: "#fede42", ink: "#132245", icon: "stadium" }
   };
   // Who can see a flag, in the words the editor uses.
   var AUDIENCE = {
@@ -65,19 +66,18 @@
     legend: $("mapLegend"), detail: $("mapFlagDetail"), drop: $("mapDrop"),
     locate: $("mapLocate"), form: $("mapFlagForm"), formTitle: $("flagFormTitle"),
     draftTag: $("mapDraftTag"), draftNote: $("mapDraftNote"), kinds: $("mapKinds"),
-    kindChips: $("mapKindChips"), titleLabel: $("mapTitleLabel"), priceWrap: $("mapPriceWrap"),
+    kindChips: $("mapKindChips"), titleLabel: $("mapTitleLabel"),
     point: $("mapFlagPoint"), lat: $("mapFlagLatitude"), lng: $("mapFlagLongitude"),
     locName: $("mapFlagLocationName"), durationWrap: $("mapDurationWrap"),
     visibility: $("mapFlagVisibility"), friendPick: $("mapFriendPick"),
     friendChips: $("mapFriendChips"), friendSearch: $("mapFriendSearch"),
     friendList: $("mapFriendList"), friendMore: $("mapFriendMore"),
-    clubWrap: $("mapFlagClubWrap"), club: $("mapFlagClub"), safety: $("mapUfindSafety"),
+    clubWrap: $("mapFlagClubWrap"), club: $("mapFlagClub"),
     error: $("mapFormError"), submit: $("mapFlagSubmit"), cancel: $("mapFlagCancel")
   };
   var urls = {
     flags: root.dataset.flagsUrl,
     umb: root.dataset.umbLogo || "",
-    ufind: root.dataset.ufindLogo || "",
     chat: root.dataset.chatUrl || "",   // ends in /0: swap in the chat's id
     rsvp: root.dataset.rsvpUrl || ""    // contains /0/: swap in the meetup's id
   };
@@ -294,21 +294,18 @@
     });
   }
 
-  // A flag pin: a square pixel head on a pole. U-Find shows its wordmark.
+  // A flag pin: a square pixel head on a pole.
   function flagIcon(category, options) {
     var look = kindOf(category);
-    var ufind = category === "ufind" && urls.ufind;
-    var classes = "beacon-flag-pin" + (ufind ? " ufind" : "") +
+    var classes = "beacon-flag-pin" +
       (options.on ? " on" : "") + (options.draft ? " draft" : "");
-    var head = ufind
-      ? '<img src="' + urls.ufind + '" alt="" width="60" height="16" />'
-      : spriteMarkup(options.draft && !options.keepIcon ? "plus" : look.icon);
+    var head = spriteMarkup(options.draft && !options.keepIcon ? "plus" : look.icon);
     return L.divIcon({
       className: "beacon-flag-icon",
       html: '<span class="' + classes + '" style="--flag-color:' + look.color + ";--flag-ink:" + look.ink + '">' +
         '<span class="flag-head">' + head + '</span><span class="flag-pole"></span></span>',
-      iconSize: ufind ? [80, 52] : [36, 52],
-      iconAnchor: ufind ? [40, 52] : [18, 52]
+      iconSize: [36, 52],
+      iconAnchor: [18, 52]
     });
   }
 
@@ -356,11 +353,7 @@
     el.legend.replaceChildren();
     info.order.forEach(function (key) {
       var item = node("li", "map-key");
-      if (key === "ufind" && urls.ufind) {
-        var img = node("img", "map-key-ufind");
-        img.src = urls.ufind; img.alt = labelOf(key); img.width = 60; img.height = 16;
-        item.appendChild(img);
-      } else {
+      {
         var swatch = node("span", "map-key-swatch");
         swatch.style.setProperty("--flag-color", kindOf(key).color);
         item.appendChild(swatch);
@@ -436,14 +429,7 @@
     if (flag.description) { card.appendChild(node("p", "fd-note", flag.description)); }
 
     var tags = node("div", "fd-tags");
-    if (flag.category === "ufind" && urls.ufind) {
-      var uf = tag("", "ufind");
-      var img = node("img"); img.src = urls.ufind; img.alt = "U-Find";
-      uf.appendChild(img); tags.appendChild(uf);
-      tags.appendChild(tag(flag.price ? "$" + flag.price : "Free", "price"));
-    } else {
-      tags.appendChild(tag(labelOf(flag.category), "kind"));
-    }
+    tags.appendChild(tag(labelOf(flag.category), "kind"));
     if (!flag.event) { tags.appendChild(tag(expiresText(flag.expires_at))); }
     if (flag.mine || flag.visibility === "going") { tags.appendChild(tag(AUDIENCE[flag.visibility])); }
     card.appendChild(tags);
@@ -542,7 +528,7 @@
       lat: latlng.lat, lng: latlng.lng, labelTouched: false,
       visibility: "public", picked: [], club: info.clubs.length ? String(info.clubs[0].id) : ""
     };
-    fillForm({ title: "", description: "", price: "", location_name: nearestPlaceName(latlng) });
+    fillForm({ title: "", description: "", location_name: nearestPlaceName(latlng) });
     setMode("draft");
     announce("Draft flag placed. Fill it in, then press Submit flag.", "success");
     setTimeout(function () { el.form.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 60);
@@ -557,7 +543,7 @@
       picked: (flag.friends || []).map(function (f) { return f.id; }),
       club: flag.club_id ? String(flag.club_id) : (info.clubs.length ? String(info.clubs[0].id) : "")
     };
-    fillForm({ title: flag.title, description: flag.description, price: flag.price || "",
+    fillForm({ title: flag.title, description: flag.description,
                location_name: flag.location_name });
     setMode("draft");
     announce("Editing your flag. Drag it or tap the map to move it.", "success");
@@ -594,7 +580,6 @@
     var f = el.form.elements;
     f.title.value = values.title || "";
     f.description.value = values.description || "";
-    f.price.value = values.price || "";
     el.locName.value = values.location_name || "";
     el.error.hidden = true;
     el.formTitle.textContent = draft.editing ? (draft.event ? "Edit your meetup's flag" : "Edit your flag") : "New flag";
@@ -605,23 +590,18 @@
     el.submit.textContent = draft.editing ? "Save changes" : "Submit flag";
     el.cancel.textContent = draft.editing ? "Cancel" : "Discard";
 
-    // The type chips. A meetup's flag can't become a U-Find listing.
+    // The type chips.
     el.kindChips.replaceChildren();
     info.order.forEach(function (key) {
       var label = node("label", "kind-chip");
       var input = node("input");
       input.type = "radio"; input.name = "category"; input.value = key;
       input.checked = key === draft.category;
-      input.disabled = draft.event && key === "ufind";
       input.addEventListener("change", function () { draft.category = key; kindChanged(); });
       var face = node("span");
       face.style.setProperty("--flag-color", kindOf(key).color);
-      if (key === "ufind" && urls.ufind) {
-        var img = node("img"); img.src = urls.ufind; img.alt = labelOf(key); face.appendChild(img);
-      } else {
-        face.appendChild(node("i"));
-        face.appendChild(document.createTextNode(labelOf(key)));
-      }
+      face.appendChild(node("i"));
+      face.appendChild(document.createTextNode(labelOf(key)));
       label.appendChild(input); label.appendChild(face);
       el.kindChips.appendChild(label);
     });
@@ -657,15 +637,13 @@
     showPoint();
   }
 
-  // U-Find asks what you're selling and for a price, with a safety note.
+  // Every kind asks the same two things now that selling is not one of
+  // them. Kept as a function because the draft still re-renders on a change.
   function kindChanged() {
-    var ufind = draft.category === "ufind";
-    el.titleLabel.textContent = ufind ? "What are you selling?" : "Title";
-    el.form.elements.title.placeholder = ufind ? "Mini fridge, textbook, bike..." : "Pickup frisbee after class";
-    el.form.elements.description.placeholder = ufind
-      ? "Condition, pickup time, how you take payment" : "How to find you, what to bring, who can join";
-    el.priceWrap.hidden = !ufind;
-    el.safety.hidden = !ufind;
+    el.titleLabel.textContent = "Title";
+    el.form.elements.title.placeholder = "Pickup frisbee after class";
+    el.form.elements.description.placeholder =
+      "How to find you, what to bring, who can join";
     renderMarkers();
   }
 
@@ -740,7 +718,6 @@
       latitude: el.lat.value, longitude: el.lng.value,
       visibility: el.visibility.value
     };
-    if (draft.category === "ufind") { body.price = f.price.value; }
     if (!draft.event && f.duration.value) { body.duration = f.duration.value; }
     if (body.visibility === "club") { body.club_id = el.club.value; }
     if (body.visibility === "friends") { body.friend_ids = draft.picked.slice(); }
@@ -756,7 +733,7 @@
   function submitDraft(event) {
     event.preventDefault();
     if (!el.form.elements.title.value.trim()) {
-      showFormError(draft.category === "ufind" ? "Say what you're selling." : "Give your flag a title.");
+      showFormError("Give your flag a title.");
       el.form.elements.title.focus();
       return;
     }
