@@ -2,7 +2,56 @@
 {% import "_ui.html" as ui %}
 {% block title %}Your profile{% endblock %}
 
+{#
+  profile.html  -  "Your profile"   (relocation, Oct 24)
+  STEMS FROM: templates/profile.html in beacon-profile-rebuild (Oct 23, unchanged),
+  which stems from templates/profile.html in beacon-push.
+  Sits beside your account.html: the same windows (.win, .bar, ui.icon), the same
+  form look (copied from account.html's .acct rules), your ui.avatar for
+  initials, and no stylesheet of its own outside this page. Matched against your
+  base.html (Beacon OS): its keys, .pronouns chip, .report-link, .empty box,
+  .invites badge and dashed row dividers are used as they are.
 
+  WHAT CHANGED FROM THE REBUILD  (search for "RELOCATION")
+    The account menu in shell.html now holds only your name and email, your
+    photo, View my profile, Happening now, Admin and Sign out. Everything else
+    it used to list lives here:
+      Find people, Group chats      the new "People and group chats" window
+      Your account: name, pronouns  real form in "Your profile" (was a placeholder)
+      Your account: your interests  real form in "Clubs and interests" (was a
+                                    placeholder), using your own _questions.html
+      Your account: Leaving         real "Delete your account" form in "Account
+                                    and safety" (was a placeholder)
+      Report someone, Get in touch  "Report a problem" in "Account and safety"
+    The three Your account forms send exactly the fields account.html sends, to
+    part 2's routes, which hand them to your own `account` and `account_delete`
+    routes. So they are checked and saved by your code, unchanged. Your
+    /account page still works; nothing on the site has to link to it any more.
+
+  WHAT LIVES WHERE
+    People and group chats  links to /people and /chats (with the invite count)
+    Your profile            name and pronouns (form #pf-who -> your account route);
+                            picture, bio, major, minor, class year, what you're
+                            looking for, usernames (form #pf-profile, new to the site)
+    Clubs and interests     your clubs (#pf-clubs); your interests (#pf-answers ->
+                            your account route)
+    Account and safety      blocked people and change password (#pf-account);
+                            report links to /report; delete your account
+                            (#pf-delete -> your account_delete route)
+
+  Every Save asks "Are you sure?" first and lists what changed (the dialog at the
+  end of this file); Delete asks with a warning instead. Without JavaScript the
+  forms simply post.
+
+  Kept clear of names your tests watch: no .card class, no bare <h2>, and no
+  class or id containing pill, score, shared, waiting or dock.
+
+  NEEDS FROM THE ROUTE: profile, pronoun_label, majors, minors, years, socials,
+  text_max, code_minutes, password_min, joined, blocked, code_sent, note, and
+  (RELOCATION, the same names account.html uses) questions, selected, optional,
+  pronoun_options, pronouns_now, name_max, counts. invite_count comes from your
+  inject_dock, as in shell.html.
+#}
 
 {% block appstyle %}
       /* ---------- forms: the same look as account.html's .acct ---------- */
@@ -17,6 +66,19 @@
       .pf textarea { max-width: 34rem; resize: vertical; }
       .pf .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
       .pf .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+      /* RELOCATION: two forms in one window, divided like two rows */
+      .win > .pf + .pf { margin-top: 0; border-top: 2px dashed var(--line); }
+
+      /* RELOCATION: the questions from your _questions.html, as account.html draws them */
+      .pf fieldset {
+        margin: 0; padding: 12px 14px;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      .pf legend { padding: 0 6px; font-size: .9rem; font-weight: 700; }
+      .pf fieldset label {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin: 0 10px 6px 0; font-weight: 400;
+      }
 
       /* ---------- one setting = one row ---------- */
       .pf-row { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 2px dashed var(--line); }
@@ -26,7 +88,6 @@
         letter-spacing: .05em; text-transform: uppercase; }
       .pf-count { color: var(--muted); font-size: .8rem; }
 
-      /* a secondary button or link, next to the page's normal buttons */
       /* a secondary key: white, raised, like base.html's button.ghost and .nav a */
       .pf .ghost, .pf-jump a {
         display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -49,7 +110,7 @@
       /* ---------- jump links under the heading ---------- */
       .pf-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
 
-      /* ---------- placeholders: settings that live on another page ---------- */
+      /* ---------- links to another page (your /report page) ---------- */
       .pf-place { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px;
         background: var(--paper); border: 2px dashed var(--line-2); border-radius: var(--r); }
       .pf-place p { flex: 1 1 16rem; margin: 0; color: var(--navy); font-size: .92rem; }
@@ -99,6 +160,17 @@
       .pf-tags li { padding: 3px 8px; color: var(--navy); background: var(--paper);
         border: 2px solid var(--line); border-radius: var(--r-sm); font: 700 .8rem/1.2 var(--sans); }
 
+      /* ---------- RELOCATION: deleting the account, as account.html's .leaving ---------- */
+      /* Red, and set apart by a double rule, because it is the one thing on this
+         page that cannot be undone. */
+      .win > .pf.pf-leaving { border-top: 3px double var(--line); }
+      .pf-leaving ul { margin: 0; padding-left: 20px; color: var(--navy); }
+      .pf-leaving li { margin: 3px 0; font-size: .92rem; }
+      .pf-leaving .heavy { margin: 0; font-weight: 700; }
+      .pf-leaving .keeps { margin: 0; color: var(--muted); font-size: .88rem; }
+      .pf-leaving button[type="submit"] { background: var(--danger); border-color: var(--danger); color: #fff; }
+      .pf-leaving button[type="submit"]:hover { background: #7f1d17; }
+
       /* ---------- "Are you sure?" ---------- */
       .pf-dialog { width: min(26rem, calc(100vw - 2rem)); padding: 16px; color: var(--navy); background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r); box-shadow: var(--drop); font-family: var(--sans); }
@@ -110,12 +182,18 @@
       .pf-dialog .warn { color: var(--danger); }
       .pf-dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
       .pf-dialog .row button { min-height: 40px; margin-bottom: 3px; }
+      .pf-dialog .row button.danger { background: var(--danger); border-color: var(--danger); }   /* RELOCATION */
+      .pf-dialog .row button.danger:hover { background: #7f1d17; }
       .pf [hidden], .pf-dialog [hidden] { display: none !important; }
 {% endblock %}
 
 {% block main %}
 {%- macro note_for(section) -%}
   {%- if note and note.section == section -%}
+    {%- if note.saved is none -%}
+      {#- RELOCATION: what your own account route flashed, word for word. -#}
+      <div class="pf-note" role="status">{{ note.messages | join(" ") }}</div>
+    {%- else -%}
     <div class="pf-note{% if not note.saved %} bad{% endif %}" role="{{ 'status' if note.saved else 'alert' }}">
       {%- if note.saved or note.messages | length == 1 -%}
         {%- if not note.saved %}Not saved: {% endif %}{{ note.messages | join(" ") }}
@@ -123,6 +201,7 @@
         Not saved:<ul>{% for m in note.messages %}<li>{{ m }}</li>{% endfor %}</ul>
       {%- endif -%}
     </div>
+    {%- endif -%}
   {%- endif -%}
 {%- endmacro -%}
 {%- macro picture(name, seed, url, size="", id=None) -%}
@@ -134,7 +213,7 @@
 
   <div class="pagehead">
     <h1>Your profile</h1>
-    <p class="lede">How you come across to other students, your clubs, and keeping your account safe.</p>
+    <p class="lede">Everything about you in one place: how you come across, your clubs and interests, and your account.</p>
   </div>
 
   <nav class="pf-jump" aria-label="On this page">
@@ -143,13 +222,32 @@
     <a href="#safety">Account and safety</a>
   </nav>
 
+  {# ======================= RELOCATION: people and group chats =======================
+     Find people and Group chats, moved here from the account menu. The invite
+     count is the same number the menu showed (invite_count, from your inject_dock);
+     the friends panel in the tab bar shows the invites themselves. #}
+  <section class="win sec-chat" id="around">
+    <div class="bar">{{ ui.icon("search") }}<span class="bar-title">People and group chats</span><span class="grip"></span></div>
+    <div class="pf">
+      <div class="row">
+        <a class="ghost" href="{{ url_for('people') }}">Find people</a>
+        <a class="ghost" href="{{ url_for('chats') }}">Group chats{%
+          if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
+      </div>
+    </div>
+  </section>
+
   {# ======================= 1. your profile ======================= #}
   <section class="win sec-place" id="profile">
     <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Your profile</span><span class="grip"></span></div>
-    <form class="pf" id="pf-profile" method="post" action="{{ url_for('profile_details') }}"
-          enctype="multipart/form-data" data-group="Your profile" data-confirm="Save changes to your profile?">
-      {{ note_for("profile") }}
-      <p class="hint">Any Save button in this window saves every change in it.</p>
+
+    {# RELOCATION: name and pronouns, moved from Your account. The same fields as
+       account.html's first form (section=who, name, pronouns), saved by your
+       account route. Its own form, as on Your account, so saving your name can
+       never rewrite anything else. #}
+    <form class="pf" id="pf-who" method="post" action="{{ url_for('profile_name_interests') }}"
+          data-group="Name and pronouns" data-confirm="Save your name and pronouns?">
+      {{ note_for("who") }}
 
       <details class="pf-preview">
         <summary>Preview of your profile</summary>
@@ -178,6 +276,31 @@
         </div>
       </details>
 
+      {# (b) (c) name and pronouns #}
+      <section class="pf-row" data-section="Name and pronouns" id="pf-name">
+        <h3>Name and pronouns</h3>
+        <input type="hidden" name="section" value="who" />
+        <label>Your name
+          <input type="text" name="name" value="{{ current_user.name }}"
+                 maxlength="{{ name_max }}" required autocomplete="name" />
+        </label>
+        <label>Pronouns
+          <select name="pronouns">
+            {% for slug, label in pronoun_options.items() %}
+              <option value="{{ slug }}" {% if slug == pronouns_now %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <p class="pf-locked">{{ ui.icon("lock") }}<span>{{ current_user.email }} &mdash; your UMass Boston email. It can't be changed: it is how you sign in, and only you see it here.</span></p>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+    </form>
+
+    <form class="pf" id="pf-profile" method="post" action="{{ url_for('profile_details') }}"
+          enctype="multipart/form-data" data-group="Your profile" data-confirm="Save changes to your profile?">
+      {{ note_for("profile") }}
+      <p class="hint">From here down, any Save button saves every change from Profile picture to Your usernames.</p>
+
       {# (a) picture #}
       <section class="pf-row" data-section="Profile picture" id="pf-picture">
         <h3>Profile picture</h3>
@@ -191,20 +314,10 @@
               <button type="button" class="ghost" id="pf-remove" {% if not current_user.picture_url %}hidden{% endif %}>Remove</button>
             </div>
             <input type="hidden" name="remove_picture" id="pf-remove-flag" value="" />
-            <p class="hint" style="margin-top:6px">JPG, PNG, GIF or WebP, up to 2 MB. With no picture, your initials show instead.</p>
+            <p class="hint" style="margin-top:6px">JPG, PNG, GIF or WebP, up to 2 MB. With no picture, your initials show instead. You can also change it from your account menu, top right.</p>
           </div>
         </div>
         <div class="row"><button type="submit">Save</button></div>
-      </section>
-
-      {# (b) (c) name and pronouns: placeholder, they are saved on Your account #}
-      <section class="pf-row" id="pf-name">
-        <h3>Name and pronouns</h3>
-        <div class="pf-place">
-          <p><b>{{ current_user.name }}</b>{% if pronoun_label %}<span class="pronouns">{{ pronoun_label }}</span>{% endif %}</p>
-          <a class="ghost" href="{{ url_for('account') }}">Change on Your account</a>
-        </div>
-        <p class="pf-locked">{{ ui.icon("lock") }}<span>{{ current_user.email }} &mdash; your UMass Boston email. It can't be changed, and only you see it here.</span></p>
       </section>
 
       {# (d) bio #}
@@ -295,7 +408,7 @@
   <section class="win sec-club" id="clubs">
     <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Clubs and interests</span><span class="grip"></span></div>
     <form class="pf" id="pf-clubs" method="post" action="{{ url_for('profile_clubs') }}"
-          data-group="Clubs and interests" data-confirm="Leave the clubs you ticked?" data-confirm-ok="Leave">
+          data-group="Your clubs" data-confirm="Leave the clubs you ticked?" data-confirm-ok="Leave">
       {{ note_for("clubs") }}
 
       {# (j) your clubs #}
@@ -324,14 +437,21 @@
         {% endif %}
         <div class="row"><a class="ghost" href="{{ url_for('clubs') }}">Browse all clubs</a></div>
       </section>
+    </form>
 
-      {# (k) interests: placeholder, they are saved on Your account #}
-      <section class="pf-row" id="pf-interests">
+    {# (k) RELOCATION: your interests, moved from Your account. The same partial
+       and fields as account.html's second form (section=answers, q<id>), saved
+       by your account route through read_answers() and save_answers(). #}
+    <form class="pf" id="pf-answers" method="post" action="{{ url_for('profile_name_interests') }}"
+          data-group="Your interests" data-confirm="Save your answers?" data-confirm-ok="Save answers">
+      {{ note_for("interests") }}
+      <section class="pf-row" data-section="Your interests" id="pf-interests">
         <h3>Your interests</h3>
-        <div class="pf-place">
-          <p>The answers you're matched on are kept on Your account, together with your name and pronouns.</p>
-          <a class="ghost" href="{{ url_for('account') }}">Change your answers</a>
-        </div>
+        <input type="hidden" name="section" value="answers" />
+        <p class="hint">These are what you are matched on. Changing them changes who you are
+          suggested, and who is suggested you.</p>
+        {% include "_questions.html" %}
+        <div class="row"><button type="submit">Save answers</button></div>
       </section>
     </form>
   </section>
@@ -396,7 +516,8 @@
         <div class="row"><button type="submit">Save</button></div>
       </section>
 
-      {# (n) reporting: placeholder, your /report page does it #}
+      {# (n) reporting: your /report page. RELOCATION: these two links used to be
+         in the account menu too; this is now their only place outside /report. #}
       <section class="pf-row" id="pf-report">
         <h3>Report a problem</h3>
         <div class="pf-place">
@@ -405,14 +526,55 @@
           <a class="ghost" href="{{ url_for('report_new', kind='contact') }}">Get in touch / report a problem</a>
         </div>
       </section>
+    </form>
 
-      {# (p) deleting the account: placeholder, it lives under Leaving on Your account #}
-      <section class="pf-row" id="pf-delete">
+    {# (p) RELOCATION: delete your account, moved from Your account ("Leaving").
+       The same wording, counts and field as account.html (password), handed to
+       your account_delete route. Its own form, as on Your account. #}
+    <form class="pf pf-leaving" id="pf-delete" method="post" action="{{ url_for('profile_delete') }}"
+          data-group="Delete your account" data-confirm="Delete your account?" data-confirm-ok="Delete my account"
+          data-danger="This cannot be undone. Everything listed under Delete your account goes with it.">
+      {{ note_for("leaving") }}
+      <section class="pf-row" id="pf-delete-row">
         <h3>Delete your account</h3>
-        <div class="pf-place">
-          <p>Deleting your account is on Your account, under Leaving. It shows exactly what goes with it first.</p>
-          <a class="ghost" href="{{ url_for('account') }}">Go to Your account</a>
-        </div>
+        <p class="heavy">This cannot be undone. Deleting your account removes:</p>
+        <ul>
+          <li>your answers, and your place in every hub</li>
+          <li>{{ counts.friends }} friendship{{ "" if counts.friends == 1 else "s" }},
+              and the conversation with each of them</li>
+          <li>{{ counts.messages }} message{{ "" if counts.messages == 1 else "s" }} you have
+              written, including in hub and group chats</li>
+          <li>{{ counts.meetups }} meetup{{ "" if counts.meetups == 1 else "s" }} you posted
+              and {{ counts.pins }} map pin{{ "" if counts.pins == 1 else "s" }}</li>
+          <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played
+              &mdash; <span class="heavy">these disappear from the other
+              player's history too</span></li>
+          <li>your profile picture and everything on this page</li>
+        </ul>
+        {% if counts.passing %}
+          <p class="keeps">
+            {{ "These group chats" if counts.passing | length > 1 else "This group chat" }}
+            will carry on without you, managed by whoever has been in
+            {{ "them" if counts.passing | length > 1 else "it" }} longest:
+            <b>{{ counts.passing | join(", ") }}</b>.
+          </p>
+        {% endif %}
+        {% if counts.closing %}
+          <p class="keeps">
+            {{ "These group chats have" if counts.closing | length > 1 else "This group chat has" }}
+            nobody else in {{ "them" if counts.closing | length > 1 else "it" }},
+            so {{ "they" if counts.closing | length > 1 else "it" }} will close:
+            <b>{{ counts.closing | join(", ") }}</b>.
+          </p>
+        {% endif %}
+        <p class="keeps">What other people wrote in hub, group and campus
+          chats stays where it is. Your name comes off anything you reported.</p>
+        {# The password, not the email, as on Your account: the email is printed
+           in the account menu on every page, so it would confirm nothing. #}
+        <label>Type your password to confirm
+          <input type="password" name="password" required autocomplete="current-password" />
+        </label>
+        <div class="row"><button type="submit">Delete my account</button></div>
       </section>
     </form>
   </section>
@@ -441,7 +603,8 @@
   (function () {
     var page = document.getElementById("pf-profile");
     if (!page) { return; }
-    var IDS = ["pf-profile", "pf-clubs", "pf-account"];
+    // RELOCATION: pf-who, pf-answers and pf-delete added.
+    var IDS = ["pf-who", "pf-profile", "pf-clubs", "pf-answers", "pf-account", "pf-delete"];
 
     // ---- every named value in a form, so changes can be listed
     function values(form) {
@@ -462,7 +625,9 @@
     ourForms().forEach(function (form) { form.pfStart = values(form); });
     window.pfLeaving = false;
 
-    // The data-section names whose fields differ from how the form started.
+    // The names of the settings whose fields differ from how the form started:
+    // a question's own wording inside your _questions.html (RELOCATION), or the
+    // data-section of the row anywhere else.
     function changes(form) {
       if (!form.pfStart) { return []; }
       var now = values(form), seen = {}, out = [];
@@ -470,14 +635,18 @@
         if (JSON.stringify(now[name]) === JSON.stringify(form.pfStart[name] || [])) { return; }
         var field = form.elements[name];
         if (field && !field.closest && field[0]) { field = field[0]; }
+        var set = field && field.closest ? field.closest("fieldset") : null;
+        var legend = set ? set.querySelector("legend") : null;
         var holder = field && field.closest ? field.closest("[data-section]") : null;
-        var label = holder ? holder.dataset.section : name;
+        var label = legend ? legend.textContent.trim() : holder ? holder.dataset.section : name;
         if (!seen[label]) { seen[label] = true; out.push(label); }
       });
       return out;
     }
+    // Forms with unsaved changes. The delete form never counts: its password box
+    // confirms a delete, it is not a setting anybody could lose (RELOCATION).
     function dirty(except) {
-      return ourForms().filter(function (f) { return f !== except && changes(f).length; })
+      return ourForms().filter(function (f) { return f !== except && !f.dataset.danger && changes(f).length; })
                        .map(function (f) { return f.dataset.group; });
     }
 
@@ -504,12 +673,14 @@
       el("pf-confirm-warn").textContent = opts.warn || "";
       el("pf-confirm-warn").hidden = !opts.warn;
       el("pf-confirm-ok").textContent = opts.ok || "Save changes";
+      el("pf-confirm-ok").classList.toggle("danger", !!opts.danger);     // RELOCATION
       el("pf-confirm-ok").hidden = !!opts.alertOnly;
       el("pf-confirm-cancel").textContent = opts.alertOnly ? "OK" : "Cancel";
       box.returnValue = "";
       box.onclose = function () { box.onclose = null; if (box.returnValue === "ok" && onOk) { onOk(); } };
       box.showModal();
-      (opts.alertOnly ? el("pf-confirm-cancel") : el("pf-confirm-ok")).focus();
+      // A delete starts on Cancel, so pressing Enter by habit deletes nothing.
+      (opts.alertOnly || opts.danger ? el("pf-confirm-cancel") : el("pf-confirm-ok")).focus();
     }
     function lost(groups) {
       return groups.length ? "Unsaved changes in " + groups.join(" and ") +
@@ -535,6 +706,11 @@
           return;
         }
         e.preventDefault(); e.stopImmediatePropagation();
+        if (form.dataset.danger) {                                       // RELOCATION: Delete your account
+          ask({ title: form.dataset.confirm, body: form.dataset.danger, ok: form.dataset.confirmOk,
+                danger: true, warn: lost(dirty(form)) }, send);
+          return;
+        }
         var changed = changes(form);
         if (!changed.length) {
           ask({ title: "Nothing to save yet", body: "Make a change in " + form.dataset.group + " first.", alertOnly: true });
