@@ -6403,22 +6403,45 @@ def init_map_table_command():
 # functions from across the site into one easy accessible spot.
 
 # This is made as a pipeline for all of the logic from the
-#  back to the profile, so if a change is made to 
+# back to the profile, so if a change is made to 
 # a variable or function elsewhere in the codebase, then
 # we do not need to go through all 700-800 lines of backend for the
 # profile figuring out what needs to be fitted to newer changes.
 # Instead, we can change these references here in an easily
-# accessible spot.
+# accessible spot. 
+
+def beacon_account_page_values(user):
+    """The values the account route gives account.html, under the same names,
+    so the profile can show the same three forms and include _questions.html."""
+    return {
+        # The question list: the same list read_answers() and save_answers() check.
+        "questions": db.session.scalars(db.select(Question).order_by(Question.id)).all(),
+        # The options this student picked: the query save_answers() uses for `had`.
+        "selected": set(db.session.scalars(
+            db.select(UserAnswer.option_id).filter_by(user_id=user.id))),
+        # Questions that may be left blank: what read_answers() checks against.
+        "optional": OPTIONAL_QUESTIONS,
+        # The pronoun choices (slug -> label) and this student's slug.
+        "pronoun_options": PRONOUNS,
+        "pronouns_now": user.pronouns,
+        # The longest name your account route accepts.
+        "name_max": NAME_MAX,
+        # What deleting the account takes with it: account_counts(),
+        # which reads current_user (the profile only ever shows the signed-in
+        # student's own page, so that is this student).
+        "counts": account_counts(),
+    }
+
 
 def beacon_pronoun_label(user):
-    """What to show beside the student's name, or None: your pronoun_label(), so
+    """What to show beside the student's name, or None: pronoun_label(), so
     "prefer not to say" shows nothing here, exactly as everywhere else."""
     return pronoun_label(user.pronouns)
 
 
-
 def beacon_joined_clubs(user):
-    """The students clubs and hubs."""
+    """The student's clubs and hubs (each with .id, .name, .description): every
+    clubs row they have a ClubMember row for."""
     return db.session.scalars(
         db.select(Club)
         .join(ClubMember, ClubMember.club_id == Club.id)
@@ -6427,32 +6450,30 @@ def beacon_joined_clubs(user):
     ).all()
 
 
-
 def beacon_leave_club(user, club_id):
-    """Takes the student out of one club."""
+    """Takes the student out of one club: leave_club route, without the
+    commit, flash and redirect."""
     membership = db.session.get(ClubMember, (user.id, club_id))
     if membership is not None:
         db.session.delete(membership)
 
 
-
 def beacon_end_friendship(user, other):
-    """When `user` blocks `other`: uses unmatch.
+    """When `user` blocks `other`: the same call unmatch route makes.
     end_match may commit by itself; that is safe here, because the Block route
     only adds the block row before this call and commits straight after it."""
     matching.end_match(user.id, other.id)
 
 
-
 def beacon_send_email(to, subject, body):
-    """One plain-text email, same func. as send_verification_message 
-    from MAIL_DEFAULT_SENDER."""
+    """One plain-text email, sent the way send_verification_email() sends the
+    sign-up code: your `mail` and `MailMessage`, from MAIL_DEFAULT_SENDER."""
     mail.send(MailMessage(subject=subject, recipients=[to], body=body))
 
 
-
 def beacon_set_password(user, new_password):
-    """Stores a new password."""
+    """Stores a new password the way your register route does:
+    password_hash=generate_password_hash(password)."""
     user.password_hash = generate_password_hash(new_password)
 
 
@@ -6500,7 +6521,12 @@ import sqlalchemy as _bc_sa
 import sqlalchemy.orm as _bc_orm
 from werkzeug import security as _bc_security
 
-# Jan 2024 major and minor list, as well as years of study.
+
+# ----------------------------------------------------------------------------- lists
+
+# UMass Boston undergraduate majors. Sources: the university's "College and Major
+# Listing" (January 2024) and the College of Management's five new majors.
+# Check against the current catalog before launch.
 BEACON_MAJORS = ["Undeclared"] + sorted([
     "Accounting", "Africana Studies", "Aging Studies", "American Studies", "Anthropology", "Art",
     "Asian Studies", "Biochemistry", "Biology", "Chemistry", "Classical Languages", "Classical Studies",
@@ -6516,6 +6542,8 @@ BEACON_MAJORS = ["Undeclared"] + sorted([
     "Sociology", "Sport Leadership and Administration", "Theatre Arts", "Urban Public Health",
 ])
 
+# UMass Boston undergraduate minors. Source: Office of Institutional Research,
+# Table 32 (fall 2017 to fall 2024). "None" is added by the template.
 BEACON_MINORS = sorted([
     "Africana Studies", "Aging Studies", "American Studies", "Anthropology", "Arabic", "Art History",
     "Biology", "Chemistry", "Chinese", "Cinema Studies", "Classical Languages", "Classical Studies",
@@ -6534,8 +6562,8 @@ BEACON_MINORS = sorted([
 
 BEACON_YEARS = ["First-year", "Sophomore", "Junior", "Senior", "Graduate student"]
 
-# For platform inputting; github, instagram, linkedin.
-
+# One box per platform, username only. max = that platform's own username limit.
+# Patterns are valid in both the browser (pattern="...") and Python re.fullmatch.
 BEACON_SOCIALS = [
     {"key": "github", "label": "GitHub", "prefix": "github.com/", "max": 39,
      "pattern": r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}",
@@ -6554,7 +6582,7 @@ BEACON_TEXT_MAX = 200                      # bio and "looking for"
 BEACON_CODE_MINUTES = 10                   # a password code lasts this long
 BEACON_CODE_RESEND_SECONDS = 60            # at most one code a minute
 BEACON_CODE_MAX_TRIES = 5                  # wrong codes before it stops working
-BEACON_PASSWORD_MIN = 8                    # the same minimum as reg. route
+BEACON_PASSWORD_MIN = 8                    # the same minimum as your register route
 
 
 def _bc_now():
@@ -6562,7 +6590,7 @@ def _bc_now():
     return _bc_dt.datetime.now(_bc_dt.timezone.utc).replace(tzinfo=None)
 
 
-# establishing tables
+# ----------------------------------------------------------------------------- tables
 
 _bc_user_pk = User.__mapper__.primary_key
 if len(_bc_user_pk) != 1 or not isinstance(_bc_user_pk[0].type, _bc_sa.Integer):
@@ -6605,7 +6633,7 @@ class BeaconPasswordCode(db.Model):
     tries = db.Column(db.Integer, nullable=False, default=0)
 
 
-#  checking form values
+# ----------------------------------------------------------------------------- checking form values
 
 _bc_control_chars = _bc_re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -6655,7 +6683,49 @@ def _bc_back(section, messages, saved=False):
     return _bc_flask.redirect(_bc_flask.url_for("profile") + "#" + section)
 
 
-# section to manage the images
+# RELOCATION: the two helpers below are new.
+
+def _bc_hand_over(endpoint, section, anchor):
+    """Runs one of YOUR routes (account or account_delete) on this same request,
+    unchanged. The profile's forms send the same fields account.html sends
+    (section, name, pronouns, q<id>, password), so your route reads, checks,
+    saves and flashes exactly as it does for Your account.
+
+    Only where it sends the student next is changed. Your route answers in one
+    of three ways (checked against your account route, Oct 24):
+      - it saved, flashed "Saved." and redirected to /account: the student goes
+        back to this window of the profile, with your message inside it;
+      - it found a problem (a blank or too-long name, a missing answer), flashed
+        it and drew Your account again: the same, back to this window with your
+        message, so the student never leaves the profile;
+      - anything else (signing out after a delete, say) is passed on untouched."""
+    response = _bc_flask.make_response(app.view_functions[endpoint]())
+    sent_to_account = (response.status_code in (301, 302, 303, 307, 308)
+                       and _bc_url.urlsplit(response.location or "").path == _bc_flask.url_for("account"))
+    messages = []
+    if sent_to_account or (response.status_code == 200 and _bc_login.current_user.is_authenticated):
+        # What your route flashed: still queued after a redirect, or already
+        # read by the Your account page it drew (Flask keeps them for the request).
+        messages = [str(m) for m in _bc_flask.get_flashed_messages()]
+    if sent_to_account or messages:
+        if messages:
+            # saved=None: these are your route's own words, shown as they are
+            # (it decides what counts as saved, not this part).
+            _bc_flask.session["pf_note"] = {"section": section, "saved": None, "messages": messages}
+        return _bc_flask.redirect(_bc_flask.url_for("profile") + "#" + anchor)
+    return response
+
+
+def _bc_safe_next(value):
+    """Where the account menu's photo form was sent from: a path on this site
+    only (like /people). Anything else, such as another website's address, goes
+    to the profile instead."""
+    if isinstance(value, str) and _bc_re.fullmatch(r"/(?![/\\])[^\s\\\x00-\x1f\x7f]*", value):
+        return value
+    return _bc_flask.url_for("profile")
+
+
+# ----------------------------------------------------------------------------- pictures
 
 def _bc_upload_folder():
     folder = app.config.get("BEACON_UPLOAD_FOLDER") or _bc_os.path.join(app.static_folder, "uploads")
@@ -6664,13 +6734,13 @@ def _bc_upload_folder():
 
 
 def _bc_is_image(head):
-    """True for PNG, JPEG, GIF or WebP, judged by the files first bytes (not its name)."""
+    """True for PNG, JPEG, GIF or WebP, judged by the file's first bytes (not its name)."""
     return (head.startswith(b"\x89PNG\r\n\x1a\n") or head.startswith(b"\xff\xd8\xff")
             or head[:6] in (b"GIF87a", b"GIF89a") or (head[:4] == b"RIFF" and head[8:12] == b"WEBP"))
 
 
 def _bc_picture_path(name):
-    """The filess path, only for names this code made (u<id>-<hex>.<ext>)."""
+    """The file's path, only for names this code made (u<id>-<hex>.<ext>)."""
     if not name or not _bc_re.fullmatch(r"u\d+-[0-9a-f]{12}\.(png|jpg|gif|webp)", name):
         return None
     return _bc_os.path.join(_bc_upload_folder(), name)
@@ -6703,11 +6773,24 @@ def _bc_store_picture(row, upload):
 
 def beacon_picture_url(user_id):
     """The picture's address, or None (the page then shows your initials avatar).
-    Looked up once per request per student."""
+    Looked up once per request per student.
+
+    RELOCATION: the account menu now shows the photo on every page, so this runs
+    on every page with your top bar: one small query, by primary key. It makes
+    sure the beacon_ tables exist first, and if they could not be made it shows
+    initials rather than breaking the page."""
     cache = _bc_flask.g.setdefault("_bc_pictures", {}) if _bc_flask.has_request_context() else {}
     if user_id not in cache:
-        row = db.session.get(BeaconProfile, user_id)
-        cache[user_id] = row.picture if row else None
+        _bc_ensure_tables()
+        if not _bc_tables_ready:
+            return None
+        with db.session.no_autoflush:          # a lookup only: never writes pending changes
+            row = db.session.get(BeaconProfile, user_id)
+        name = row.picture if row else None
+        path = _bc_picture_path(name)
+        # The file itself must be there too: if it is gone (a server whose disk is
+        # wiped on each redeploy, say), initials show instead of a broken image.
+        cache[user_id] = name if path and _bc_os.path.isfile(path) else None
     name = cache[user_id]
     if not name:
         return None
@@ -6716,7 +6799,7 @@ def beacon_picture_url(user_id):
     return _bc_flask.url_for("static", filename="uploads/" + name)
 
 
-# creating helpers for routes
+# ----------------------------------------------------------------------------- helpers for your own routes
 
 def beacon_profile_row(user_id):
     """The student's profile row, made on first use (not committed)."""
@@ -6742,11 +6825,11 @@ def beacon_is_blocked(a_id, b_id):
         | ((BeaconBlock.blocker_id == b_id) & (BeaconBlock.blocked_id == a_id))).first() is not None
 
 
-#  when account_delete removes a student
+# ----------------------------------------------------------------------------- when your account_delete removes a student
 
 @_bc_sa.event.listens_for(User, "before_delete")
 def _bc_user_leaving(mapper, connection, target):
-    """Runs inside your account_deletes own transaction, just before the users row
+    """Runs inside your account_delete's own transaction, just before the users row
     is deleted: removes this student's beacon_ rows (so it works the same on any
     database) and remembers the picture file to delete once the deletion commits."""
     profile = BeaconProfile.__table__
@@ -6772,7 +6855,7 @@ def _bc_keep_files_after_rollback(session):
     session.info.pop("_bc_files_to_remove", None)
 
 
-# Routes
+# ----------------------------------------------------------------------------- the routes
 
 @_bc_login.login_required
 def _bc_profile_page():
@@ -6797,6 +6880,9 @@ def _bc_profile_page():
         text_max=BEACON_TEXT_MAX, code_minutes=BEACON_CODE_MINUTES, password_min=BEACON_PASSWORD_MIN,
         joined=beacon_joined_clubs(me), blocked=blocked, code_sent=code_sent,
         note=_bc_flask.session.pop("pf_note", None),
+        # RELOCATION: what account.html is given (questions, selected, optional,
+        # pronoun_options, pronouns_now, name_max, counts), from part 1.
+        **beacon_account_page_values(me),
     )
 
 
@@ -6953,6 +7039,70 @@ def _bc_block_user(other_id):
     return _bc_back("safety", ["You blocked %s." % other.name], saved=True)
 
 
+# the three routes below are new.
+
+@_bc_login.login_required
+def _bc_profile_name_interests():
+    """The profile's "Name and pronouns" and "Your interests" forms. They carry
+    the same hidden `section` as account.html's forms ("who" or "answers"), and
+    your account route does the rest."""
+    _bc_same_site()
+    section = _bc_flask.request.form.get("section")
+    if section == "who":
+        return _bc_hand_over("account", "who", "profile")
+    if section == "answers":
+        return _bc_hand_over("account", "interests", "pf-interests")
+    _bc_flask.abort(400)
+
+
+@_bc_login.login_required
+def _bc_profile_delete():
+    """The profile's "Delete your account" form: your account_delete route checks
+    the password and deletes, exactly as from Your account. A wrong password comes
+    back to this window with your route's message."""
+    _bc_same_site()
+    return _bc_hand_over("account_delete", "leaving", "pf-delete")
+
+
+@_bc_login.login_required
+def _bc_profile_picture():
+    """The account menu's photo control (shell.html), on every page: a new photo,
+    or remove it. Saves only the photo, then goes back to the page it was sent
+    from, with what happened as one of your usual flashed messages."""
+    _bc_same_site()
+    # `next` is in the address, not the form, so it can be read without
+    # reading a body that may be too big.
+    back = _bc_safe_next(_bc_flask.request.args.get("next"))
+    if _bc_too_big():
+        _bc_flask.flash("Your photo was not changed: the picture must be under 2 MB.")
+        return _bc_flask.redirect(back)
+    row = beacon_profile_row(_bc_login.current_user.id)
+    if _bc_flask.request.form.get("remove") == "1":
+        if not row.picture:
+            db.session.rollback()
+            _bc_flask.flash("You don't have a photo to remove.")
+            return _bc_flask.redirect(back)
+        old_picture, row.picture = row.picture, None
+        message = "Your photo is removed. Your initials show instead."
+    else:
+        upload = _bc_flask.request.files.get("picture")
+        if not upload or not upload.filename:
+            db.session.rollback()
+            _bc_flask.flash("Your photo was not changed: pick a picture first.")
+            return _bc_flask.redirect(back)
+        old_picture, problem = _bc_store_picture(row, upload)
+        if problem:
+            db.session.rollback()
+            _bc_flask.flash("Your photo was not changed: " + problem[0].lower() + problem[1:])
+            return _bc_flask.redirect(back)
+        message = "Your photo is saved."
+    db.session.commit()
+    if old_picture and old_picture != row.picture:
+        _bc_remove_file(old_picture)              # only once the new value is saved
+    _bc_flask.flash(message)
+    return _bc_flask.redirect(back)
+
+
 def _bc_serve_upload(name):
     """Pictures, when BEACON_UPLOAD_FOLDER is outside the static folder."""
     path = _bc_picture_path(name)
@@ -6968,12 +7118,20 @@ BEACON_ROUTES = [
     ("/profile/account", "profile_account", _bc_profile_account, ["POST"]),
     ("/profile/password-code", "password_code", _bc_password_code, ["POST"]),
     ("/block/<int:other_id>", "block_user", _bc_block_user, ["POST"]),
+    # RELOCATION: new
+    ("/profile/name-and-interests", "profile_name_interests", _bc_profile_name_interests, ["POST"]),
+    ("/profile/delete", "profile_delete", _bc_profile_delete, ["POST"]),
+    ("/profile/picture", "profile_picture", _bc_profile_picture, ["POST"]),
 ]
 
 
-# The routes profile.html links to.
-BEACON_ROUTES_NEEDED = ["account", "report_new", "clubs", "chat"]
-BEACON_PART_1 = ["beacon_pronoun_label", "beacon_joined_clubs", "beacon_leave_club",
+# ----------------------------------------------------------------------------- set-up check
+
+# Your routes that profile.html links to, or hands its forms to.
+# account_delete, people and chats added.
+BEACON_ROUTES_NEEDED = ["account", "account_delete", "report_new", "clubs", "chat", "people", "chats"]
+BEACON_PART_1 = ["beacon_account_page_values",                                  # RELOCATION: new
+                 "beacon_pronoun_label", "beacon_joined_clubs", "beacon_leave_club",
                  "beacon_end_friendship", "beacon_send_email", "beacon_set_password"]
 
 
@@ -7001,15 +7159,18 @@ def beacon_setup_problems():
                 except Exception:
                     found.append("profile.html links to %s(%s), and your route can't be called that way."
                                  % (endpoint, ", ".join("%s=..." % k for k in args)))
-    try:
-        app.jinja_env.get_template("profile.html")
-    except Exception as error:                         # missing, or a syntax error in it
-        found.append("Template profile.html: %s" % error)
+    for template in ("profile.html", "_questions.html"):     # RELOCATION: profile.html includes _questions.html
+        try:
+            app.jinja_env.get_template(template)
+        except Exception as error:                     # missing, or a syntax error in it
+            found.append("Template %s: %s" % (template, error))
     try:
         shell = app.jinja_env.loader.get_source(app.jinja_env, "shell.html")[0]
-        if "url_for('profile')" not in shell and 'url_for("profile")' not in shell:
-            found.append("shell.html has no link to the profile yet. Add the \"Your profile\" line to its "
-                         "account menu (HOW_TO_PUSH.md, step 3).")
+        # RELOCATION: the account menu links to the profile and holds the photo control.
+        for endpoint, ends in (("profile", ")"), ("profile_picture", "")):
+            if ("url_for('%s'%s" % (endpoint, ends)) not in shell and ('url_for("%s"%s' % (endpoint, ends)) not in shell:
+                found.append("shell.html's account menu has no url_for('%s') yet. Use the account menu "
+                             "from this kit's shell.html (HOW_TO_PUSH.md, step 3)." % endpoint)
     except Exception as error:
         found.append("Could not read shell.html: %s" % error)
     if "mail" not in app.extensions:
@@ -7029,6 +7190,7 @@ def _bc_tables():
 
 
 _bc_tables_checked = []
+_bc_tables_ready = []        #  [True] once the three tables are known to exist
 
 
 def _bc_ensure_tables():
@@ -7039,6 +7201,7 @@ def _bc_ensure_tables():
     _bc_tables_checked.append(True)
     try:
         db.metadata.create_all(bind=db.engine, tables=_bc_tables(), checkfirst=True)
+        _bc_tables_ready.append(True)
     except Exception:                       # never take the site down over this
         db.session.rollback()
         app.logger.exception("Beacon profile: could not create the beacon_ tables; "
@@ -7065,7 +7228,7 @@ def _bc_register():
     if app.config.get("BEACON_UPLOAD_FOLDER"):
         app.add_url_rule("/uploads/<name>", "beacon_upload", _bc_serve_upload)
     if not hasattr(User, "picture_url"):
-        # profile.html reads current_user.picture_url.
+        # profile.html and the top bar in shell.html read current_user.picture_url.
         User.picture_url = property(lambda user: beacon_picture_url(user.id))
     app.before_request(_bc_ensure_tables)
 
@@ -7091,6 +7254,21 @@ def _bc_cli_check():
                 except Exception as error:
                     problems.append("%s() failed on the student with id %s: %s: %s"
                                     % (name, user.id, type(error).__name__, error))
+            #  the values copied from your account route, read as that
+            # student (account_counts() reads current_user).
+            with app.test_request_context():
+                _bc_login.login_user(user)
+                try:
+                    values = beacon_account_page_values(user)
+                    wanted = {"questions", "selected", "optional", "pronoun_options", "pronouns_now",
+                              "name_max", "counts"}
+                    if not wanted <= set(values):
+                        problems.append("beacon_account_page_values() is missing: %s"
+                                        % ", ".join(sorted(wanted - set(values))))
+                except Exception as error:
+                    problems.append("beacon_account_page_values() failed on the student with id %s: %s: %s"
+                                    % (user.id, type(error).__name__, error))
+                _bc_login.logout_user()
         db.session.rollback()
     if problems:
         _bc_click.echo("Beacon profile: %d thing(s) to fix:" % len(problems))
