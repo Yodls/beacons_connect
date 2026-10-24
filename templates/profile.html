@@ -1,0 +1,606 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Your profile{% endblock %}
+
+
+
+{% block appstyle %}
+      /* ---------- forms: the same look as account.html's .acct ---------- */
+      .pf { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+      .pf label { display: block; color: var(--navy); font-size: .88rem; font-weight: 700; }
+      .pf input[type="text"], .pf input[type="password"], .pf select, .pf textarea {
+        display: block; width: 100%; max-width: 22rem; margin-top: 4px; padding: 9px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 .95rem/1.35 var(--sans);
+      }
+      .pf textarea { max-width: 34rem; resize: vertical; }
+      .pf .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .pf .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+
+      /* ---------- one setting = one row ---------- */
+      .pf-row { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 2px dashed var(--line); }
+      .pf > .pf-row:first-of-type { padding-top: 0; border-top: 0; }
+      .pf-row h3 { margin: 0; color: var(--navy); }
+      .pf-row h3 small { margin-left: 6px; color: var(--muted); font-size: .72rem; font-weight: 700;
+        letter-spacing: .05em; text-transform: uppercase; }
+      .pf-count { color: var(--muted); font-size: .8rem; }
+
+      /* a secondary button or link, next to the page's normal buttons */
+      /* a secondary key: white, raised, like base.html's button.ghost and .nav a */
+      .pf .ghost, .pf-jump a {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        width: auto; min-height: 40px; margin: 0 0 3px; padding: .35rem .9rem;
+        background: #fff; color: var(--navy); border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font: 700 .92rem/1.2 var(--sans); text-decoration: none; cursor: pointer;
+      }
+      .pf .ghost:hover, .pf-jump a:hover { background: var(--paper); text-decoration: none; }
+      .pf .ghost:active, .pf-jump a:active { transform: translateY(3px); box-shadow: none; }
+      .pf .ghost input[type="file"] { display: none; }
+
+      /* ---------- what happened after a save ---------- */
+      .pf-note { margin: 0; padding: 10px 12px; color: var(--navy); background: var(--paper);
+        border: 2px solid var(--navy); border-left-width: 6px; border-radius: var(--r); font-size: .95rem; font-weight: 700; }
+      .pf-note.bad { color: var(--danger); background: var(--danger-bg); border-color: var(--danger); }
+      .pf-note ul { font-weight: 400; }
+      .pf-note ul { margin: 4px 0 0; padding-left: 20px; }
+
+      /* ---------- jump links under the heading ---------- */
+      .pf-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+
+      /* ---------- placeholders: settings that live on another page ---------- */
+      .pf-place { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px;
+        background: var(--paper); border: 2px dashed var(--line-2); border-radius: var(--r); }
+      .pf-place p { flex: 1 1 16rem; margin: 0; color: var(--navy); font-size: .92rem; }
+      .pf-place .ghost { flex: none; }
+      .pf-locked { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: .88rem; }
+      .pf-locked .icon { width: 18px; height: 18px; flex: none; }
+
+      /* ---------- the picture ---------- */
+      .pf-photo { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+      .pf-pic { display: inline-grid; place-items: center; flex: none; }
+      .pf-pic img, .pf-pic .avatar { width: 88px; height: 88px; border-radius: 50%; }
+      .pf-pic img { display: block; object-fit: cover; }
+      .pf-pic img { border: 2px solid var(--navy); }
+      .pf-pic .avatar { font-size: 44px; }
+      .pf-small img, .pf-small .avatar { width: 34px; height: 34px; font-size: 17px; }
+      .pf-mid img, .pf-mid .avatar { width: 64px; height: 64px; font-size: 32px; }
+
+      /* ---------- usernames: the site's address in front of the box ---------- */
+      .pf-handle { display: flex; align-items: stretch; max-width: 26rem; margin-top: 4px; }
+      .pf-handle span { display: flex; align-items: center; padding: 0 10px; color: var(--muted);
+        background: var(--paper); border: 2px solid var(--navy); border-right: 0;
+        border-radius: var(--r-sm) 0 0 var(--r-sm); font-weight: 400; font-size: .86rem; white-space: nowrap; }
+      .pf .pf-handle input { margin-top: 0; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+
+      /* ---------- lists: clubs and blocked people ---------- */
+      .pf-list { margin: 0; padding: 0; list-style: none; }
+      .pf-item { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0;
+        border-top: 2px dashed var(--line); }
+      .pf-item:first-child { border-top: 0; }
+      .pf-item-text { flex: 1 1 12rem; min-width: 0; }
+      .pf-item-text b { display: block; color: var(--navy); }
+      .pf-item-text > span { display: block; color: var(--muted); font-size: .86rem; }
+      .pf-item-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .pf .pf-mark { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+      .pf-item:has(.pf-mark input:checked) .pf-item-text b { text-decoration: line-through; }
+
+      /* ---------- the preview ---------- */
+      .pf-preview { border: 2px solid var(--line); border-radius: var(--r); }
+      .pf-preview > summary { padding: 10px 12px; color: var(--navy); font-weight: 700; cursor: pointer; }
+      .pf-preview-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; padding: 0 12px 12px; }
+      .pf-preview-text { flex: 1 1 16rem; min-width: 0; }
+      .pf-preview-text b { color: var(--navy); font-size: 1.05rem; }
+      .pf-preview-text p { margin: 4px 0 0; color: var(--navy); font-size: .92rem; overflow-wrap: anywhere; }
+      .pf-preview-text .label { display: block; margin-top: 8px; color: var(--muted); font-size: .72rem;
+        font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+      .pf-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+      .pf-tags li { padding: 3px 8px; color: var(--navy); background: var(--paper);
+        border: 2px solid var(--line); border-radius: var(--r-sm); font: 700 .8rem/1.2 var(--sans); }
+
+      /* ---------- "Are you sure?" ---------- */
+      .pf-dialog { width: min(26rem, calc(100vw - 2rem)); padding: 16px; color: var(--navy); background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r); box-shadow: var(--drop); font-family: var(--sans); }
+      .pf-dialog::backdrop { background: rgba(13, 27, 56, .45); }
+      .pf-dialog h3 { margin: 0; font: 400 26px/1 var(--px); }
+      .pf-dialog p { margin: 8px 0 0; font-size: .92rem; }
+      .pf-dialog ul { margin: 10px 0 0; padding: 8px 12px 8px 28px; background: var(--paper);
+        border-radius: var(--r-sm); font-size: .9rem; font-weight: 700; }
+      .pf-dialog .warn { color: var(--danger); }
+      .pf-dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+      .pf-dialog .row button { min-height: 40px; margin-bottom: 3px; }
+      .pf [hidden], .pf-dialog [hidden] { display: none !important; }
+{% endblock %}
+
+{% block main %}
+{%- macro note_for(section) -%}
+  {%- if note and note.section == section -%}
+    <div class="pf-note{% if not note.saved %} bad{% endif %}" role="{{ 'status' if note.saved else 'alert' }}">
+      {%- if note.saved or note.messages | length == 1 -%}
+        {%- if not note.saved %}Not saved: {% endif %}{{ note.messages | join(" ") }}
+      {%- else -%}
+        Not saved:<ul>{% for m in note.messages %}<li>{{ m }}</li>{% endfor %}</ul>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+{%- endmacro -%}
+{%- macro picture(name, seed, url, size="", id=None) -%}
+  <span class="pf-pic {{ size }}"{% if id %} id="{{ id }}"{% endif %}>
+    <img src="{{ url or '' }}" alt="" {% if not url %}hidden{% endif %} />
+    {%- if url %}<span hidden>{{ ui.avatar(name, seed) }}</span>{% else %}{{ ui.avatar(name, seed) }}{% endif -%}
+  </span>
+{%- endmacro -%}
+
+  <div class="pagehead">
+    <h1>Your profile</h1>
+    <p class="lede">How you come across to other students, your clubs, and keeping your account safe.</p>
+  </div>
+
+  <nav class="pf-jump" aria-label="On this page">
+    <a href="#profile">Your profile</a>
+    <a href="#clubs">Clubs and interests</a>
+    <a href="#safety">Account and safety</a>
+  </nav>
+
+  {# ======================= 1. your profile ======================= #}
+  <section class="win sec-place" id="profile">
+    <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Your profile</span><span class="grip"></span></div>
+    <form class="pf" id="pf-profile" method="post" action="{{ url_for('profile_details') }}"
+          enctype="multipart/form-data" data-group="Your profile" data-confirm="Save changes to your profile?">
+      {{ note_for("profile") }}
+      <p class="hint">Any Save button in this window saves every change in it.</p>
+
+      <details class="pf-preview">
+        <summary>Preview of your profile</summary>
+        <div class="pf-preview-body">
+          {{ picture(current_user.name, current_user.id, current_user.picture_url, "pf-mid") }}
+          <div class="pf-preview-text">
+            <b>{{ current_user.name }}</b>{% if pronoun_label %}<span class="pronouns">{{ pronoun_label }}</span>{% endif %}
+            <p>{{ profile.major or "Undeclared" }}{% if profile.year %} &middot; {{ profile.year }}{% endif %}
+              {%- if profile.minor %} &middot; Minor in {{ profile.minor }}{% endif %}</p>
+            {% if profile.bio %}<p>{{ profile.bio }}</p>{% endif %}
+            {% if profile.looking_for %}
+              <span class="label">Looking for</span><p>{{ profile.looking_for }}</p>
+            {% endif %}
+            {% if joined %}
+              <span class="label">Clubs</span>
+              <ul class="pf-tags">{% for club in joined %}<li>{{ club.name }}</li>{% endfor %}</ul>
+            {% endif %}
+            {% set handles = [] %}
+            {% for s in socials %}{% if profile[s.key] %}{% set _ = handles.append(s) %}{% endif %}{% endfor %}
+            {% if handles %}
+              <span class="label">Find me on</span>
+              <ul class="pf-tags">{% for s in handles %}<li>{{ s.label }}: {{ profile[s.key] }}</li>{% endfor %}</ul>
+            {% endif %}
+            <p class="hint">Shows what is saved now. Your email is never part of it.</p>
+          </div>
+        </div>
+      </details>
+
+      {# (a) picture #}
+      <section class="pf-row" data-section="Profile picture" id="pf-picture">
+        <h3>Profile picture</h3>
+        <div class="pf-photo">
+          {{ picture(current_user.name, current_user.id, current_user.picture_url, id="pf-pic") }}
+          <div>
+            <div class="row">
+              <label class="ghost">Change
+                <input type="file" name="picture" id="pf-file" accept="image/png,image/jpeg,image/gif,image/webp" />
+              </label>
+              <button type="button" class="ghost" id="pf-remove" {% if not current_user.picture_url %}hidden{% endif %}>Remove</button>
+            </div>
+            <input type="hidden" name="remove_picture" id="pf-remove-flag" value="" />
+            <p class="hint" style="margin-top:6px">JPG, PNG, GIF or WebP, up to 2 MB. With no picture, your initials show instead.</p>
+          </div>
+        </div>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (b) (c) name and pronouns: placeholder, they are saved on Your account #}
+      <section class="pf-row" id="pf-name">
+        <h3>Name and pronouns</h3>
+        <div class="pf-place">
+          <p><b>{{ current_user.name }}</b>{% if pronoun_label %}<span class="pronouns">{{ pronoun_label }}</span>{% endif %}</p>
+          <a class="ghost" href="{{ url_for('account') }}">Change on Your account</a>
+        </div>
+        <p class="pf-locked">{{ ui.icon("lock") }}<span>{{ current_user.email }} &mdash; your UMass Boston email. It can't be changed, and only you see it here.</span></p>
+      </section>
+
+      {# (d) bio #}
+      <section class="pf-row" data-section="Bio" id="pf-bio">
+        <h3>Bio</h3>
+        <label>A few words about you
+          <textarea name="bio" maxlength="{{ text_max }}" rows="4" data-count
+                    placeholder="When you're on campus, what you're studying, what you're into.">{{ profile.bio }}</textarea>
+        </label>
+        <span class="pf-count"></span>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (e) major #}
+      <section class="pf-row" data-section="Major" id="pf-major">
+        <h3>Major</h3>
+        <label>Your major
+          <select name="major" required>
+            {% for major in majors %}
+              <option value="{{ major }}" {% if major == (profile.major or "Undeclared") %}selected{% endif %}>{{ major }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (f) minor #}
+      <section class="pf-row" data-section="Minor" id="pf-minor">
+        <h3>Minor <small>Optional</small></h3>
+        <label>Your minor
+          <select name="minor">
+            <option value="" {% if not profile.minor %}selected{% endif %}>None</option>
+            {% for minor in minors %}
+              <option value="{{ minor }}" {% if minor == profile.minor %}selected{% endif %}>{{ minor }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (g) class year #}
+      <section class="pf-row" data-section="Class year" id="pf-year">
+        <h3>Class year</h3>
+        <label>Where you are in your studies
+          <select name="year" required>
+            <option value="" {% if not profile.year %}selected{% endif %}>Choose one</option>
+            {% for year in years %}
+              <option value="{{ year }}" {% if year == profile.year %}selected{% endif %}>{{ year }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (h) what you're looking for #}
+      <section class="pf-row" data-section="Looking for" id="pf-looking">
+        <h3>What you're looking for <small>Optional</small></h3>
+        <label>Club members, a study group, friends, connections&hellip;
+          <textarea name="looking_for" maxlength="{{ text_max }}" rows="3" data-count
+                    placeholder="e.g. A study group for CS 210, and people to play chess with between classes.">{{ profile.looking_for }}</textarea>
+        </label>
+        <span class="pf-count"></span>
+        <p class="hint">Only shows on your profile when you fill it in.</p>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (i) one box per platform, username only #}
+      <section class="pf-row" data-section="Usernames" id="pf-usernames">
+        <h3>Your usernames <small>Optional</small></h3>
+        <p class="hint">Usernames only, not links. One per box.</p>
+        {% for s in socials %}
+          <label>{{ s.label }}
+            <span class="pf-handle">
+              <span aria-hidden="true">{{ s.prefix }}</span>
+              <input type="text" name="{{ s.key }}" value="{{ profile[s.key] or '' }}" maxlength="{{ s.max }}"
+                     pattern="{{ s.pattern }}" title="{{ s.rule }}" autocomplete="off"
+                     autocapitalize="off" spellcheck="false" aria-describedby="rule-{{ s.key }}" />
+            </span>
+            <span class="hint" id="rule-{{ s.key }}" style="display:block;font-weight:400">{{ s.rule }}</span>
+          </label>
+        {% endfor %}
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+    </form>
+  </section>
+
+  {# ======================= 2. clubs and interests ======================= #}
+  <section class="win sec-club" id="clubs">
+    <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Clubs and interests</span><span class="grip"></span></div>
+    <form class="pf" id="pf-clubs" method="post" action="{{ url_for('profile_clubs') }}"
+          data-group="Clubs and interests" data-confirm="Leave the clubs you ticked?" data-confirm-ok="Leave">
+      {{ note_for("clubs") }}
+
+      {# (j) your clubs #}
+      <section class="pf-row" data-section="Your clubs" id="pf-clubs-list">
+        <h3>Your clubs</h3>
+        {% if joined %}
+          <ul class="pf-list">
+            {% for club in joined %}
+              <li class="pf-item">
+                {{ ui.avatar(club.name, club.id, square=true, sm=true) }}
+                <div class="pf-item-text">
+                  <b>{{ club.name }}</b>
+                  <span>{{ club.description }}</span>
+                </div>
+                <div class="pf-item-acts">
+                  <a class="ghost" href="{{ url_for('chat', kind='club', target_id=club.id) }}">Club space</a>
+                  <label class="pf-mark"><input type="checkbox" name="leave" value="{{ club.id }}" />Remove</label>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          <p class="hint">Tick Remove beside a club, then Save, to leave it.</p>
+          <div class="row"><button type="submit">Save</button></div>
+        {% else %}
+          <p class="empty">You're not in any clubs yet.</p>
+        {% endif %}
+        <div class="row"><a class="ghost" href="{{ url_for('clubs') }}">Browse all clubs</a></div>
+      </section>
+
+      {# (k) interests: placeholder, they are saved on Your account #}
+      <section class="pf-row" id="pf-interests">
+        <h3>Your interests</h3>
+        <div class="pf-place">
+          <p>The answers you're matched on are kept on Your account, together with your name and pronouns.</p>
+          <a class="ghost" href="{{ url_for('account') }}">Change your answers</a>
+        </div>
+      </section>
+    </form>
+  </section>
+
+  {# ======================= 3. account and safety ======================= #}
+  <section class="win sec-place" id="safety">
+    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Account and safety</span><span class="grip"></span></div>
+    <form class="pf" id="pf-account" method="post" action="{{ url_for('profile_account') }}"
+          data-group="Account and safety" data-confirm="Save your account and safety settings?">
+      {{ note_for("safety") }}
+      <p class="hint">Only you see this window.</p>
+
+      {# (l) blocked people #}
+      <section class="pf-row" data-section="Blocked people" id="pf-blocked">
+        <h3>Blocked people</h3>
+        {% if blocked %}
+          <ul class="pf-list">
+            {% for person in blocked %}
+              <li class="pf-item">
+                {{ picture(person.name, person.user_id, person.picture_url, "pf-small") }}
+                <div class="pf-item-text">
+                  <b>{{ person.name }}{% if person.pronouns %}<span class="pronouns">{{ person.pronouns }}</span>{% endif %}</b>
+                  <span>Blocked {{ person.blocked_on }}</span>
+                </div>
+                <div class="pf-item-acts">
+                  <a class="report-link" href="{{ url_for('report_new', kind='abuse', about=person.user_id) }}">Report</a>
+                  <label class="pf-mark"><input type="checkbox" name="unblock" value="{{ person.user_id }}" />Unblock</label>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="row"><button type="submit">Save</button></div>
+        {% else %}
+          <p class="empty">You haven't blocked anyone.</p>
+        {% endif %}
+      </section>
+
+      {# (o) change password: a 6-digit code to your email, like the sign-up code #}
+      <section class="pf-row" data-section="Password" id="pf-password">
+        <h3>Change password</h3>
+        <p class="hint">We email a 6-digit code to {{ current_user.email }} to make sure it's you.</p>
+        {% if code_sent and code_sent.preview_code %}
+          <p class="hint">Testing only (BEACON_SHOW_CODES is on): the code is <b>{{ code_sent.preview_code }}</b>.</p>
+        {% endif %}
+        <div class="row">
+          {# Posts to password_code without saving the rest of this window. #}
+          <button type="submit" class="ghost" formaction="{{ url_for('password_code') }}" formnovalidate data-skip-confirm>
+            {{ "Send a new code" if code_sent else "Email me a code" }}
+          </button>
+        </div>
+        <label>Code from the email
+          <input type="text" name="code" id="pw-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                 autocomplete="one-time-code" />
+        </label>
+        <label>New password
+          <input type="password" name="new_password" id="pw-new" minlength="{{ password_min }}" autocomplete="new-password" />
+        </label>
+        <label>Confirm new password
+          <input type="password" name="confirm_password" id="pw-confirm" minlength="{{ password_min }}" autocomplete="new-password" />
+        </label>
+        <p class="hint">At least {{ password_min }} characters. The code lasts {{ code_minutes }} minutes.</p>
+        <div class="row"><button type="submit">Save</button></div>
+      </section>
+
+      {# (n) reporting: placeholder, your /report page does it #}
+      <section class="pf-row" id="pf-report">
+        <h3>Report a problem</h3>
+        <div class="pf-place">
+          <p>Tell us about a person, something broken, or anything else.</p>
+          <a class="ghost" href="{{ url_for('report_new', kind='abuse') }}">Report someone</a>
+          <a class="ghost" href="{{ url_for('report_new', kind='contact') }}">Get in touch / report a problem</a>
+        </div>
+      </section>
+
+      {# (p) deleting the account: placeholder, it lives under Leaving on Your account #}
+      <section class="pf-row" id="pf-delete">
+        <h3>Delete your account</h3>
+        <div class="pf-place">
+          <p>Deleting your account is on Your account, under Leaving. It shows exactly what goes with it first.</p>
+          <a class="ghost" href="{{ url_for('account') }}">Go to Your account</a>
+        </div>
+      </section>
+    </form>
+  </section>
+
+  <p class="nav"><a href="{{ url_for('index') }}">&larr; Back</a></p>
+
+  {# "Are you sure?": opened by the script below before a save group is sent. #}
+  <dialog class="pf-dialog" id="pf-confirm" aria-labelledby="pf-confirm-title">
+    <form method="dialog">
+      <h3 id="pf-confirm-title">Save your changes?</h3>
+      <p id="pf-confirm-body"></p>
+      <ul id="pf-confirm-list" hidden></ul>
+      <p id="pf-confirm-warn" class="warn" hidden></p>
+      <div class="row">
+        <button type="submit" value="cancel" class="ghost" id="pf-confirm-cancel">Cancel</button>
+        <button type="submit" value="ok" id="pf-confirm-ok">Save changes</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
+
+{% block script %}
+<script>
+  // Profile page behaviour. Every part degrades: without this script the forms
+  // still post, just without the counters, the picture preview or the question.
+  (function () {
+    var page = document.getElementById("pf-profile");
+    if (!page) { return; }
+    var IDS = ["pf-profile", "pf-clubs", "pf-account"];
+
+    // ---- every named value in a form, so changes can be listed
+    function values(form) {
+      var out = {};
+      Array.prototype.forEach.call(form.elements, function (f) {
+        if (!f.name || f.type === "submit" || f.type === "button") { return; }
+        var list = out[f.name] || (out[f.name] = []);
+        if (f.type === "checkbox" || f.type === "radio") { if (f.checked) { list.push(f.value); } }
+        else if (f.type === "file") { Array.prototype.forEach.call(f.files, function (x) { list.push(x.name + ":" + x.size); }); }
+        else { list.push(f.value); }
+      });
+      return out;
+    }
+    function ourForms() {
+      return IDS.map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    }
+    // Remember how each form started, on the form itself (a fresh page has fresh forms).
+    ourForms().forEach(function (form) { form.pfStart = values(form); });
+    window.pfLeaving = false;
+
+    // The data-section names whose fields differ from how the form started.
+    function changes(form) {
+      if (!form.pfStart) { return []; }
+      var now = values(form), seen = {}, out = [];
+      Object.keys(now).forEach(function (name) {
+        if (JSON.stringify(now[name]) === JSON.stringify(form.pfStart[name] || [])) { return; }
+        var field = form.elements[name];
+        if (field && !field.closest && field[0]) { field = field[0]; }
+        var holder = field && field.closest ? field.closest("[data-section]") : null;
+        var label = holder ? holder.dataset.section : name;
+        if (!seen[label]) { seen[label] = true; out.push(label); }
+      });
+      return out;
+    }
+    function dirty(except) {
+      return ourForms().filter(function (f) { return f !== except && changes(f).length; })
+                       .map(function (f) { return f.dataset.group; });
+    }
+
+    // ---- the question box
+    function ask(opts, onOk) {
+      var box = document.getElementById("pf-confirm");
+      if (!box || !box.showModal) {                    // very old browser: the plain one
+        if (opts.alertOnly) { window.alert(opts.title); return; }
+        if (window.confirm(opts.title)) { onOk(); }
+        return;
+      }
+      var el = function (id) { return document.getElementById(id); };
+      el("pf-confirm-title").textContent = opts.title;
+      el("pf-confirm-body").textContent = opts.body || "";
+      el("pf-confirm-body").hidden = !opts.body;
+      var list = el("pf-confirm-list");
+      list.replaceChildren();
+      (opts.list || []).forEach(function (text) {
+        var li = document.createElement("li");
+        li.textContent = text;
+        list.appendChild(li);
+      });
+      list.hidden = !(opts.list && opts.list.length);
+      el("pf-confirm-warn").textContent = opts.warn || "";
+      el("pf-confirm-warn").hidden = !opts.warn;
+      el("pf-confirm-ok").textContent = opts.ok || "Save changes";
+      el("pf-confirm-ok").hidden = !!opts.alertOnly;
+      el("pf-confirm-cancel").textContent = opts.alertOnly ? "OK" : "Cancel";
+      box.returnValue = "";
+      box.onclose = function () { box.onclose = null; if (box.returnValue === "ok" && onOk) { onOk(); } };
+      box.showModal();
+      (opts.alertOnly ? el("pf-confirm-cancel") : el("pf-confirm-ok")).focus();
+    }
+    function lost(groups) {
+      return groups.length ? "Unsaved changes in " + groups.join(" and ") +
+        " will be lost, because the page reloads. Save them first if you want to keep them." : "";
+    }
+
+    // Installed once per browser tab, on the document and in the capture phase,
+    // so the question comes before anything else that handles a submit (your
+    // _enhance.html included). The confirmed submit is sent again with requestSubmit.
+    if (!window.pfConfirmInstalled) {
+      window.pfConfirmInstalled = true;
+      document.addEventListener("submit", function (e) {
+        var form = e.target;
+        if (!(form instanceof HTMLFormElement) || IDS.indexOf(form.id) < 0) { return; }
+        if (form.dataset.confirmed === "1") { form.dataset.confirmed = ""; window.pfLeaving = true; return; }
+        var button = e.submitter || null;
+        var send = function () { form.dataset.confirmed = "1"; form.requestSubmit(button || undefined); };
+        if (button && button.hasAttribute("data-skip-confirm")) {      // "Email me a code"
+          var others = dirty(null);
+          if (!others.length) { window.pfLeaving = true; return; }
+          e.preventDefault(); e.stopImmediatePropagation();
+          ask({ title: "Continue without saving?", body: lost(others), ok: "Continue" }, send);
+          return;
+        }
+        e.preventDefault(); e.stopImmediatePropagation();
+        var changed = changes(form);
+        if (!changed.length) {
+          ask({ title: "Nothing to save yet", body: "Make a change in " + form.dataset.group + " first.", alertOnly: true });
+          return;
+        }
+        ask({ title: form.dataset.confirm, body: "Are you sure you want to save these changes?",
+              ok: form.dataset.confirmOk || "Save changes",
+              list: changed.map(function (s) { return "Changed: " + s; }), warn: lost(dirty(form)) }, send);
+      }, true);
+      window.addEventListener("beforeunload", function (e) {
+        if (window.pfLeaving) { return; }
+        if (dirty(null).length) { e.preventDefault(); e.returnValue = ""; }
+      });
+    }
+
+    // ---- character counters for fields marked data-count
+    page.querySelectorAll("[data-count]").forEach(function (field) {
+      var out = field.closest("label").nextElementSibling;
+      if (!out || !out.classList.contains("pf-count")) { return; }
+      function count() { out.textContent = field.value.length + " / " + field.maxLength; }
+      field.addEventListener("input", count);
+      count();
+    });
+
+    // ---- the picture: preview a new pick, or the initials on Remove
+    var file = document.getElementById("pf-file");
+    var removeBtn = document.getElementById("pf-remove");
+    var removeFlag = document.getElementById("pf-remove-flag");
+    var pic = document.getElementById("pf-pic");
+    var img = pic.querySelector("img");
+    var initials = pic.querySelector(".avatar");
+    var initialsBox = initials && initials.parentElement !== pic ? initials.parentElement : initials;
+    function showPicture(src) {
+      img.hidden = !src;
+      if (src) { img.src = src; }
+      initialsBox.hidden = !!src;
+    }
+    file.addEventListener("change", function () {
+      var picked = file.files[0];
+      if (!picked) { return; }
+      if (picked.size > 2 * 1024 * 1024) {
+        ask({ title: "That picture is too large", body: "Pick an image under 2 MB.", alertOnly: true });
+        file.value = "";
+        return;
+      }
+      removeFlag.value = "";
+      showPicture(URL.createObjectURL(picked));
+      removeBtn.hidden = false;
+    });
+    removeBtn.addEventListener("click", function () {
+      file.value = "";
+      removeFlag.value = "1";
+      showPicture(null);
+      removeBtn.hidden = true;
+    });
+
+    // ---- the three password boxes go together
+    var code = document.getElementById("pw-code");
+    var pw1 = document.getElementById("pw-new");
+    var pw2 = document.getElementById("pw-confirm");
+    function syncPassword() {
+      var any = !!(code.value || pw1.value || pw2.value);
+      code.required = pw1.required = pw2.required = any;
+      pw2.setCustomValidity(pw2.value && pw2.value !== pw1.value ? "The two passwords do not match." : "");
+    }
+    [code, pw1, pw2].forEach(function (f) { f.addEventListener("input", syncPassword); });
+  })();
+</script>
+{% endblock %}
