@@ -60,39 +60,47 @@
       {% include "_notices.html" %}
 
       {# Where sign out lives, on every page. #}
+      {% set my_picture = current_user.picture_url %}
       <details class="who">
         <summary aria-label="Your account">
-          {{ ui.avatar(current_user.name, current_user.id, square=true) }}
+          {% if my_picture %}
+            <img class="avatar sq" src="{{ my_picture }}" alt="" />
+          {% else %}
+            {{ ui.avatar(current_user.name, current_user.id, square=true) }}
+          {% endif %}
         </summary>
         <div class="who-panel">
           <b>{{ current_user.name }}</b>
           <small>{{ current_user.email }}</small>
-          {# Was "Change your answers", pointing straight at /onboarding.
-             The answers are one of three things you can change about
-             yourself now, so this opens the page that holds all of them --
-             and leaving, which lives there rather than in this list because
-             a destructive action one click from the menu is a misclick
-             waiting to happen. /onboarding is still the first-time flow. #}
-          <a href="{{ url_for('profile') }}">Your profile</a>
-          <a href="{{ url_for('account') }}">Your account</a>
-          <a href="{{ url_for('people') }}">Find people</a>
-          <a href="{{ url_for('chats') }}">Group chats{%
-            if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
+          {# change or remove your photo from any page. Picking a
+             picture shows it here first, with Save photo and Cancel; nothing is
+             sent until Save photo. Saved by part 2's profile_picture route,
+             which comes back to this same page (request.path; only on pages
+             opened normally, so it never sends you back to a form's address). #}
+          <form class="who-photo" method="post" enctype="multipart/form-data"
+                action="{{ url_for('profile_picture', next=request.path if request.method == 'GET' else none) }}">
+            <span class="who-photo-now">
+              {% if my_picture %}<img class="avatar" src="{{ my_picture }}" alt="" data-who-now />{% endif %}
+              <span data-who-initials {% if my_picture %}hidden{% endif %}>{{ ui.avatar(current_user.name, current_user.id) }}</span>
+              <img class="avatar" src="" alt="" data-who-new hidden />
+            </span>
+            <span class="who-photo-keys">
+              <span class="who-photo-say" role="status" hidden></span>
+              <label class="who-key">Change photo
+                <input type="file" name="picture" accept="image/png,image/jpeg,image/gif,image/webp" />
+              </label>
+              {% if my_picture %}<button type="button" class="who-key" data-who-remove>Remove</button>{% endif %}
+              <button type="submit" class="who-key who-save" hidden>Save photo</button>
+              <button type="button" class="who-key" data-who-cancel hidden>Cancel</button>
+            </span>
+            <input type="hidden" name="remove" value="" />
+          </form>
+          
+          <a href="{{ url_for('profile') }}">View my profile</a>
           {# Shorter than the page it opens, on purpose. This panel fits six
              items in about twenty characters; the page has the width to say
              what it is. The mismatch is the point, not drift. #}
           <a href="{{ url_for('fixtures') }}">Happening now</a>
-          {# Below the line: the three ways to tell us something. Separated
-             because they are not places you go, they are things you do, and
-             because the list is long enough now that Sign out needs to not
-             be the eighth indistinguishable row. #}
-          <div class="who-sep"></div>
-          <a href="{{ url_for('report_new', kind='abuse') }}">Report someone</a>
-          {# One entry for both, because they are the same errand: something
-             to tell us that is not about a person. The page it opens already
-             offers the choice between a message and something broken, so
-             the switch lives there rather than in a menu this narrow. #}
-          <a href="{{ url_for('report_new', kind='contact') }}">Get In Touch/Report Problem</a>
           <div class="who-sep"></div>
           {% if current_user.is_admin %}
             <a href="{{ url_for('admin') }}">Admin</a>
@@ -100,6 +108,53 @@
           <a href="{{ url_for('logout') }}">Sign out</a>
         </div>
       </details>
+      {# what the photo control does in the browser. Installed once
+         per tab, on the document, so it keeps working after a page is swapped
+         in place. Inside the slice /people's privacy audit reads, like the
+         rest of this bar, so it uses none of the words listed at the top. #}
+      <script>
+        (function () {
+          if (window.whoPhotoReady) { return; }
+          window.whoPhotoReady = true;
+          function parts(form) {
+            var q = function (s) { return form.querySelector(s); };
+            return { file: q('input[type="file"]'), flag: q('input[name="remove"]'),
+                     now: q("[data-who-now]"), initials: q("[data-who-initials]"), next: q("[data-who-new]"),
+                     pick: q("label.who-key"), remove: q("[data-who-remove]"), save: q(".who-save"),
+                     cancel: q("[data-who-cancel]"), say: q(".who-photo-say") };
+          }
+          // mode "": as saved. "pick": a new picture, sent only on Save photo.
+          // "remove": back to initials, sent only on Remove photo.
+          function show(form, mode, src, words) {
+            var p = parts(form), asking = mode !== "";
+            if (p.now) { p.now.hidden = asking; }
+            p.initials.hidden = mode === "pick" || (mode === "" && !!p.now);
+            p.next.hidden = mode !== "pick";
+            if (src) { p.next.src = src; }
+            p.pick.hidden = asking;
+            if (p.remove) { p.remove.hidden = asking; }
+            p.save.hidden = p.cancel.hidden = !asking;
+            p.save.textContent = mode === "remove" ? "Remove photo" : "Save photo";
+            p.flag.value = mode === "remove" ? "1" : "";
+            if (mode !== "pick") { p.file.value = ""; }
+            words = words || (mode === "pick" ? "Use this picture?" : mode === "remove" ? "Remove your photo?" : "");
+            p.say.textContent = words;
+            p.say.hidden = !words;
+          }
+          document.addEventListener("change", function (e) {
+            var input = e.target;
+            if (!input.matches || !input.matches('.who-photo input[type="file"]')) { return; }
+            var picked = input.files && input.files[0];
+            if (!picked) { show(input.form, ""); return; }
+            if (picked.size > 2 * 1024 * 1024) { show(input.form, "", null, "That picture is over 2 MB. Pick a smaller one."); return; }
+            show(input.form, "pick", URL.createObjectURL(picked));
+          });
+          document.addEventListener("click", function (e) {
+            var key = e.target.closest ? e.target.closest("[data-who-remove], [data-who-cancel]") : null;
+            if (key && key.form) { show(key.form, key.hasAttribute("data-who-remove") ? "remove" : ""); }
+          });
+        })();
+      </script>
     </div>
   </header>
 
