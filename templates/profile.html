@@ -3,7 +3,6 @@
 {% block title %}Your profile{% endblock %}
 
 {#
-  
 
   WHAT LIVES WHERE
     People and group chats  links to /people and /chats (with the invite count)
@@ -20,12 +19,10 @@
   end of this file); Delete asks with a warning instead. Without JavaScript the
   forms simply post.
 
-  Kept clear of names your tests watch: no .card class, no bare <h2>, and no
-  class or id containing pill, score, shared, waiting or dock.
 
   NEEDS FROM THE ROUTE: profile, pronoun_label, majors, minors, years, socials,
-  text_max, code_minutes, password_min, joined, blocked, code_sent, note, and
-  (RELOCATION, the same names account.html uses) questions, selected, optional,
+  text_max, code_minutes, password_min, joined, blocked, code_sent, note,
+  the same names account.html uses, questions, selected, optional,
   pronoun_options, pronouns_now, name_max, counts. invite_count comes from your
   inject_dock, as in shell.html.
 #}
@@ -43,10 +40,10 @@
       .pf textarea { max-width: 34rem; resize: vertical; }
       .pf .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
       .pf .hint { margin: 0; color: var(--muted); font-size: .86rem; }
-      /* RELOCATION: two forms in one window, divided like two rows */
+      /* two forms in one window, divided like two rows */
       .win > .pf + .pf { margin-top: 0; border-top: 2px dashed var(--line); }
 
-      /* RELOCATION: the questions from your _questions.html, as account.html draws them */
+      /* the questions from _questions.html, as account.html draws them */
       .pf fieldset {
         margin: 0; padding: 12px 14px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
@@ -137,7 +134,7 @@
       .pf-tags li { padding: 3px 8px; color: var(--navy); background: var(--paper);
         border: 2px solid var(--line); border-radius: var(--r-sm); font: 700 .8rem/1.2 var(--sans); }
 
-      /* ---------- RELOCATION: deleting the account, as account.html's .leaving ---------- */
+      /* ---------- deleting the account, as account.html's .leaving ---------- */
       /* Red, and set apart by a double rule, because it is the one thing on this
          page that cannot be undone. */
       .win > .pf.pf-leaving { border-top: 3px double var(--line); }
@@ -199,7 +196,7 @@
     <a href="#safety">Account and safety</a>
   </nav>
 
-  {# ======================= RELOCATION: people and group chats =======================
+  {# =======================  people and group chats =======================
      Find people and Group chats, moved here from the account menu. The invite
      count is the same number the menu showed (invite_count, from your inject_dock);
      the friends panel in the tab bar shows the invites themselves. #}
@@ -218,8 +215,8 @@
   <section class="win sec-place" id="profile">
     <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Your profile</span><span class="grip"></span></div>
 
-    {# RELOCATION: name and pronouns, moved from Your account. The same fields as
-       account.html's first form (section=who, name, pronouns), saved by your
+    {#  name and pronouns, moved from Your account. The same fields as
+       account.html's first form (section=who, name, pronouns), saved by the 
        account route. Its own form, as on Your account, so saving your name can
        never rewrite anything else. #}
     <form class="pf" id="pf-who" method="post" action="{{ url_for('profile_name_interests') }}"
@@ -558,18 +555,22 @@
 
   <p class="nav"><a href="{{ url_for('index') }}">&larr; Back</a></p>
 
-  {# "Are you sure?": opened by the script below before a save group is sent. #}
+  {# "Are you sure?": opened by the script below before a save group is sent.
+     RELOCATION: plain buttons (type="button", styled by base.html's .btn) that
+     close the box from the script, and no <form method="dialog"> around them:
+     your _enhance.html takes over every form submit on the page, including that
+     kind, which stopped OK and Cancel from ever closing the box. #}
   <dialog class="pf-dialog" id="pf-confirm" aria-labelledby="pf-confirm-title">
-    <form method="dialog">
+    <div>
       <h3 id="pf-confirm-title">Save your changes?</h3>
       <p id="pf-confirm-body"></p>
       <ul id="pf-confirm-list" hidden></ul>
       <p id="pf-confirm-warn" class="warn" hidden></p>
       <div class="row">
-        <button type="submit" value="cancel" class="ghost" id="pf-confirm-cancel">Cancel</button>
-        <button type="submit" value="ok" id="pf-confirm-ok">Save changes</button>
+        <button type="button" class="btn ghost" id="pf-confirm-cancel">Cancel</button>
+        <button type="button" class="btn" id="pf-confirm-ok">Save changes</button>
       </div>
-    </form>
+    </div>
   </dialog>
 {% endblock %}
 
@@ -602,8 +603,17 @@
     ourForms().forEach(function (form) { form.pfStart = values(form); });
     window.pfLeaving = false;
 
+    // after a save, bring its message on screen. _enhance.html
+    // swaps the page in place, which drops the #window part of the address, so
+    // the browser never jumps there by itself. Waits a moment, so it comes after
+    // the swap has set the scroll position.
+    var said = document.querySelector(".pf .pf-note");
+    if (said && said.scrollIntoView) {
+      setTimeout(function () { said.scrollIntoView({ block: "center" }); }, 0);
+    }
+
     // The names of the settings whose fields differ from how the form started:
-    // a question's own wording inside your _questions.html (RELOCATION), or the
+    // a question's own wording inside _questions.html , or the
     // data-section of the row anywhere else.
     function changes(form) {
       if (!form.pfStart) { return []; }
@@ -654,6 +664,9 @@
       el("pf-confirm-ok").hidden = !!opts.alertOnly;
       el("pf-confirm-cancel").textContent = opts.alertOnly ? "OK" : "Cancel";
       box.returnValue = "";
+      //  the buttons close the box themselves (see the note on the dialog).
+      el("pf-confirm-ok").onclick = function () { box.close("ok"); };
+      el("pf-confirm-cancel").onclick = function () { box.close("cancel"); };
       box.onclose = function () { box.onclose = null; if (box.returnValue === "ok" && onOk) { onOk(); } };
       box.showModal();
       // A delete starts on Cancel, so pressing Enter by habit deletes nothing.
@@ -665,8 +678,8 @@
     }
 
     // Installed once per browser tab, on the document and in the capture phase,
-    // so the question comes before anything else that handles a submit (your
-    // _enhance.html included). The confirmed submit is sent again with requestSubmit.
+    // so the question comes before anything else that handles a submit.
+    //  The confirmed submit is sent again with requestSubmit.
     if (!window.pfConfirmInstalled) {
       window.pfConfirmInstalled = true;
       document.addEventListener("submit", function (e) {
