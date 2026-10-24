@@ -3,30 +3,7 @@
 {% block title %}Your profile{% endblock %}
 
 {#
-  profile.html  -  "Your profile"   (relocation, Oct 24)
-  STEMS FROM: templates/profile.html in beacon-profile-rebuild (Oct 23, unchanged),
-  which stems from templates/profile.html in beacon-push.
-  Sits beside your account.html: the same windows (.win, .bar, ui.icon), the same
-  form look (copied from account.html's .acct rules), your ui.avatar for
-  initials, and no stylesheet of its own outside this page. Matched against your
-  base.html (Beacon OS): its keys, .pronouns chip, .report-link, .empty box,
-  .invites badge and dashed row dividers are used as they are.
-
-  WHAT CHANGED FROM THE REBUILD  (search for "RELOCATION")
-    The account menu in shell.html now holds only your name and email, your
-    photo, View my profile, Happening now, Admin and Sign out. Everything else
-    it used to list lives here:
-      Find people, Group chats      the new "People and group chats" window
-      Your account: name, pronouns  real form in "Your profile" (was a placeholder)
-      Your account: your interests  real form in "Clubs and interests" (was a
-                                    placeholder), using your own _questions.html
-      Your account: Leaving         real "Delete your account" form in "Account
-                                    and safety" (was a placeholder)
-      Report someone, Get in touch  "Report a problem" in "Account and safety"
-    The three Your account forms send exactly the fields account.html sends, to
-    part 2's routes, which hand them to your own `account` and `account_delete`
-    routes. So they are checked and saved by your code, unchanged. Your
-    /account page still works; nothing on the site has to link to it any more.
+  
 
   WHAT LIVES WHERE
     People and group chats  links to /people and /chats (with the invite count)
