@@ -7065,9 +7065,12 @@ def _bc_profile_delete():
 
 @_bc_login.login_required
 def _bc_profile_picture():
-    """The account menu's photo control (shell.html), on every page: a new photo,
-    or remove it. Saves only the photo, then goes back to the page it was sent
-    from, with what happened as one of your usual flashed messages."""
+    """Saves only a new photo, or removes it, then goes back to the page it was
+    sent from, with what happened as one of your usual flashed messages.
+
+    Nothing links here at the moment: the account menu's photo control that
+    used it was taken out, and the profile page saves its picture through
+    profile_details instead."""
     _bc_same_site()
     # `next` is in the address, not the form, so it can be read without
     # reading a body that may be too big.
@@ -7165,8 +7168,9 @@ def beacon_setup_problems():
             found.append("Template %s: %s" % (template, error))
     try:
         shell = app.jinja_env.loader.get_source(app.jinja_env, "shell.html")[0]
-        # RELOCATION: the account menu links to the profile and holds the photo control.
-        for endpoint, ends in (("profile", ")"), ("profile_picture", "")):
+        # RELOCATION: the account menu links to the profile. It no longer holds
+        # the photo control: that lives on the profile page only.
+        for endpoint, ends in (("profile", ")"),):
             if ("url_for('%s'%s" % (endpoint, ends)) not in shell and ('url_for("%s"%s' % (endpoint, ends)) not in shell:
                 found.append("shell.html's account menu has no url_for('%s') yet. Use the account menu "
                              "from this kit's shell.html (HOW_TO_PUSH.md, step 3)." % endpoint)

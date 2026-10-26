@@ -354,46 +354,10 @@
 
 
         
-      /* The top-bar avatar is an <img class="avatar sq"> when you have a photo
-         (initials as before when you don't), and the menu can change or
-         remove it: the form .who-photo, under your email. Here, in the shared
-         sheet, because shell.html draws it on every page. */
-        
-   img.avatar { object-fit: cover; background: #fff; }
-      .who-photo {
-        display: flex; align-items: center; gap: 10px;
-        padding: 2px 12px 12px;
-      }
-      .who-photo .avatar { width: 52px; height: 52px; font-size: 24px; }
-      .who-photo-keys { display: flex; flex: 1 1 0; flex-wrap: wrap; gap: 6px; min-width: 0; }
-      .who-photo-say { flex-basis: 100%; color: var(--navy); font-size: .85rem; font-weight: 700; }
-      .who-photo .who-key {
-        position: relative;
-        display: inline-flex; align-items: center; justify-content: center;
-        min-height: 34px; margin: 0 0 3px; padding: .25rem .6rem;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 0 3px 0 var(--navy);
-        font: 700 .85rem/1.1 var(--sans); white-space: nowrap; cursor: pointer;
-      }
-      .who-photo .who-key:hover { background: var(--paper); }
-      .who-photo .who-key:active { transform: translateY(3px); box-shadow: none; }
-      .who-photo .who-key:has(input:focus-visible) { outline: 3px solid var(--orange); outline-offset: 2px; }
-      .who-photo .who-save { background: var(--beacon); color: #fff; }
-      .who-photo .who-save:hover { background: var(--blue-deep); }
-      /* The file box covers its label, invisible, so a click or a key on
-         "Change photo" opens the picker. */
-      .who-photo input[type="file"] {
-        position: absolute; inset: 0;
-        width: 100%; height: 100%; min-height: 0; padding: 0;
-        opacity: 0; cursor: pointer;
-      }
-      /* the display rules above would beat the browser's own [hidden] rule */
-      .who-photo [hidden] { display: none !important; }
-      /* The photo row makes the menu taller, so the cap on its height set above
-         (min(78vh, 30rem)) is raised just enough to keep Sign out in view on an
-         ordinary screen, admins included. A short screen still scrolls, as before. */
-      .who-panel { max-height: min(78vh, 34rem); }
+      /* The top-bar avatar is an <img class="avatar sq"> when you have a
+         photo, initials when you don't. The photo is changed on Profile
+         Settings. */
+      img.avatar { object-fit: cover; background: #fff; }
 
   
 
