@@ -152,8 +152,7 @@
       .draft-head .tag { background: #fff; color: var(--navy); }
       .draft-note { margin-top: -4px; color: var(--muted); font-size: .9rem; }
       .draftbox label { color: var(--navy); font-size: .92rem; }
-      .draftbox label > input, .draftbox label > select, .draftbox label > textarea,
-      .draftbox textarea { min-height: 5rem; }
+      .draftbox label > textarea, .draftbox textarea { min-height: 5rem; }
       /* the type chips: radios drawn as keys */
       .draftbox .draft-kinds { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
       .draft-kinds legend { padding: 0; margin-bottom: 6px; font-size: .92rem; font-weight: 700; }
@@ -318,8 +317,24 @@
       @media (min-width: 1000px) {
         #beaconCampusMap { height: 28rem; }
       }
+      /* "Tap to move the map". On a touch screen the map starts with dragging
+         off, so a finger across it scrolls the page instead of panning 352px
+         of tiles; one tap on this unlocks it until a tap lands outside. */
+      .map-unlock {
+        position: absolute; z-index: 1000; left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        padding: 10px 14px; min-height: 44px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: var(--drop);
+        font: 700 .95rem/1.2 var(--sans); cursor: pointer;
+      }
+      @media (max-width: 700px) {
+        #beaconCampusMap { height: min(22rem, 45vh); height: min(22rem, 45dvh); }
+      }
       @media (max-width: 560px) {
         #beaconCampusMap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
+        .map-status { bottom: 26px; }
         /* 16px keeps iOS from zooming the page when a field is focused */
         .draftbox input, .draftbox select, .draftbox textarea { font-size: 16px; }
         .flag-form-row { grid-template-columns: 1fr; }

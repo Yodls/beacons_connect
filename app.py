@@ -66,7 +66,10 @@ from models import (
     MapFlagViewer,
     MESSAGE_PARENTS,
     Message,
+    MessageReaction,
     PRONOUNS,
+    REACTION_NAMES,
+    REACTIONS,
     Question,
     QuestionOption,
     REPORT_KINDS,
@@ -886,6 +889,36 @@ def message_filter(kind, parent):
     return MESSAGE_PARENTS[kind] == parent.id
 
 
+def in_chat(message, kind, parent):
+    """message_filter for a row already loaded: is it in this conversation?"""
+    if kind == COMMUNITY:
+        return message.room == COMMUNITY
+    return getattr(message, MESSAGE_PARENTS[kind].key) == parent.id
+
+
+def reactions_for(message_ids):
+    """{message_id: [{name, glyph, label, count, mine}, ...]}, one query.
+
+    Only emoji somebody used appear, always in the order of REACTIONS, so the
+    page, /messages and /live draw a row's chips the same way round.
+    """
+    if not message_ids:
+        return {}
+    tally = {}
+    for mid, emoji, uid in db.session.execute(
+            db.select(MessageReaction.message_id, MessageReaction.emoji,
+                      MessageReaction.user_id)
+            .where(MessageReaction.message_id.in_(message_ids))):
+        count, mine = tally.setdefault(mid, {}).get(emoji, (0, False))
+        tally[mid][emoji] = (count + 1, mine or uid == current_user.id)
+    return {
+        mid: [{"name": name, "glyph": glyph, "label": label,
+               "count": slot[name][0], "mine": slot[name][1]}
+              for name, glyph, label in REACTIONS if name in slot]
+        for mid, slot in tally.items()
+    }
+
+
 def event_wording(message, game, actor_name, other_name):
     """How a game event reads to the person looking at it.
 
@@ -952,6 +985,9 @@ def chat_rows(kind, parent, after=0):
         events = {g.id: g for g in db.session.scalars(
             db.select(Game).where(Game.id.in_(game_ids)))}
 
+    # The same again for reactions. Event cards take none.
+    reacted = reactions_for([m.id for m, _ in rows if not m.event])
+
     out = []
     for m, name in rows:
         entry = {
@@ -964,7 +1000,13 @@ def chat_rows(kind, parent, after=0):
             # reader's own time zone and mark where each day starts.
             "ts": m.created_at.isoformat() + "Z",
             "mine": m.user_id == current_user.id,
+            "reactions": reacted.get(m.id, []),
         }
+        # A reply carries a copy of what it quoted, made when it was sent.
+        # `id` goes null if the original is deleted; the copy stays.
+        if m.reply_name is not None:
+            entry["reply"] = {"id": m.reply_to_id, "name": m.reply_name,
+                              "body": m.reply_body}
         post = posts.get(m.post_id)
         if post is not None:
             entry["post"] = post_payload(
@@ -1353,6 +1395,91 @@ def notify_message(kind, parent, target_id, title=None):
         )
 
 
+REPLY_QUOTE_MAX = 140
+
+
+def quote_reply(message, raw, kind, parent):
+    """Make `message` a reply to message `raw`, where that is allowed.
+
+    The quoted message must be in this same conversation and must be
+    something somebody said, not a game-event card. Anything else is ignored
+    and the message goes out as an ordinary one: a quote that cannot be
+    honoured should not lose what was typed.
+
+    The copy is taken from the stored row, never from the form, so a reply
+    cannot put words in somebody's mouth.
+    """
+    if not raw.isdigit():
+        return
+    quoted = db.session.get(Message, int(raw))
+    if quoted is None or quoted.event or not in_chat(quoted, kind, parent):
+        return
+    author = db.session.get(User, quoted.user_id)
+    text = " ".join(quoted.body.split())
+    if len(text) > REPLY_QUOTE_MAX:
+        text = text[:REPLY_QUOTE_MAX - 1].rstrip() + "…"
+    message.reply_to_id = quoted.id
+    message.reply_name = author.name if author else "Somebody"
+    message.reply_body = text
+
+
+@app.route("/messages/<int:message_id>/react", methods=["POST"])
+@login_required
+def message_react(message_id):
+    """Add, change or take back your reaction to one message.
+
+    One per person per message, as in iMessage: none yet adds one, the same
+    emoji again takes it back, a different one replaces it. The primary key
+    on message_reactions is what actually holds that.
+
+    Answered as JSON for the page's fetch, which repaints the one row -- a
+    page swap would snap the log to the bottom, which is wrong when reacting
+    to something further up. Without JavaScript it is a form and a redirect.
+    """
+    fetched = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    def refuse(why, status=403):
+        if fetched:
+            return jsonify({"error": why}), status
+        flash(why)
+        return redirect(url_for("index"))
+
+    message = db.session.get(Message, message_id)
+    if message is None:
+        return refuse("That message is not available to you.")
+    # The same door report_subject uses, so an outsider is refused here for
+    # exactly the reasons they cannot read the message.
+    kind, target_id, parent, _ = message_chat(message)
+    if kind is None:
+        return refuse("That message is not available to you.")
+    if message.event:
+        return refuse("That one cannot take a reaction.", 400)
+    if kind == "group" and chat_ended(parent):
+        return refuse("That meetup has ended, so its chat is closed.")
+    emoji = request.form.get("emoji", "")
+    if emoji not in REACTION_NAMES:
+        return refuse("That is not one of the reactions.", 400)
+
+    mine = db.session.get(MessageReaction, (message.id, current_user.id))
+    if mine is None:
+        db.session.add(MessageReaction(message_id=message.id,
+                                       user_id=current_user.id, emoji=emoji))
+    elif mine.emoji == emoji:
+        db.session.delete(mine)
+    else:
+        mine.emoji = emoji
+        # Re-stamped so the live token moves for a swap as well.
+        mine.created_at = datetime.utcnow()
+    db.session.commit()
+
+    if fetched:
+        return jsonify({
+            "id": message.id,
+            "reactions": reactions_for([message.id]).get(message.id, []),
+        })
+    return redirect(url_for("chat", kind=kind, target_id=target_id))
+
+
 @app.route("/chats/<kind>/<int:target_id>", methods=["GET", "POST"])
 @login_required
 def chat(kind, target_id):
@@ -1377,6 +1504,8 @@ def chat(kind, target_id):
         else:
             message = Message(user_id=current_user.id, body=body)
             attach_parent(message, kind, parent)
+            quote_reply(message, request.form.get("reply_to", ""), kind,
+                        parent)
             db.session.add(message)
             notify_message(kind, parent, target_id, title)
             db.session.commit()
@@ -1493,6 +1622,8 @@ def chat(kind, target_id):
         # first live round of every visit to the campus room would come back
         # at once with every card in it.
         card_token=(live_cards_token() if kind == COMMUNITY else "none"),
+        reacts_token=live_reacts_token(message_filter(kind, parent)),
+        reactions=REACTIONS,
     )
 
 
@@ -1601,6 +1732,40 @@ def live_cards_token():
         .where(GamePost.status != "open").scalar_subquery(),
     )).one()
     return f"{count}:{newest.isoformat() if newest else '-'}:{shut}"
+
+
+def live_reacts_token(where):
+    """What the poller compares to decide whether reactions have moved.
+
+    The count and the newest created_at of every reaction in one
+    conversation. An add moves both; a removal drops the count; a change of
+    emoji re-stamps created_at; and a removal and an add landing between the
+    same two probes still move the newest. The cards token is built the same
+    way for the same reason.
+
+    Takes a where clause (message_filter's) rather than the conversation,
+    because /live releases the ORM row between probes.
+    """
+    count, newest = db.session.execute(
+        db.select(db.func.count(), db.func.max(MessageReaction.created_at))
+        .select_from(MessageReaction)
+        .join(Message, Message.id == MessageReaction.message_id)
+        .where(where)).one()
+    return f"{count}:{newest.isoformat() if newest else '-'}"
+
+
+def live_reacts(where):
+    """Every reacted message in a conversation, keyed by id as a string.
+
+    The whole map rather than what changed: the page clears any row that
+    has chips but is not listed, which is how the LAST reaction on a message
+    being taken back reaches the other tabs.
+    """
+    ids = list(db.session.scalars(
+        db.select(MessageReaction.message_id).distinct()
+        .join(Message, Message.id == MessageReaction.message_id)
+        .where(where)))
+    return {str(mid): chips for mid, chips in reactions_for(ids).items()}
 
 
 def live_cards(kind, token, parent=None, target_id=None):
@@ -1775,6 +1940,11 @@ def live_reply(kind, target_id):
     # campus room, so without this the "2 of 4 going" on a card sat stale
     # under whoever posted it until they reloaded.
     card_token = request.args.get("cards", "")
+    # And the reactions it is showing, the same way: a reaction writes no
+    # message, so nothing else here would wake for one. Only probed when the
+    # page sent one -- an empty token is a page that does not show them, and
+    # comparing a fresh token to it would wake that page on every round.
+    react_token = request.args.get("reacts", "")
 
     # Built from primitives, because the ORM object behind `parent` is
     # released along with the session between probes.
@@ -1834,6 +2004,8 @@ def live_reply(kind, target_id):
         # comparing it against a freshly computed token would return on every
         # round for ever.
         deck = card_token
+        # Defaulted for both of those reasons too.
+        reacts = react_token
         if watching:
             newest = db.session.scalar(
                 db.select(db.func.max(Message.id)).where(where)
@@ -1851,9 +2023,12 @@ def live_reply(kind, target_id):
             # this probe.
             if kind in CARD_CHATS:
                 deck = live_cards_token()
+            if react_token:
+                reacts = live_reacts_token(where)
 
         if (newest > after or fresh != token or bell_now != bell
-                or crowd != group_token or deck != card_token):
+                or crowd != group_token or deck != card_token
+                or reacts != react_token):
             rows = []
             if watching:
                 # Resolved again, because this wait has been held for up to
@@ -1877,6 +2052,10 @@ def live_reply(kind, target_id):
                 "group": (live_group(db.session.get(Chat, target_id))
                           if kind == "group" else None),
                 "cards": live_cards(kind, deck, parent, target_id),
+                # Only when they moved. New rows carry their own reactions,
+                # so a message arriving does not need the whole map again.
+                "reacts": ({"token": reacts, "rows": live_reacts(where)}
+                           if watching and reacts != react_token else None),
                 "notices": notice_slice(
                     me, seen,
                     skip_url=notices.chat_url(kind, target_id) if watching
@@ -3661,6 +3840,12 @@ def admin():
         asked_by=people,
         people=db.session.scalars(who).all(),
         term=term,
+        # Every account, newest first. Ordered by id because that is the
+        # only honest proxy for sign-up order: the user table has never had
+        # a creation timestamp, and verification_expires_at is not one -- it
+        # is reset on every resend and nulled once the code is entered.
+        accounts=db.session.scalars(
+            db.select(User).order_by(User.id.desc())).all(),
         # What a new hub may be tagged with. The question a hub is placed by
         # is the one whose answers people are shown -- so the admin is
         # choosing from the same words a student saw.
@@ -3850,6 +4035,29 @@ def message_home(message):
     return None, None
 
 
+def message_chat(message):
+    """The conversation a message is in, if the current user may read it.
+
+    Returns (kind, target_id, parent, title), or four Nones.
+
+    message_home() alone is not an access check. For a 1:1 it names "the
+    other person" assuming the reader is one of the two, so for an outsider
+    it names a participant -- and chat_target() then resolves the outsider's
+    OWN friendship with that participant and succeeds. Anybody friends with
+    one end of a conversation could read it through /report?message=<id>.
+    So the conversation chat_target() resolves must be the one the message
+    actually hangs off. Every route that takes a message id goes through
+    here.
+    """
+    kind, target_id = message_home(message)
+    if kind is None:
+        return None, None, None, None
+    parent, title = chat_target(kind, target_id)
+    if parent is None or not in_chat(message, kind, parent):
+        return None, None, None, None
+    return kind, target_id, parent, title
+
+
 def report_subject():
     """Resolve what is being reported, or (None, ...) if it may not be seen.
 
@@ -3869,11 +4077,8 @@ def report_subject():
         message = db.session.get(Message, int(raw_message))
         if message is None:
             return None, None, None, None, None
-        kind, target_id = message_home(message)
+        kind, _, _, title = message_chat(message)
         if kind is None:
-            return None, None, None, None, None
-        parent, title = chat_target(kind, target_id)
-        if parent is None:
             return None, None, None, None, None
         author = db.session.get(User, message.user_id)
         return ("message_id", message, author, message.body, title)

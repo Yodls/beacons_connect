@@ -574,6 +574,19 @@ class Message(db.Model):
     event = db.Column(db.String(12))
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # The message this one answers, if it is a reply. SET NULL, not CASCADE:
+    # deleting an account deletes everything that person wrote, and a
+    # CASCADE here would take other people's replies down with it. The quote
+    # beside it is a copy taken when the reply was sent, so it still reads
+    # after the original has gone -- Report.quoted's reasoning.
+    #
+    # Deliberately in no CHECK, and not a parent column: tests/
+    # test_schema_rules.py refuses any CHECK that names a column a SET NULL
+    # cascade can null.
+    reply_to_id = db.Column(db.Integer,
+                            db.ForeignKey("messages.id", ondelete="SET NULL"))
+    reply_name = db.Column(db.Text)
+    reply_body = db.Column(db.Text)
 
     __table_args__ = (
         # A message hangs off exactly one chat, never both and never neither.
@@ -608,6 +621,55 @@ MESSAGE_PARENTS = {
     "pair": Message.pairing_id,
     "group": Message.chat_id,
 }
+
+
+# The six reactions, iMessage's tapbacks, in the order the bar offers them.
+# Stored by name rather than by glyph, so the CHECK below is plain ASCII and
+# a future change of glyph is not a migration. The CHECK is built from this
+# tuple, the way ck_notice_kind is built from NOTICE_KINDS.
+REACTIONS = (
+    ("heart", "❤️", "a heart"),
+    ("thumbsup", "\U0001f44d", "a thumbs up"),
+    ("thumbsdown", "\U0001f44e", "a thumbs down"),
+    ("haha", "\U0001f602", "a laugh"),
+    ("exclaim", "‼️", "an exclamation"),
+    ("question", "❓", "a question mark"),
+)
+REACTION_NAMES = tuple(name for name, _, _ in REACTIONS)
+REACTION_GLYPHS = {name: glyph for name, glyph, _ in REACTIONS}
+
+
+class MessageReaction(db.Model):
+    """One person's reaction to one message.
+
+    The primary key is (message_id, user_id), which is the "one reaction per
+    person per message" rule enforced by the database rather than hoped for
+    by the route: tapping a different emoji updates this row, tapping the
+    same one deletes it.
+
+    Both keys CASCADE. A reaction is about a message and by a person; with
+    either gone it means nothing, and almost every test suite cleans up by
+    deleting its probes' messages, which a NO ACTION key would refuse.
+    """
+
+    __tablename__ = "message_reactions"
+
+    message_id = db.Column(db.Integer,
+                           db.ForeignKey("messages.id", ondelete="CASCADE"),
+                           primary_key=True)
+    user_id = db.Column(db.Integer,
+                        db.ForeignKey("user.id", ondelete="CASCADE"),
+                        primary_key=True)
+    emoji = db.Column(db.String(12), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "emoji IN (" + ", ".join(f"'{n}'" for n in REACTION_NAMES) + ")",
+            name="ck_reaction_emoji",
+        ),
+        db.Index("ix_reactions_message", "message_id"),
+    )
 
 
 class GamePost(db.Model):

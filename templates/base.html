@@ -119,6 +119,7 @@
         min-height: 100vh;
         color: var(--navy);
         font: 400 16px/1.5 var(--sans);
+        overflow-wrap: break-word;
         -webkit-font-smoothing: antialiased;
         -webkit-tap-highlight-color: transparent;
         /* the desk: sky blue with a faint white pixel grid every 32px */
@@ -166,6 +167,10 @@
          on purpose: coloured panels set their button colour themselves. */
       input, select, textarea {
         width: 100%;
+        /* 16px, not inherited: a control inside a label would otherwise take
+           the label's .95rem, and iOS zooms the whole page when a field
+           smaller than 16px is focused -- and does not zoom back. */
+        font-size: 1rem;
         min-height: 46px;
         padding: .55rem .8rem;
         color: var(--navy);
@@ -234,7 +239,7 @@
          right. No backdrop-filter here on purpose: it would make the bar
          the containing block for the fixed bell panel on phones. */
       .topbar {
-        position: sticky; top: 0; z-index: 20;
+        position: sticky; top: 0; z-index: 30;
         padding-top: env(safe-area-inset-top);
         background: #fff;
         border-bottom: 2px solid var(--navy);
@@ -356,7 +361,9 @@
          to be findable when somebody needs it and not compete with the
          thing they came to the page to do. */
       .report-link {
-        flex: none; color: var(--muted); font-size: .82rem;
+        display: inline-block; flex: none;
+        padding: 10px 4px; margin: -10px -4px;
+        color: var(--muted); font-size: .82rem;
         text-decoration: underline;
       }
       .report-link:hover { color: var(--navy); }
@@ -430,7 +437,7 @@
       .bell-when { display: block; margin-top: .15rem; color: var(--muted); font-size: .78rem; }
       .bell-answer { grid-column: 1 / -1; display: flex; gap: .5rem; padding: 0 0 .7rem; }
       .bell-answer button[type="submit"] {
-        min-height: 34px; padding: 0 .8rem;
+        min-height: 40px; padding: 0 .9rem;
         box-shadow: 0 3px 0 var(--navy); font-size: .85rem;
       }
       button.bell-yes { background: var(--beacon); color: #fff; }
@@ -439,7 +446,8 @@
       button.bell-no:hover { background: var(--paper); }
       button.bell-seen, button.bell-seen:hover, button.bell-seen:active {
         display: grid; place-items: center;
-        width: 36px; height: 36px; min-height: 0; padding: 0;
+        /* 44px: the tick is tapped with a thumb from a list of notices. */
+        width: 44px; height: 44px; min-height: 0; padding: 0;
         background: none; border: 2px solid transparent; border-radius: var(--r-sm);
         box-shadow: none; transform: none;
         color: var(--muted);
@@ -524,7 +532,7 @@
         box-shadow: var(--drop);
       }
       /* everything under the title bar gets the window's inner spacing */
-      section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) > :not(.sec) {
+      section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) > :not(.sec):not(.bar) {
         margin: 14px;
       }
       /* The title bar. .sec is what ui.section() emits; .bar is the same
@@ -578,7 +586,10 @@
       section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) .card {
         border-color: var(--line); box-shadow: none;
       }
-      .grid { display: grid; gap: 12px; }
+      /* minmax(0, 1fr), not the implicit `auto`: an auto track grows to the
+         widest item's min-content, so one unbreakable word in one row
+         pushed every row on the home page 8px past a 320px screen. */
+      .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
       .card-top { display: flex; align-items: center; gap: 12px; }
       .card-top .grow { flex: 1 1 auto; min-width: 0; }
       .why { display: block; margin-top: 2px; color: var(--muted); font-size: .92rem; }
@@ -798,8 +809,8 @@
         font: 400 24px/1 var(--px);
       }
       .dock-find { display: flex; gap: 8px; }
-      .dock-find input { min-height: 42px; padding: .4rem .65rem; font-size: .95rem; }
-      .dock-find button[type="submit"] { min-height: 42px; padding: 0 .9rem; font-size: .9rem; }
+      .dock-find input { min-height: 44px; padding: .4rem .65rem; font-size: 1rem; }
+      .dock-find button[type="submit"] { min-height: 44px; min-width: 44px; padding: 0 .9rem; font-size: 1rem; }
       .dock h4 {
         margin: 16px 0 4px;
         color: var(--muted); font: 700 .76rem/1.2 var(--sans);
@@ -819,7 +830,7 @@
       }
       .dock-row .avatar { width: 34px; height: 34px; font-size: 17px; }
       .dock-row button[type="submit"] {
-        min-height: 34px; padding: 0 .7rem;
+        min-height: 40px; padding: 0 .8rem;
         box-shadow: 0 3px 0 var(--navy); font-size: .85rem;
       }
       .dock-note { margin-top: 8px; color: var(--muted); font-size: .9rem; }
@@ -839,7 +850,7 @@
       .auth {
         min-height: 100vh; min-height: 100dvh;
         padding: 28px 16px calc(36px + env(safe-area-inset-bottom));
-        display: grid; place-items: center;
+        display: grid; grid-template-columns: minmax(0, 1fr); place-items: center;
       }
       .auth-stack {
         width: 100%; max-width: 26rem;
@@ -868,6 +879,11 @@
       .brandpanel.compact > div { align-items: flex-start; gap: 8px; }
       .brandpanel.compact .brandpanel-logo { width: 72px; height: 72px; }
       .brandpanel.compact .brandpanel-name { font-size: 40px; }
+      @media (max-width: 400px) {
+        .brandpanel.compact { flex-direction: column; text-align: center; }
+        .brandpanel.compact > div { align-items: center; }
+        .brandpanel.compact .brandpanel-name { font-size: 34px; }
+      }
       .brandpanel-umb {
         display: flex; align-items: center; justify-content: center; gap: 8px;
         color: var(--muted); font: 700 16px/1 var(--sans);
@@ -937,6 +953,11 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 0 3px 0 var(--navy);
         font-size: .92rem; font-weight: 700; cursor: pointer;
+        /* A chip may not be wider than its row. One option reads
+           "reading/crafting/cooking/baking", and slashes do not break, so
+           that chip was 281px wide on a 320px screen. `anywhere` lets the
+           min-content width shrink, which `break-word` does not. */
+        max-width: 100%; overflow-wrap: anywhere;
       }
       .chips label:has(input:checked) {
         background: var(--navy); color: #fff;
@@ -954,12 +975,21 @@
         .topbar-inner { gap: 8px; min-height: 64px; padding: 8px 12px; }
         .brand-mark { width: 42px; height: 42px; }
         .brand-name { font-size: 25px; }
+        /* The subtitle is right-aligned under the name on wide screens. On a
+           phone the column is only as wide as "BeaconsConnect", and a nowrap
+           line a few pixels wider than that, aligned flex-end, spills off the
+           LEFT -- under the logo, which paints over the "C". Aligned to the
+           start, anything left over runs into the gap before the bell. */
+        .brand-sub { justify-content: flex-start; }
+        /* Only the brand text gives way when the bar is tight. */
+        .brand-text { flex: 0 1 auto; }
+        .brand-mark, .bell, .who, .findlink { flex: none; }
         /* the search field becomes an icon that goes to /people */
         .find { display: none; }
         .findlink { display: grid; }
         .page { padding-top: 16px; }
         h1 { font-size: 40px; }
-        section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) > :not(.sec) {
+        section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) > :not(.sec):not(.bar) {
           margin: 12px;
         }
         .tabbar {
@@ -987,8 +1017,12 @@
       }
       @media (max-width: 400px) {
         .brand-name { font-size: 23px; }
-        .brand-sub { font-size: 10px; }
-        .brand-umb { height: 20px; }
+        /* Sized so "Connect on Campus @" and the UMass mark fit under the name
+           at 320 and 375, where the bar is tightest -- measured, not guessed:
+           at 10px with a 20px mark the line was ~15px wider than its column. */
+        .brand-text { gap: 2px; }
+        .brand-sub { font-size: 9.5px; gap: 2px; }
+        .brand-umb { height: 15px; }
         .tab { font-size: 11px; }
       }
       @media (max-width: 370px) {
@@ -1023,6 +1057,7 @@
       }
       .chatrow:first-child { border-top: 0; }
       .chatrow:hover { background: var(--paper); text-decoration: none; }
+      @media (max-width: 370px) { .chatrow { gap: 8px; padding: 10px; } }
       .chatrow .mid { flex: 1 1 auto; min-width: 0; display: block; }
       .chatrow .name { display: block; font-size: 1rem; font-weight: 700; }
       .chatrow .last {

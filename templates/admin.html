@@ -50,7 +50,7 @@
       .ask textarea {
         width: 100%; padding: 8px 10px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .92rem/1.35 var(--sans);
+        font: 400 1rem/1.35 var(--sans);
       }
       .done { color: var(--muted); }
       .done b { color: var(--navy); }
@@ -61,6 +61,9 @@
         border-top: 2px dashed var(--line);
       }
       .who-row:first-child { border-top: 0; }
+      .acctnote { margin: 0; padding: 10px 14px 0; color: var(--muted); font-size: .88rem; }
+      /* Long addresses wrap rather than push the chips off a phone. */
+      .acct-row small { display: block; overflow-wrap: anywhere; }
       .who-row .grow { flex: 1 1 auto; min-width: 0; }
       .who-row b { display: block; color: var(--navy); }
       .who-row small { color: var(--muted); }
@@ -74,6 +77,7 @@
       .dbwhere b { color: var(--navy); }
       .dbnote { color: var(--muted); font-size: .88rem; }
       .dbrows { padding: 10px 0 0; }
+      .dbrow button { min-height: 40px; }
       .dbrow {
         display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
         padding: 10px 14px;
@@ -85,7 +89,7 @@
       .dbrow input.dbarg {
         flex: 0 1 13rem; padding: 7px 9px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .9rem/1.3 var(--sans);
+        font: 400 1rem/1.3 var(--sans);
       }
       .dblive {
         display: inline-flex; align-items: center; gap: 5px;
@@ -109,8 +113,9 @@
       .dbapply input.dbconfirm {
         width: 100%; max-width: 18rem; padding: 8px 10px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .92rem/1.35 var(--sans);
+        font: 400 1rem/1.35 var(--sans);
       }
+      .dbsure[hidden] { display: none; }
       .dbsure {
         display: block; margin: 8px 0;
         font-size: .88rem; font-weight: 700; color: var(--navy);
@@ -120,7 +125,7 @@
       .findwho input {
         flex: 1 1 14rem; padding: 9px 10px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .95rem/1.35 var(--sans);
+        font: 400 1rem/1.35 var(--sans);
       }
 {% endblock %}
 
@@ -309,6 +314,35 @@
             <b>Nobody holds anything yet.</b> Search for somebody to let them
             post campus-wide meetups.
           {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# Every account, for reading. Granting and revoking stays in the section
+     above; this one only says who is here and what state they are in.
+
+     Ordered, not dated. The user table has never recorded when an account
+     was made, and nothing else in the schema does either, so a "joined"
+     column would be invented. Ids are a sequence, so newest first is true;
+     anything more precise would not be. #}
+  <section class="win sec-friend">
+    <div class="bar">{{ ui.icon("people") }}<span class="bar-title">All accounts</span><span class="count">{{ accounts | length }}</span><span class="grip"></span></div>
+    <p class="acctnote">Newest first. The site doesn't record sign-up dates,
+      so accounts are ordered, not dated.</p>
+    <div class="grid">
+      {% for person in accounts %}
+        <div class="who-row acct-row">
+          <div class="grow">
+            <b>{{ person.name }}</b>
+            <small>{{ person.email }}</small>
+          </div>
+          {% if person.is_admin %}<span class="holds">Admin</span>{% endif %}
+          {% if person.can_post_fixtures %}<span class="holds">Posts meetups</span>{% endif %}
+          {# Registered but never entered the code: they cannot sign in. #}
+          {% if not person.email_verified %}<span class="holds">Not verified</span>{% endif %}
+          {# Hidden from strangers' suggestions and search; friends still see them. #}
+          {% if not person.discoverable %}<span class="holds">Unlisted</span>{% endif %}
         </div>
       {% endfor %}
     </div>

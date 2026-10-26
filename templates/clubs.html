@@ -90,7 +90,7 @@
         padding: 9px 10px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .95rem/1.35 var(--sans);
+        font: 400 1rem/1.35 var(--sans);
       }
       .hubform textarea { resize: vertical; }
       .hubform button { align-self: flex-start; margin-top: 8px; }
@@ -138,6 +138,7 @@
 
       /* ---------- a club ---------- */
       .clubgrid .card { display: flex; flex-direction: column; }
+      .clubgrid .card[hidden] { display: none; }
       .clubgrid .card-top { align-items: flex-start; }
       .clubgrid .card-top h3 { margin: 0; font: 700 1.05rem/1.25 var(--sans); }
       .clubgrid .card-top .grow { padding-top: 2px; }

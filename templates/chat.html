@@ -78,7 +78,8 @@
          stylesheet rather than the shared one: a test reads the CSSOM and
          requires these rules to arrive with the chat and leave with it. */
       #log {
-        height: 26rem; margin-top: 14px; padding: 16px; overflow-y: auto;
+        height: min(26rem, 55vh); height: min(26rem, 55dvh);
+        margin-top: 14px; padding: 16px; overflow-y: auto;
         display: flex; flex-direction: column;
         /* paper with a faint pixel grid */
         background-color: var(--paper);
@@ -143,6 +144,92 @@
       /* a flag link nobody can open here */
       .msg .flaggone { display: block; margin-top: 4px; color: var(--muted); font-size: .86rem; font-style: italic; }
       .msg.mine .flaggone { color: rgba(255, 255, 255, .8); }
+
+      /* ---------- replies and reactions ----------
+         A reply shows what it answers as a small quote above its words. The
+         copy was taken when it was sent, so it still reads after the
+         original is deleted; then it is italic and goes nowhere. */
+      .msg .quote {
+        display: block; margin: 2px 0 4px; padding: 3px 8px;
+        border-left: 3px solid var(--beacon); border-radius: 4px;
+        background: rgba(120, 175, 233, .18);
+        font-size: .85rem; line-height: 1.3; overflow-wrap: anywhere;
+      }
+      .msg .quote[data-to] { cursor: pointer; }
+      .msg .quote-name { display: block; font-size: .76rem; }
+      .msg .quote-text {
+        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+        overflow: hidden;
+      }
+      .msg .quote:not([data-to]) .quote-text { font-style: italic; }
+      .msg.mine .quote { border-left-color: #fff; background: rgba(255, 255, 255, .18); }
+      /* The reactions sit on the bubble's top corner, as in iMessage: the
+         right on theirs (their avatar is bottom left), the left on yours. */
+      .msg .reacts {
+        position: absolute; top: -13px; right: -8px;
+        display: flex; gap: 2px; padding: 0 5px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: 999px;
+        font-size: .8rem; line-height: 1.45; white-space: nowrap;
+      }
+      .msg.mine .reacts { right: auto; left: -8px; }
+      .msg .react { border-radius: 999px; padding: 0 1px; }
+      .msg .react.on { background: rgba(120, 175, 233, .45); }
+      .msg .react b { margin-left: 1px; font-size: .7rem; }
+      .msg.has-reacts { margin-top: 12px; }
+      /* React, Reply and Report under the words. Written out rather than
+         hidden behind a tap, so it is plain that a message can be answered.
+         Styled like the Report link beside them, with the same padded hit
+         area pulled back by a negative margin. */
+      .msg .row-acts {
+        display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px;
+        margin-top: 2px; color: var(--muted); font-size: .82rem;
+      }
+      .msg .row-acts button {
+        min-height: 0; width: auto; margin: -8px -4px; padding: 8px 4px;
+        background: none; color: inherit; border: 0; box-shadow: none;
+        font-size: .82rem; font-weight: 700; text-decoration: underline;
+      }
+      .msg .row-acts button:hover, .msg .row-acts button[aria-expanded="true"] { color: var(--navy); }
+      .msg .row-acts .report-link { margin: -10px -4px; }
+      .msg.mine .row-acts { color: rgba(255, 255, 255, .85); }
+      .msg.mine .row-acts button:hover,
+      .msg.mine .row-acts button[aria-expanded="true"] { color: #fff; }
+      /* A row the script turns into a shared-flag card has no bubble to
+         react to; Report stays. */
+      .msg.has-card .act-react, .msg.has-card .act-reply, .msg.has-card .act-sep { display: none; }
+      .msg.flash { box-shadow: 0 0 0 3px var(--sky), 4px 4px 0 var(--navy); }
+      /* Tap a bubble for this: the six reactions and Reply. A sibling of the
+         row rather than inside it, because a bubble at 320px is too narrow
+         for six things to tap. */
+      .msgbar {
+        align-self: flex-start; flex: none; max-width: 100%;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+        margin: -6px 0 14px; padding: 3px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
+      }
+      .msgbar.mine { align-self: flex-end; }
+      .msgbar button {
+        width: 38px; height: 38px; min-height: 0; margin: 0; padding: 0;
+        background: none; color: inherit; border: 0; border-radius: 8px; box-shadow: none;
+        font-size: 1.25rem; line-height: 1;
+      }
+      .msgbar button:hover, .msgbar button:focus-visible { background: var(--paper); }
+      .msgbar button.on { background: rgba(120, 175, 233, .45); }
+      /* Above the composer while you are writing a reply. */
+      .replying {
+        display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 10px;
+        background: var(--paper); border-left: 3px solid var(--beacon); border-radius: 4px;
+        font-size: .88rem; min-width: 0;
+      }
+      .replying[hidden] { display: none; }
+      .replying-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .replying button {
+        flex: none; width: 32px; height: 32px; min-height: 0; padding: 0;
+        background: none; color: var(--navy); border: 0; box-shadow: none; font-size: 1rem;
+      }
 
       /* "Today", "Yesterday", or the date, where each day starts. */
       .daymark {
@@ -265,19 +352,26 @@
       .pickgame-menu button[type="submit"]:hover { background: var(--game-bg); }
       /* Anchored to its right edge: from a left anchor this form ran off the
          right of the window. */
-      .newmeet-menu { right: 0; width: min(24rem, calc(100vw - 2rem)); }
+      /* Anchored LEFT by default. The key sits near the left edge of a
+         one-column chat at every width, so a right-anchored 384px menu
+         opened off-screen -- at 1280px it landed at x = -105. Only the
+         two-column game layout, where the composer is in the right rail,
+         wants it on the right: see the min-width: 900px block below. */
+      .newmeet-menu { left: 0; right: auto; width: min(24rem, calc(100vw - 2rem)); max-height: calc(100vh - 8rem); overflow: auto; }
       /* A form is wider than a list of buttons, so on a phone it is pinned
          to the viewport instead. */
-      @media (max-width: 560px) {
+      @media (max-width: 899px) {
         .newmeet-menu {
           position: fixed; left: 8px; right: 8px; width: auto;
           bottom: calc(var(--tabbar-h) + 5rem);
+          max-height: calc(100vh - var(--tabbar-h) - 6rem);
+          max-height: calc(100dvh - var(--tabbar-h) - 6rem);
+          overflow: auto;
         }
       }
       /* On a phone the game menu would run off the right edge from a left
          anchor, and the labels cost width the message field needs. */
       @media (max-width: 480px) {
-        .pickgame-menu { left: auto; right: 0; }
         .pickgame > summary, .newmeet > summary { width: 48px; padding: 0; justify-content: center; }
         .pickgame > summary span, .newmeet > summary span { display: none; }
       }
@@ -365,14 +459,14 @@
       .post-actions .meta { margin-right: auto; }
       /* "See on map": a white key that goes to the meetup's flag on Meet up */
       .post-actions .maplink {
-        display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 0 3px 0 var(--navy); font-size: .88rem;
       }
       .post-actions .maplink:hover { background: var(--paper); text-decoration: none; }
       .post-actions button[type="submit"],
-      .post-actions .confirm > summary { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      .post-actions .confirm > summary { min-height: 40px; margin: 0; padding: 0 12px; font-size: .88rem; }
 
       /* Leaving is the one action here you cannot undo in a click, so it
          carries the warning colour and asks first. Qualified with the element
@@ -380,7 +474,7 @@
          as a raised blue key: tie on specificity, win on order. */
       .confirm { margin: 0; }
       .confirm > summary {
-        display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px;
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px;
         list-style: none; cursor: pointer;
         background: var(--danger-bg); color: var(--danger);
         border: 2px solid var(--danger); border-radius: var(--r);
@@ -398,7 +492,7 @@
       .confirm-ask { display: block; margin-bottom: 8px; color: var(--navy); font-size: .9rem; line-height: 1.35; }
       .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .confirm-row form { margin: 0; }
-      .confirm-row button { min-height: 36px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      .confirm-row button { min-height: 40px; margin: 0; padding: 0 12px; font-size: .88rem; }
       button.leave-yes, button.leave-yes:hover { background: var(--danger); color: #fff; border-color: var(--navy); }
       button.leave-yes:hover { background: #8a2119; }
       button.confirm-no {
@@ -413,9 +507,12 @@
          full width; .playing is added by the server on load and by the poller
          when an invite arrives. */
       .gamewrap { display: block; }
-      .gamewrap.playing { display: grid; gap: 16px; align-items: start; margin-top: 14px; }
+      .gamewrap.playing { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 14px; }
       @media (min-width: 900px) {
         .gamewrap.playing { grid-template-columns: minmax(0, 1fr) 21rem; }
+        /* The composer is in the 21rem right rail here, so a left-anchored
+           menu would run past the right edge instead. */
+        .gamewrap.playing .newmeet-menu { left: auto; right: 0; }
       }
       .talkcol { min-width: 0; }
       .gamewrap.playing #log { margin-top: 0; }
@@ -468,10 +565,11 @@
       .gamehead h3 { margin: 0; font: 400 24px/1 var(--px); }
       .gamehead .vs { color: var(--navy); font-size: .85rem; font-weight: 700; }
       .gamehead form { margin: 0; }
-      .gamehead button { min-height: 34px; margin: 0; padding: 0 10px; font-size: .85rem; }
+      .gamehead button { min-height: 40px; margin: 0; padding: 0 12px; font-size: .85rem; }
 
       .boardwrap {
-        display: grid; place-items: center;
+        display: grid; grid-template-columns: minmax(0, 1fr);
+        place-items: center; justify-items: safe center;
         padding: 16px;
         background: #fff;
         overflow-x: auto;
@@ -546,7 +644,7 @@
       .board.chess .cell.pick { box-shadow: inset 0 0 0 3px var(--orange); }
       #chessform { width: 100%; }
       #chessform label { margin-top: 12px; font-size: .9rem; }
-      #chessform input { max-width: 9rem; }
+      #chessform input { max-width: 9rem; font-size: 1rem; }
       #chessform button { margin-top: 8px; }
 
       /* The boards are fixed-width grids, and chess at 8 x 2.7rem is wider
@@ -566,6 +664,16 @@
         .board.chess .cell, .board.chess .cell:hover { height: 1.95rem; font-size: 1.15rem; }
         .board.ttt { grid-template-columns: repeat(3, 3.8rem); }
         .board.ttt .cell, .board.ttt .cell:hover { height: 3.8rem; font-size: 1.6rem; }
+        /* The board sits in #board-area, which .boardwrap centres as a
+           shrink-wrapped grid item -- so the board's 100% was 100% of its
+           own max-content, and the fluid cells came out 21px in a 264px
+           pane. Stretch the area for this board only; chess and tic-tac-toe
+           keep their fixed sizes and their centring. */
+        #board-area:has(.board.c4) { width: 100%; justify-self: stretch; }
+        .board.c4 { grid-template-columns: repeat(7, minmax(0, 1fr)); width: 100%; max-width: 19rem; margin: 0 auto; gap: 4px; }
+        .board.c4 .cell, .board.c4 .cell:hover, .board.c4 .cell:active {
+          height: auto; width: 100%; min-width: 0; aspect-ratio: 1; padding: 0;
+        }
       }
 
       /* whose turn: plain text, or a yellow tag when it is yours */
@@ -591,8 +699,8 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
-      .groupbar form { display: flex; gap: 8px; margin: 0 0 0 auto; }
-      .groupbar select { width: auto; margin: 0; max-width: 12rem; }
+      .groupbar form { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
+      .groupbar select { width: auto; margin: 0; max-width: 100%; min-width: 0; }
       .groupbar button { min-height: 40px; margin: 0; padding: 0 12px; font-size: .9rem; }
       .code {
         display: inline-block; padding: 1px 7px;
@@ -807,7 +915,7 @@
     <div class="talkcol">
   {# data-cards is the deck token, handed over on the markup the way
      the game pane and the roster hand theirs over. #}
-  <div id="log" data-cards="{{ card_token }}">
+  <div id="log" data-cards="{{ card_token }}" data-reacts="{{ reacts_token }}">
     {% for message in messages %}
       {% if message.event %}
         {# A game moment, not speech. It keeps the .msg class because the
@@ -841,10 +949,15 @@
          (has-card), and the script below does the same for a shared map
          flag. data-ts is the moment in full, for local times and the
          "Today" markers. #}
-      <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}"
+      <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}{% if message.reactions and not message.post %} has-reacts{% endif %}"
            data-id="{{ message.id }}" data-ts="{{ message.ts }}">
         {% if not message.mine %}{{ ui.avatar(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
+        {# What this answers, from the copy taken when it was sent. data-to
+           only while the original is still there to jump to. #}
+        {% if message.reply %}
+          <span class="quote"{% if message.reply.id %} data-to="{{ message.reply.id }}"{% endif %}><b class="quote-name">{{ message.reply.name }}</b><span class="quote-text">{{ message.reply.body }}</span></span>
+        {% endif %}
         <span class="body">{{ message.body }}</span>
         {% if message.post %}
           {# One source for the card, so a live swap cannot render it
@@ -856,13 +969,34 @@
             {%- include "_postcard.html" -%}
           {% endwith %}
         {% endif %}
-        {# Reporting what somebody said. Not on your own messages, and
-           added in the JS builder below as well -- a message that could
-           only be reported until the next live update would be worse than
-           one that could not be reported at all. #}
-        {% if not message.mine %}
-          <a class="report-link"
-             href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
+        {# React, Reply and Report, written out under the words. React and
+           Reply are not offered on a meetup card or once the chat has
+           closed; Report is not offered on your own messages. All three
+           are added in the JS builder below as well -- a message that could
+           only be answered until the next live update would be worse than
+           one that could not be answered at all. #}
+        {% set answerable = not ended and not message.post %}
+        {% if answerable or not message.mine %}
+          <span class="row-acts">
+            {%- if answerable -%}
+              <button type="button" class="act-react" aria-expanded="false">React</button>
+              <span class="act-sep" aria-hidden="true">&middot;</span>
+              <button type="button" class="act-reply">Reply</button>
+            {%- endif -%}
+            {%- if answerable and not message.mine -%}
+              <span class="act-sep" aria-hidden="true">&middot;</span>
+            {%- endif -%}
+            {%- if not message.mine -%}
+              <a class="report-link"
+                 href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
+            {%- endif -%}
+          </span>
+        {% endif %}
+        {# Drawn the same way by paintReacts below, which the live channel
+           and the react fetch both use. Not on a meetup card: it has no
+           bubble for them to sit on. #}
+        {% if message.reactions and not message.post %}
+          <span class="reacts">{% for r in message.reactions %}<span class="react{% if r.mine %} on{% endif %}" data-name="{{ r.name }}" title="{{ r.label }}{% if r.mine %} (yours){% endif %}">{{ r.glyph }}{% if r.count > 1 %}<b>{{ r.count }}</b>{% endif %}</span>{% endfor %}</span>
         {% endif %}
         <span class="at">{{ message.at }}</span>
       </div>
@@ -871,6 +1005,13 @@
       <p class="why" id="empty">No messages yet. Say hello.</p>
     {% endfor %}
   </div>
+
+  {% if not ended %}
+  <div class="replying" id="replying" hidden>
+    <span class="replying-what">Replying to <b class="replying-name"></b>: <span class="replying-text"></span></span>
+    <button type="button" class="replying-cancel" aria-label="Cancel the reply">&#x2715;</button>
+  </div>
+  {% endif %}
 
   <div class="sendrow">
     {# Beside the composer rather than inside it: nested forms are invalid
@@ -964,6 +1105,10 @@
     <p class="chat-ended">This meetup has ended, so its chat is closed.</p>
   {% else %}
   <form class="composer" method="post">
+    {# Set by Reply on a message. The server checks it is in this chat and
+       copies the quote from the stored row; a send swaps the page, which
+       clears it. #}
+    <input type="hidden" name="reply_to" id="reply-to" value="" />
     <input name="body" maxlength="2000" autocomplete="off" autofocus
            placeholder="Write a message&hellip;" required />
     <button type="submit">Send</button>
@@ -1250,6 +1395,14 @@
     // way the pane's and the roster's do, so a fresh load asks for nothing.
     var deck = log.dataset.cards || "none";
 
+    // The reactions, the same way: a token on the markup, a fresh map from
+    // the channel only when it moves. A reaction writes no message, so
+    // nothing else would bring one to another tab.
+    var reacts = log.dataset.reacts || "none";
+    // [name, emoji, what a screen reader calls it], in the order they show.
+    var REACTIONS = {{ reactions | tojson }};
+    var closed = {{ (ended or false) | tojson }};
+
     // One card back where it belongs. Keyed by the message it lives inside,
     // so a card can also be filled into a message that arrived live a moment
     // ago and has none -- a meetup posted while you watch used to appear as
@@ -1298,6 +1451,49 @@
       // textContent, never innerHTML: this is user-written text.
       el.textContent = text;
       return el;
+    }
+
+    // A row's reaction chips, from the server's list. The one painter for
+    // live rows, the live map and the react fetch, drawn to match the
+    // server's, so none of them can draw it differently.
+    function paintReacts(row, list) {
+      var box = row.querySelector(":scope > .reacts");
+      if (!list || !list.length || row.classList.contains("has-post")) {
+        if (box) { box.remove(); }
+        row.classList.remove("has-reacts");
+        return;
+      }
+      if (!box) {
+        box = span("reacts", "");
+        row.insertBefore(box, row.querySelector(":scope > .at"));
+      }
+      box.replaceChildren();
+      list.forEach(function (r) {
+        var chip = span("react" + (r.mine ? " on" : ""), r.glyph);
+        chip.dataset.name = r.name;
+        chip.title = r.label + (r.mine ? " (yours)" : "");
+        if (r.count > 1) {
+          var n = document.createElement("b");
+          n.textContent = String(r.count);
+          chip.appendChild(n);
+        }
+        box.appendChild(chip);
+      });
+      row.classList.add("has-reacts");
+    }
+
+    function actButton(cls, label) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.textContent = label;
+      if (cls === "act-react") { b.setAttribute("aria-expanded", "false"); }
+      return b;
+    }
+    function actSep() {
+      var dot = span("act-sep", "\u00b7");
+      dot.setAttribute("aria-hidden", "true");
+      return dot;
     }
 
     // A one-button form, the way the friends panel builds its Add button.
@@ -1361,19 +1557,172 @@
         p.appendChild(face);
       }
       p.appendChild(span("who", message.name));
+      if (message.reply) {
+        // The same quote the server draws, from the same copy.
+        var quote = span("quote", "");
+        if (message.reply.id) { quote.dataset.to = message.reply.id; }
+        var quoted = document.createElement("b");
+        quoted.className = "quote-name";
+        quoted.textContent = message.reply.name;
+        quote.appendChild(quoted);
+        quote.appendChild(span("quote-text", message.reply.body));
+        p.appendChild(quote);
+      }
       p.appendChild(span("body", message.body));
-      if (message.user_id !== me) {
-        // The same link the server draws beside a message that is not
-        // yours. Built rather than pasted as markup: this file is checked
-        // file-wide for innerHTML.
-        var tell = document.createElement("a");
-        tell.className = "report-link";
-        tell.href = "/report?kind=abuse&message=" + encodeURIComponent(message.id);
-        tell.textContent = "Report";
-        p.appendChild(tell);
+      // The same React, Reply and Report row the server draws. Built rather
+      // than pasted as markup: this file is checked file-wide for innerHTML.
+      var answerable = !closed && !message.post;
+      var theirs = message.user_id !== me;
+      if (answerable || theirs) {
+        var acts = span("row-acts", "");
+        if (answerable) {
+          acts.appendChild(actButton("act-react", "React"));
+          acts.appendChild(actSep());
+          acts.appendChild(actButton("act-reply", "Reply"));
+        }
+        if (answerable && theirs) { acts.appendChild(actSep()); }
+        if (theirs) {
+          var tell = document.createElement("a");
+          tell.className = "report-link";
+          tell.href = "/report?kind=abuse&message=" + encodeURIComponent(message.id);
+          tell.textContent = "Report";
+          acts.appendChild(tell);
+        }
+        p.appendChild(acts);
       }
       p.appendChild(span("at", message.at || ""));
+      paintReacts(p, message.reactions);
       log.appendChild(p);
+    }
+
+    // ---------- tap a bubble: react or reply ----------
+    // One listener on #log, which every swap replaces, so it cannot pile up
+    // the way one on the document would.
+    var bar = null;
+    function closeBar() {
+      if (!bar) { return; }
+      var row = bar.previousElementSibling;
+      var btn = row && row.querySelector(":scope > .row-acts .act-react");
+      if (btn) { btn.setAttribute("aria-expanded", "false"); }
+      bar.remove();
+      bar = null;
+    }
+    function reactUrl(row) {
+      return "/messages/" + encodeURIComponent(row.dataset.id) + "/react";
+    }
+    function react(row, name) {
+      closeBar();
+      var form = new FormData();
+      form.append("emoji", name);
+      fetch(reactUrl(row), {
+        method: "POST", body: form, credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      }).then(function (r) {
+        // Refused (the chat closed, say): leave the row as it is.
+        return r.ok ? r.json() : null;
+      }).then(function (data) {
+        if (data) { paintReacts(row, data.reactions); }
+      }).catch(function () {
+        // No answer at all. A real form still works, at the price of the
+        // page coming back at the bottom.
+        var f = document.createElement("form");
+        f.method = "post";
+        f.action = reactUrl(row);
+        var field = document.createElement("input");
+        field.type = "hidden";
+        field.name = "emoji";
+        field.value = name;
+        f.appendChild(field);
+        document.body.appendChild(f);
+        f.submit();
+      });
+    }
+    function startReply(row) {
+      closeBar();
+      var chip = document.getElementById("replying");
+      var field = document.getElementById("reply-to");
+      if (!chip || !field) { return; }
+      field.value = row.dataset.id;
+      var who = row.querySelector(":scope > .who");
+      var said = row.querySelector(":scope > .body");
+      chip.querySelector(".replying-name").textContent =
+        row.classList.contains("mine") ? "yourself" : (who ? who.textContent : "them");
+      chip.querySelector(".replying-text").textContent = said ? said.textContent : "";
+      chip.hidden = false;
+      var input = document.querySelector(".composer input[name=body]");
+      if (input) { input.focus(); }
+    }
+    function openBar(row) {
+      closeBar();
+      var picked = row.querySelector(":scope > .reacts .react.on");
+      bar = document.createElement("div");
+      bar.className = "msgbar" + (row.classList.contains("mine") ? " mine" : "");
+      bar.setAttribute("role", "toolbar");
+      bar.setAttribute("aria-label", "React or reply");
+      REACTIONS.forEach(function (r) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = r[1];
+        b.setAttribute("aria-label", "React with " + r[2]);
+        var on = !!picked && picked.dataset.name === r[0];
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        if (on) { b.className = "on"; }
+        b.addEventListener("click", function () { react(row, r[0]); });
+        bar.appendChild(b);
+      });
+      // No Reply in here: it is written out on the message itself.
+      row.after(bar);
+      var btn = row.querySelector(":scope > .row-acts .act-react");
+      if (btn) { btn.setAttribute("aria-expanded", "true"); }
+      bar.firstElementChild.focus({ preventScroll: true });
+    }
+    // The original a quote points at, brought into view and flashed. Moved
+    // within the log only, so the page itself does not jump.
+    function jumpTo(id) {
+      var target = log.querySelector('.msg[data-id="' + id + '"]');
+      if (!target) { return; }
+      log.scrollTop += target.getBoundingClientRect().top
+        - log.getBoundingClientRect().top - log.clientHeight / 3;
+      target.classList.add("flash");
+      setTimeout(function () { target.classList.remove("flash"); }, 1200);
+    }
+    log.addEventListener("click", function (e) {
+      var t = e.target;
+      if (t.closest(".msgbar")) { return; }
+      // The buttons written out on the message.
+      var act = t.closest(".act-react, .act-reply");
+      if (act) {
+        var owner = act.closest(".msg");
+        if (act.classList.contains("act-reply")) { startReply(owner); return; }
+        if (bar && bar.previousElementSibling === owner) { closeBar(); return; }
+        openBar(owner);
+        return;
+      }
+      var quote = t.closest(".quote[data-to]");
+      if (quote) { jumpTo(quote.dataset.to); return; }
+      var row = t.closest(".msg");
+      // Not the cards, not the game notes, not a link or a button inside a
+      // row, and not somebody who has just selected text to copy it.
+      if (closed || !row || !row.dataset.id
+          || row.classList.contains("note") || row.classList.contains("has-card")
+          || t.closest("a, button, form, input, select, details")
+          || String(window.getSelection ? window.getSelection() : "")) {
+        closeBar();
+        return;
+      }
+      if (bar && bar.previousElementSibling === row) { closeBar(); return; }
+      openBar(row);
+    });
+    log.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { closeBar(); }
+    });
+    var cancel = document.querySelector("#replying .replying-cancel");
+    if (cancel) {
+      cancel.addEventListener("click", function () {
+        var field = document.getElementById("reply-to");
+        if (field) { field.value = ""; }
+        document.getElementById("replying").hidden = true;
+      });
     }
 
     // Chess is the one board that needs a client: click a square, then
@@ -1406,6 +1755,20 @@
         if (stuck) { log.scrollTop = log.scrollHeight; }
       }
       if (typeof data.after === "number") { after = data.after; }
+
+      // Reactions, when anybody's moved. The map lists every reacted
+      // message in the chat, so a row with chips that is not in it has had
+      // its last one taken back.
+      var rx = data.reacts;
+      if (rx && rx.token !== reacts) {
+        reacts = rx.token;
+        var map = rx.rows || {};
+        log.querySelectorAll(".msg[data-id]").forEach(function (row) {
+          var list = map[row.dataset.id];
+          if (list) { paintReacts(row, list); }
+          else if (row.querySelector(":scope > .reacts")) { paintReacts(row, []); }
+        });
+      }
 
       // The meetup cards, when an RSVP or a cancellation has moved one.
       // Nothing else moves the deck token, so this does not run on an
@@ -1458,7 +1821,7 @@
       here: {{ (kind ~ ":" ~ target_id) | tojson }},
       state: function () {
         return {after: after, token: token, crowd: crowd,
-                cards: deck};
+                cards: deck, reacts: reacts};
       },
       apply: apply
     });

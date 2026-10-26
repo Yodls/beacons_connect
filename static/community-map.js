@@ -216,11 +216,36 @@
 
   function campusContains(latlng) { return L.latLngBounds(CAMPUS_BOUNDS).contains(latlng); }
 
+  // On a touch screen, one-finger drag pans the map -- so a thumb trying to
+  // scroll past 350px of tiles moves the tiles instead and the page never
+  // moves. The map starts locked and a tap unlocks it; a tap anywhere else
+  // locks it again. Mouse users never see this.
+  function lockUntilTap(container) {
+    var touch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+    if (!touch) { return; }
+    var button = node("button", "map-unlock", "Tap to move the map");
+    button.type = "button";
+    function lock() {
+      map.dragging.disable(); map.touchZoom.disable();
+      if (!button.isConnected) { container.appendChild(button); }
+    }
+    function unlock() {
+      map.dragging.enable(); map.touchZoom.enable();
+      button.remove();
+    }
+    button.addEventListener("click", function (ev) { ev.stopPropagation(); unlock(); });
+    document.addEventListener("touchstart", function (ev) {
+      if (!container.contains(ev.target)) { lock(); }
+    }, { passive: true });
+    lock();
+  }
+
   function initMap() {
     map = L.map("beaconCampusMap", {
       zoomControl: true, minZoom: 15, maxZoom: 19,
       maxBounds: CAMPUS_BOUNDS, maxBoundsViscosity: 0.85
     }).setView(CAMPUS_CENTER, 17);
+    lockUntilTap(document.getElementById("beaconCampusMap"));
 
     var tiles = L.tileLayer(TILE_URL, {
       maxZoom: 19,
@@ -380,6 +405,11 @@
     if (!quiet) { renderMarkers(); }
     var flag = findFlag(id);
     if (flag && fly && map) { map.flyTo([flag.latitude, flag.longitude], 18, { duration: 0.45 }); }
+    // The card is drawn under the map, which on a phone is under the fold.
+    if (flag && !quiet) {
+      var card = document.querySelector(".flag-detail");
+      if (card && card.scrollIntoView) { card.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    }
   }
 
   function tag(text, extra) { return node("span", "tag" + (extra ? " " + extra : ""), text); }

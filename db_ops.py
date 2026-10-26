@@ -2492,6 +2492,109 @@ def _applied_reports(cur):
             and "account_gone" in kinds)
 
 
+_REACTION_NAMES = ("heart", "thumbsup", "thumbsdown", "haha", "exclaim",
+                   "question")
+_REPLY_COLUMNS = (
+    # SET NULL: a reply must outlive the message it quotes, because deleting
+    # an account deletes everything that person wrote. In no CHECK, which
+    # test_schema_rules enforces for every SET NULL column.
+    ("reply_to_id", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"),
+    ("reply_name", "TEXT"),
+    ("reply_body", "TEXT"),
+)
+
+
+def _work_reactions(cur, dbname, say):
+    """Replies and emoji reactions on chat messages.
+
+    Three nullable columns on messages for the reply and its quoted copy,
+    and a message_reactions table whose primary key is the one-per-person
+    rule. Nothing existing is backfilled: every message comes out as a
+    plain message with no reactions, which is what they are.
+    """
+    for needed in ("user", "messages"):
+        if not table_exists(cur, needed):
+            raise Refuse(f"{dbname} has no {needed!r} table.")
+
+    before = count(cur, "messages")
+    say(f"  {dbname}: {before} message(s)")
+
+    changed = 0
+    for column, decl in _REPLY_COLUMNS:
+        if column_exists(cur, "messages", column):
+            say(f"  = messages.{column} already exists")
+        else:
+            cur.execute(f"ALTER TABLE messages ADD COLUMN {column} {decl}")
+            say(f"  + added messages.{column}")
+            changed += 1
+
+    if table_exists(cur, "message_reactions"):
+        say("  = message_reactions already exists")
+    else:
+        cur.execute(f"""
+            CREATE TABLE message_reactions (
+                message_id INTEGER NOT NULL
+                           REFERENCES messages(id) ON DELETE CASCADE,
+                user_id    INTEGER NOT NULL
+                           REFERENCES "user"(id) ON DELETE CASCADE,
+                emoji      VARCHAR(12) NOT NULL,
+                created_at TIMESTAMP NOT NULL
+                           DEFAULT (now() AT TIME ZONE 'utc'),
+                PRIMARY KEY (message_id, user_id),
+                CONSTRAINT ck_reaction_emoji
+                    CHECK (emoji IN ({quoted(_REACTION_NAMES)}))
+            )
+        """)
+        say("  + created message_reactions")
+        changed += 1
+
+    if index_exists(cur, "ix_reactions_message"):
+        say("  = index ix_reactions_message already exists")
+    else:
+        cur.execute("CREATE INDEX ix_reactions_message "
+                    "ON message_reactions (message_id)")
+        say("  + created index ix_reactions_message")
+        changed += 1
+
+    # The rules mean something, proven by trying to break them.
+    cur.execute("SELECT id, user_id FROM messages ORDER BY id LIMIT 1")
+    row = cur.fetchone()
+    if row is None:
+        say("  . no messages, so the probes below are skipped")
+    else:
+        mid, uid = row
+        if not rejects(cur,
+                       "INSERT INTO message_reactions (message_id, user_id, "
+                       "emoji) VALUES (%s, %s, 'shrug')", (mid, uid),
+                       "an unknown reaction"):
+            raise Refuse("ck_reaction_emoji accepted an unknown reaction.")
+        say("  . ck_reaction_emoji refuses an unknown reaction")
+        cur.execute("SAVEPOINT twice")
+        try:
+            cur.execute("INSERT INTO message_reactions (message_id, user_id, "
+                        "emoji) VALUES (%s, %s, 'heart')", (mid, uid))
+            twice = not rejects(
+                cur, "INSERT INTO message_reactions (message_id, user_id, "
+                     "emoji) VALUES (%s, %s, 'haha')", (mid, uid),
+                "a second reaction by the same person")
+        finally:
+            cur.execute("ROLLBACK TO SAVEPOINT twice")
+        if twice:
+            raise Refuse("one person could react to one message twice.")
+        say("  . one reaction per person per message, enforced by the key")
+
+    after = count(cur, "messages")
+    if after != before:
+        raise Refuse(f"messages changed {before} -> {after}")
+    return changed
+
+
+def _applied_reactions(cur):
+    return (all(column_exists(cur, "messages", c) for c, _ in _REPLY_COLUMNS)
+            and table_exists(cur, "message_reactions")
+            and index_exists(cur, "ix_reactions_message"))
+
+
 # ---------------------------------------------------------- the registry
 #
 # In the order they were written, which is the order they have to run in:
@@ -2562,6 +2665,8 @@ MIGRATIONS = [
     # After add_map_flags, because a report can point at a map pin.
     ("add_reports", "the reports queue and three new notice kinds",
      _work_reports, _applied_reports),
+    ("add_reactions", "message replies and emoji reactions",
+     _work_reactions, _applied_reactions),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]

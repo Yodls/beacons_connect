@@ -26,14 +26,14 @@
         padding: 9px 10px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .95rem/1.35 var(--sans);
+        font: 400 1rem/1.35 var(--sans);
       }
       .fixform input[type="text"], .fixform textarea { width: 100%; }
       .fixform textarea { resize: vertical; }
       .clock { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
       /* The shared stylesheet draws a select full width, which turns three
          of them into three stacked rows instead of a clock. */
-      .clock select { flex: 0 0 auto; width: auto; min-width: 5rem; }
+      .clock select { flex: 1 1 4rem; width: auto; min-width: 0; }
       .pickmap {
         height: 300px; margin-top: 6px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
@@ -42,6 +42,11 @@
       .atpoint { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
       .atpoint input { width: 10rem; }
       .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+      /* The main map's rule, for this picker: Leaflet's zoom buttons are
+         30px, which is a miss on a phone. */
+      @media (max-width: 560px) {
+        .pickmap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
+      }
 {% endblock %}
 
 {% block main %}

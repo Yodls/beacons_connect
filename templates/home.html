@@ -33,7 +33,7 @@
         position: absolute; z-index: 3; left: 16px; top: 22px; right: 104px;
         display: flex; flex-direction: column; gap: 8px;
       }
-      .scene-copy h1 { color: #fff; font-size: 54px; line-height: .9; }
+      .scene-copy h1 { color: #fff; font-size: clamp(34px, 13vw, 54px); line-height: .9; }
       .scene-copy .lede { margin: 0; color: var(--on-navy); font-size: 1rem; }
       /* stars: four-pixel squares, every third one gold */
       .star {
@@ -134,6 +134,11 @@
         color: var(--muted); font-size: .8rem; font-weight: 400;
       }
       @media (max-width: 600px) { .quick-label small { display: none; } }
+      /* Three tiles share 288px at 320: 88px each. "Community" at .92rem plus
+         the label's padding is 95px, so it broke as "Communit / y Chat".
+         Smaller type and tighter padding keep the word whole; at 375px the
+         column is 106px and nothing needs this. */
+      @media (max-width: 370px) { .quick-label { font-size: .8rem; padding: 4px 6px; } }
 
       /* ---------- My chats: rows inside the window ---------- */
       .home .sec-chat > .grid { margin: 0; gap: 0; }
