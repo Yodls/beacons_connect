@@ -359,7 +359,7 @@
          remove it: the form .who-photo, under your email. Here, in the shared
          sheet, because shell.html draws it on every page. */
         
-      img.avatar { object-fit: cover; background: #fff; }
+   img.avatar { object-fit: cover; background: #fff; }
       .who-photo {
         display: flex; align-items: center; gap: 10px;
         padding: 2px 12px 12px;
@@ -390,8 +390,12 @@
       }
       /* the display rules above would beat the browser's own [hidden] rule */
       .who-photo [hidden] { display: none !important; }
+      /* The photo row makes the menu taller, so the cap on its height set above
+         (min(78vh, 30rem)) is raised just enough to keep Sign out in view on an
+         ordinary screen, admins included. A short screen still scrolls, as before. */
+      .who-panel { max-height: min(78vh, 34rem); }
 
-        
+  
 
       /* The Report link beside a person or a post. Quiet on purpose: it has
          to be findable when somebody needs it and not compete with the
