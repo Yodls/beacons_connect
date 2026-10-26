@@ -35,10 +35,13 @@
 
   WHAT LIVES WHERE
     Your profile            name and pronouns (form #pf-who -> your account route);
-                            picture, bio, major, minor, class year, what you're
-                            looking for, usernames (form #pf-profile, new to the site)
+                            picture, bio, what you're looking for, usernames
+                            (form #pf-profile, new to the site)
     Clubs and interests     your clubs (#pf-clubs); your interests (#pf-answers ->
-                            your account route)
+                            your account route), which include the major, minor
+                            and graduation year asked at registration. They are
+                            not asked again under Your profile: a second copy
+                            could only disagree with them.
     Account and safety      blocked people and change password (#pf-account);
                             delete your account (#pf-delete -> your account_delete
                             route)
@@ -50,7 +53,7 @@
   Kept clear of names your tests watch: no .card class, no bare <h2>, and no
   class or id containing pill, score, shared, waiting or dock.
 
-  NEEDS FROM THE ROUTE: profile, pronoun_label, majors, minors, years, socials,
+  NEEDS FROM THE ROUTE: profile, pronoun_label, studies, socials,
   text_max, code_minutes, password_min, joined, blocked, code_sent, note, and
   (RELOCATION, the same names account.html uses) questions, selected, optional,
   pronoun_options, pronouns_now, name_max, counts.
@@ -239,8 +242,8 @@
           {{ picture(current_user.name, current_user.id, current_user.picture_url, "pf-mid") }}
           <div class="pf-preview-text">
             <b>{{ current_user.name }}</b>{% if pronoun_label %}<span class="pronouns">{{ pronoun_label }}</span>{% endif %}
-            <p>{{ profile.major or "Undeclared" }}{% if profile.year %} &middot; {{ profile.year }}{% endif %}
-              {%- if profile.minor %} &middot; Minor in {{ profile.minor }}{% endif %}</p>
+            <p>{{ studies.major or "Undeclared" }}{% if studies.grad_year %} &middot; Class of {{ studies.grad_year }}{% endif %}
+              {%- if studies.minor %} &middot; Minor in {{ studies.minor }}{% endif %}</p>
             {% if profile.bio %}<p>{{ profile.bio }}</p>{% endif %}
             {% if profile.looking_for %}
               <span class="label">Looking for</span><p>{{ profile.looking_for }}</p>
@@ -315,46 +318,9 @@
         <div class="row"><button type="submit">Save</button></div>
       </section>
 
-      {# (e) major #}
-      <section class="pf-row" data-section="Major" id="pf-major">
-        <h3>Major</h3>
-        <label>Your major
-          <select name="major" required>
-            {% for major in majors %}
-              <option value="{{ major }}" {% if major == (profile.major or "Undeclared") %}selected{% endif %}>{{ major }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="row"><button type="submit">Save</button></div>
-      </section>
-
-      {# (f) minor #}
-      <section class="pf-row" data-section="Minor" id="pf-minor">
-        <h3>Minor <small>Optional</small></h3>
-        <label>Your minor
-          <select name="minor">
-            <option value="" {% if not profile.minor %}selected{% endif %}>None</option>
-            {% for minor in minors %}
-              <option value="{{ minor }}" {% if minor == profile.minor %}selected{% endif %}>{{ minor }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="row"><button type="submit">Save</button></div>
-      </section>
-
-      {# (g) class year #}
-      <section class="pf-row" data-section="Class year" id="pf-year">
-        <h3>Class year</h3>
-        <label>Where you are in your studies
-          <select name="year" required>
-            <option value="" {% if not profile.year %}selected{% endif %}>Choose one</option>
-            {% for year in years %}
-              <option value="{{ year }}" {% if year == profile.year %}selected{% endif %}>{{ year }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="row"><button type="submit">Save</button></div>
-      </section>
+      {# Major, minor and graduation year are not asked here: they are
+         registration questions, changed under Your interests below, and a
+         second copy here could only disagree with them. #}
 
       {# (h) what you're looking for #}
       <section class="pf-row" data-section="Looking for" id="pf-looking">

@@ -6872,10 +6872,19 @@ def _bc_profile_page():
             blocked.append({"user_id": other.id, "name": other.name, "pronouns": beacon_pronoun_label(other),
                             "picture_url": beacon_picture_url(other.id),
                             "blocked_on": block.created_at.strftime("%b %d, %Y").replace(" 0", " ")})
+    # Major, minor and graduation year as answered at registration, for the
+    # preview. They are registration questions, changed under Your interests;
+    # the page no longer keeps a second copy of them on the profile row.
+    studies = dict(db.session.execute(
+        db.select(Question.key, QuestionOption.label)
+        .join(QuestionOption, QuestionOption.question_id == Question.id)
+        .join(UserAnswer, UserAnswer.option_id == QuestionOption.id)
+        .where(UserAnswer.user_id == me.id,
+               Question.key.in_(("major", "minor", "grad_year")))).all())
     return _bc_flask.render_template(
         "profile.html",
-        profile=row, pronoun_label=beacon_pronoun_label(me),
-        majors=BEACON_MAJORS, minors=BEACON_MINORS, years=BEACON_YEARS, socials=BEACON_SOCIALS,
+        profile=row, pronoun_label=beacon_pronoun_label(me), studies=studies,
+        socials=BEACON_SOCIALS,
         text_max=BEACON_TEXT_MAX, code_minutes=BEACON_CODE_MINUTES, password_min=BEACON_PASSWORD_MIN,
         joined=beacon_joined_clubs(me), blocked=blocked, code_sent=code_sent,
         note=_bc_flask.session.pop("pf_note", None),
@@ -6887,8 +6896,11 @@ def _bc_profile_page():
 
 @_bc_login.login_required
 def _bc_profile_details():
-    """Picture, bio, major, minor, year, looking for, usernames. Checks everything
-    first; saves nothing if any part is wrong."""
+    """Picture, bio, looking for, usernames. Checks everything first; saves
+    nothing if any part is wrong.
+
+    Not major, minor or year: those are registration questions, saved with the
+    rest of the answers, and this form no longer asks for them."""
     _bc_same_site()
     if _bc_too_big():
         return _bc_back("profile", ["The picture must be under 2 MB."])
@@ -6899,13 +6911,6 @@ def _bc_profile_details():
         problems.append("Your bio can be up to %d characters." % BEACON_TEXT_MAX)
     if len(looking) > BEACON_TEXT_MAX:
         problems.append("What you're looking for can be up to %d characters." % BEACON_TEXT_MAX)
-    major, minor, year = _bc_text("major"), _bc_text("minor"), _bc_text("year")
-    if major not in BEACON_MAJORS:
-        problems.append("Pick a major from the list.")
-    if minor and minor not in BEACON_MINORS:
-        problems.append("Pick a minor from the list, or None.")
-    if year not in BEACON_YEARS:
-        problems.append("Pick your class year.")
     handles = {}
     for social in BEACON_SOCIALS:
         value = _bc_text(social["key"]).lstrip("@")
@@ -6924,7 +6929,7 @@ def _bc_profile_details():
         old_picture, problem = _bc_store_picture(row, upload)
         if problem:
             return _bc_back("profile", [problem])
-    row.bio, row.looking_for, row.major, row.minor, row.year = bio, looking, major, minor, year
+    row.bio, row.looking_for = bio, looking
     for key, value in handles.items():
         setattr(row, key, value)
     db.session.commit()
