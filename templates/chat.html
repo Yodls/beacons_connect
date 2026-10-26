@@ -441,6 +441,11 @@
       .timeset:focus-within { outline: 3px solid var(--orange); outline-offset: 2px; }
       /* A count of players is two digits, not a sentence. */
       .newpost input[type="number"] { flex: 0 0 5rem; text-align: center; }
+      .newpost .howmany {
+        display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px;
+        color: var(--navy); font-size: .9rem; font-weight: 700;
+      }
+      .newpost .howmany input[type="number"] { flex: none; width: 4.5rem; }
       .newpost button { margin: 0; }
 
       /* The action row: divided off and pushed to the end, so it reads as the
@@ -964,7 +969,7 @@
              differently from a reload. `with` because the partial speaks of
              `post` and the loop calls it message.post. #}
           {% with post = message.post,
-                  home_kind = (kind if kind in ("match", "pair") else none),
+                  home_kind = (kind if kind in ("match", "pair", "club") else none),
                   home_id = target_id %}
             {%- include "_postcard.html" -%}
           {% endwith %}
@@ -1031,19 +1036,21 @@
     {% endif %}
 
     {# Arranging to meet, in the conversation where you are already talking
-       about it. Only in the one-on-ones: a club or a group chat has a room
-       full of people, which is what /find is for.
+       about it: a one-on-one, or a club. Not a group chat, whose people are
+       already gathered; /find is for finding more.
 
-       The form is the campus room's, without the two questions this does not
-       have to ask -- in person by definition, and for the two of you -- and
-       it names the conversation, so the meetup belongs to it and never
-       reaches /find. #}
-    {% if kind in ("match", "pair") %}
+       The form is the campus room's, and it names the conversation, so the
+       meetup belongs to it and never reaches /find. In a one-on-one it skips
+       the two questions it does not have to ask -- in person by definition,
+       and for the two of you. A club is a room full of people, so it asks
+       both, as the campus room does, and the meetup gets its own chat. #}
+    {% if kind in ("match", "pair", "club") %}
+      {% set in_club = kind == "club" %}
       <details class="newmeet">
         <summary>{{ ui.icon("meet") }}<span>Meet up</span></summary>
         <form class="newpost newmeet-menu" method="post"
               action="{{ url_for('post_new') }}">
-          <b>Meet up in person</b>
+          <b>{{ "Post a meetup for the club" if in_club else "Meet up in person" }}</b>
           <input type="hidden" name="from_kind" value="{{ kind }}" />
           <input type="hidden" name="from_id" value="{{ target_id }}" />
           <select name="game" class="act" required aria-label="Activity">
@@ -1054,6 +1061,15 @@
             {% endfor %}
             <option value="other" data-online="0" data-inperson="1">Other&hellip;</option>
           </select>
+          {% if in_club %}
+            {# class="mode", so the narrowing script above hides whatever the
+               chosen activity cannot be, and the places with it. #}
+            <select name="mode" class="mode" aria-label="Online or in person">
+              {% for key, label in post_modes.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
           <select name="location" class="loc" aria-label="Where">
             <option value="">Where</option>
             {% for a in catalogue %}
@@ -1074,6 +1090,14 @@
                  placeholder="What are you doing?" aria-label="Activity" />
           <input name="custom_location" class="custom" maxlength="120"
                  placeholder="Where?" aria-label="Meetup location" />
+          {% if in_club %}
+            {# Worded, not a bare number: "4" on its own beside "Where" read
+               as nothing in particular. #}
+            <label class="howmany">People
+              <input name="max_players" type="number" min="2" max="50" value="4"
+                     title="How many people, you included" />
+            </label>
+          {% endif %}
           <input name="when_on" type="date" class="ondate" required
                  aria-label="Date" title="Date" />
           <span class="whenrow">
@@ -1092,7 +1116,7 @@
             </span>
           </span>
           <input name="note" maxlength="300" placeholder="Note (optional)" />
-          <button type="submit">Ask them</button>
+          <button type="submit">{{ "Post" if in_club else "Ask them" }}</button>
         </form>
       </details>
     {% endif %}
@@ -1188,6 +1212,27 @@
       act.addEventListener("change", sync);
       if (mode) { mode.addEventListener("change", sync); }
       sync();
+    });
+  })();
+
+  // Below 900px the Meet up form is pinned to the screen (see .newmeet-menu),
+  // a fixed distance above the tab bar -- which assumes its key is at the
+  // bottom of the screen. On a short page it is not, and the form opened on
+  // top of its own key, so it could not be closed with it: the club form,
+  // being the longest, found this at 768px. So once it is open, it is placed
+  // from where the key really is.
+  (function () {
+    document.querySelectorAll("details.newmeet").forEach(function (box) {
+      box.addEventListener("toggle", function () {
+        var menu = box.querySelector(".newmeet-menu");
+        if (!menu) { return; }
+        menu.style.bottom = "";
+        menu.style.maxHeight = "";
+        if (!box.open || getComputedStyle(menu).position !== "fixed") { return; }
+        var top = box.querySelector("summary").getBoundingClientRect().top;
+        menu.style.bottom = (window.innerHeight - top + 10) + "px";
+        menu.style.maxHeight = Math.max(160, top - 16) + "px";
+      });
     });
   })();
 </script>

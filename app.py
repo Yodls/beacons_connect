@@ -822,13 +822,19 @@ def chat_target(kind, target_id):
     return None, None
 
 
-# The conversations a meetup can be arranged in: the one-on-one ones. A club
-# or a group chat has a room full of people, which is what /find is for.
+# The one-on-ones: a meetup arranged in one is for the two people in it, in
+# person, with no chat of its own -- they are already talking.
 PRIVATE_MEETUP_CHATS = ("match", "pair")
 
-# And the conversations a meetup card can appear in at all, which is those two
+# Every conversation a meetup can be posted from. A club's is for its members
+# only, like a one-on-one's, but sized and moded like a campus one and given
+# its own chat, because a club is a room full of people. A group chat still
+# cannot: /find is for arranging with people you have not already gathered.
+MEETUP_CHATS = PRIVATE_MEETUP_CHATS + ("club",)
+
+# And the conversations a meetup card can appear in at all, which is those
 # plus the campus room. live_cards walks this.
-CARD_CHATS = (COMMUNITY,) + PRIVATE_MEETUP_CHATS
+CARD_CHATS = (COMMUNITY,) + MEETUP_CHATS
 
 # Where a friend button can be pressed: the three rooms that draw a list of
 # people, and the pair chat, which has one person and a header to put it in.
@@ -855,7 +861,7 @@ def chat_home(kinds):
 
 
 def card_home():
-    """The one-on-one a meetup was posted from or acted on in, or None.
+    """The one-on-one or club a meetup was posted from or acted on in, or None.
 
     The Meet up form and the card's own buttons carry the conversation in
     hidden fields. Resolved through chat_target rather than trusted, which is
@@ -866,7 +872,7 @@ def card_home():
     Returns (kind, target_id, parent), so the caller has both the id the chat
     URL needs and the row attach_parent needs.
     """
-    return chat_home(PRIVATE_MEETUP_CHATS)
+    return chat_home(MEETUP_CHATS)
 
 
 def attach_parent(message, kind, parent):
@@ -1611,17 +1617,17 @@ def chat(kind, target_id):
         # Only the community room renders the meetup form, so only it needs
         # the catalogue. Building it unconditionally cost every other chat a
         # pile of queries for a form that was never on the page.
-        # The campus room's form, and now the Meet up button in a
-        # one-on-one. Still not built for a club or a group chat: the comment
-        # this replaces was about not paying for a form that is not there,
-        # and for those two it still is not.
+        # The campus room's form, and the Meet up button in a one-on-one or a
+        # club. Still not built for a group chat: the comment this replaces
+        # was about not paying for a form that is not there, and for that one
+        # it still is not.
         catalogue=(activity_catalogue(presets_only=True)
                    if kind in CARD_CHATS else []),
         # What the cards on this page add up to, handed over the way the game
         # pane's and the roster's tokens are: on the markup. Without it the
-        # first live round of every visit to the campus room would come back
-        # at once with every card in it.
-        card_token=(live_cards_token() if kind == COMMUNITY else "none"),
+        # first live round of every visit to a room with cards would come
+        # back at once with every card in it.
+        card_token=(live_cards_token() if kind in CARD_CHATS else "none"),
         reacts_token=live_reacts_token(message_filter(kind, parent)),
         reactions=REACTIONS,
     )
@@ -1828,7 +1834,7 @@ def live_cards(kind, token, parent=None, target_id=None):
             # page context to read it from, so it is handed over.
             "html": card_markup.render(
                 post=card,
-                home_kind=(kind if kind in PRIVATE_MEETUP_CHATS else None),
+                home_kind=(kind if kind in MEETUP_CHATS else None),
                 home_id=target_id),
         })
     return {"token": token, "cards": cards}
@@ -3393,8 +3399,8 @@ def pairing_close(pairing_id):
 @login_required
 def post_new():
     # Where this was posted from, if it was posted from a conversation. The
-    # Meet up button in a one-on-one sends these; /find and the campus room
-    # send neither and behave exactly as they always have.
+    # Meet up button in a one-on-one or a club sends these; /find and the
+    # campus room send neither and behave exactly as they always have.
     #
     # Resolved through chat_target, which is the same check the chat page
     # itself passes -- so this cannot be used to put a meetup into somebody
@@ -3444,11 +3450,14 @@ def post_new():
         location = request.form.get("custom_location", "").strip()
         mode = "inperson"
 
-    if here is not None:
+    if here in PRIVATE_MEETUP_CHATS:
         # In person by definition -- the button exists to arrange meeting --
         # and between the two people already in the conversation, so neither
         # is a question the form has to ask. Set before the checks below, so
         # the location rules are the in-person ones.
+        #
+        # Not for a club: a room full of people, so its form asks both, the
+        # way the campus room's does.
         mode = "inperson"
         players = 2
 
@@ -3520,10 +3529,11 @@ def post_new():
         # the campus-wide room. Membership is this post's RSVP list, and the
         # author is already on it.
         #
-        # Not for one arranged in a conversation: make_meetup_chat exists to
+        # Not for one arranged in a one-on-one: make_meetup_chat exists to
         # give the people going somewhere to talk, and these two are already
-        # doing exactly that in the chat they posted it from.
-        if here is None:
+        # doing exactly that in the chat they posted it from. A club's does
+        # get one, so planning it does not take over the whole club space.
+        if here not in PRIVATE_MEETUP_CHATS:
             make_meetup_chat(post)
 
         # The post lives in the conversation as a message, so one timeline and
@@ -3542,8 +3552,11 @@ def post_new():
         if post.mode == "inperson":
             make_event_flag(post)
         db.session.commit()
-        flash("Asked them to meet up." if here
-              else "Posted to Community Chat.")
+        if here == "club":
+            flash(f"Posted to {here_parent.name}.")
+        else:
+            flash("Asked them to meet up." if here
+                  else "Posted to Community Chat.")
         if here is not None:
             return redirect(url_for("chat", kind=here, target_id=from_id))
 
@@ -3590,6 +3603,12 @@ def post_rsvp(post_id):
                     db.session.add(said)
             db.session.commit()
             flash(f"You're no longer down for {post.game}.")
+        elif not post_readable(post):
+            # Joining by a guessed id. Leaving is still allowed above: an RSVP
+            # somebody already holds -- say from before they left the club --
+            # should never be impossible to give back.
+            flash("That meetup isn't available to you.")
+            return redirect(url_for("index"))
         else:
             going = db.session.scalar(
                 db.select(db.func.count()).select_from(GamePostRsvp)
@@ -4058,6 +4077,25 @@ def message_chat(message):
     return kind, target_id, parent, title
 
 
+def post_readable(post):
+    """Whether the current user may see, and so join, this meetup.
+
+    A campus meetup is anybody's. Any other lives as a message in one
+    conversation -- a one-on-one or a club -- and is readable exactly when
+    that message is, through message_chat, the one door every message id
+    goes through. The author always can.
+
+    Without this, post ids being small integers, anybody could RSVP to a
+    club's meetup and be seated in its chat, or put their name on two
+    friends' private plan.
+    """
+    if post.audience == "campus" or post.author_id == current_user.id:
+        return True
+    said = db.session.scalar(
+        db.select(Message).where(Message.post_id == post.id).limit(1))
+    return said is not None and message_chat(said)[0] is not None
+
+
 def report_subject():
     """Resolve what is being reported, or (None, ...) if it may not be seen.
 
@@ -4087,12 +4125,11 @@ def report_subject():
         post = db.session.get(GamePost, int(raw_post))
         if post is None:
             return None, None, None, None, None
-        # A chat-only meetup is readable by the people in its chat, which is
-        # its RSVP list. Anything else is campus-wide.
-        if post.audience != "campus":
-            rsvp = db.session.get(GamePostRsvp, (post.id, current_user.id))
-            if rsvp is None and post.author_id != current_user.id:
-                return None, None, None, None, None
+        # A meetup posted in a conversation is readable by the people in that
+        # conversation -- the same rule that decides who may RSVP to it. A
+        # club member who has not RSVPed can still see it, so can report it.
+        if not post_readable(post):
+            return None, None, None, None, None
         author = db.session.get(User, post.author_id)
         said = " ".join(p for p in (post.game, post.note) if p)
         return ("post_id", post, author, said, "a meetup")
