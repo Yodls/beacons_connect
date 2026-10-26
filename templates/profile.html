@@ -67,7 +67,9 @@
         display: block; width: 100%; max-width: 22rem; margin-top: 4px; padding: 9px 10px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 .95rem/1.35 var(--sans);
+        /* 16px, not .95rem: iOS zooms the whole page when a field under 16px
+           is focused, and does not zoom back. */
+        font: 400 1rem/1.35 var(--sans);
       }
       .pf textarea { max-width: 34rem; resize: vertical; }
       .pf .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -77,14 +79,21 @@
 
       /* RELOCATION: the questions from your _questions.html, as account.html draws them */
       .pf fieldset {
-        margin: 0; padding: 12px 14px;
+        /* min-width 0: a fieldset will not otherwise shrink below its longest
+           word, and "reading/crafting/cooking/baking" ran out past the box on
+           a phone. */
+        min-width: 0; margin: 0; padding: 12px 14px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
       }
       .pf legend { padding: 0 6px; font-size: .9rem; font-weight: 700; }
       .pf fieldset label {
         display: inline-flex; align-items: center; gap: 6px;
-        margin: 0 10px 6px 0; font-weight: 400;
+        max-width: 100%; margin: 0 10px 6px 0; font-weight: 400;
+        overflow-wrap: anywhere;
       }
+      /* The box itself never gives way to its label: without this a long
+         option squeezed its radio button smaller than its neighbours'. */
+      .pf fieldset label input { flex: none; }
 
       /* ---------- one setting = one row ---------- */
       .pf-row { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 2px dashed var(--line); }
@@ -187,6 +196,19 @@
       .pf-dialog .row button.danger { background: var(--danger); border-color: var(--danger); }   /* RELOCATION */
       .pf-dialog .row button.danger:hover { background: #7f1d17; }
       .pf [hidden], .pf-dialog [hidden] { display: none !important; }
+
+      /* ---------- phones ---------- */
+      @media (max-width: 430px) {
+        .pf { padding: 14px 12px; }
+        /* One option per line: two short ones sharing a row beside a long
+           one that wraps read as a ragged grid at this width. */
+        .pf fieldset label { display: flex; margin-right: 0; }
+        .pf fieldset { padding: 10px 12px; }
+        /* The site's address in front of a username box took half the width
+           ("linkedin.com/in/"), leaving little room to type. */
+        .pf-handle span { padding: 0 6px; font-size: .76rem; }
+        .pf-handle input { min-width: 0; }
+      }
 {% endblock %}
 
 {% block main %}
