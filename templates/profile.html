@@ -3,28 +3,57 @@
 {% block title %}Your profile{% endblock %}
 
 {#
+  profile.html  -  "Your profile"   (profile settings, Oct 26)
+  STEMS FROM: templates/profile.html in beacon-profile-relocation (Oct 24,
+  unchanged), which stems from beacon-profile-rebuild (Oct 23) and beacon-push.
+  Sits beside your account.html: the same windows (.win, .bar, ui.icon), the same
+  form look (copied from account.html's .acct rules), your ui.avatar for
+  initials, and no stylesheet of its own outside this page. Matched against your
+  base.html (Beacon OS): its keys, .pronouns chip, .report-link, .empty box and
+  dashed row dividers are used as they are.
+
+  Opened from "Profile Settings" in the account menu (shell.html), which used to
+  say "Your account". This page is the profile plus everything Your account had.
+
+  WHAT CHANGED FROM THE REBUILD  (search for "RELOCATION")
+    Your account's three parts, which the rebuild showed as placeholders, are
+    real forms here now:
+      name and pronouns   in "Your profile"          (form #pf-who)
+      your interests      in "Clubs and interests"   (form #pf-answers, your own
+                                                      _questions.html)
+      Leaving             in "Account and safety"    (form #pf-delete)
+    They send exactly the fields account.html sends, to part 2's routes, which
+    hand them to your own `account` and `account_delete` routes. So they are
+    checked and saved by your code, unchanged, and /account still works.
+    The rebuild's "Report a problem" box is gone: reporting stays in the account
+    menu, where it always was. (The Report link beside each blocked person stays.)
+
+  WHAT CHANGED FROM THE RELOCATION (Oct 24)
+    The account menu keeps all of its own links again, so this page no longer
+    repeats any of them: the "People and group chats" window and the "Report a
+    problem" box are removed. Everything else is the same.
 
   WHAT LIVES WHERE
-    People and group chats  links to /people and /chats (with the invite count)
     Your profile            name and pronouns (form #pf-who -> your account route);
                             picture, bio, major, minor, class year, what you're
                             looking for, usernames (form #pf-profile, new to the site)
     Clubs and interests     your clubs (#pf-clubs); your interests (#pf-answers ->
                             your account route)
     Account and safety      blocked people and change password (#pf-account);
-                            report links to /report; delete your account
-                            (#pf-delete -> your account_delete route)
+                            delete your account (#pf-delete -> your account_delete
+                            route)
 
   Every Save asks "Are you sure?" first and lists what changed (the dialog at the
   end of this file); Delete asks with a warning instead. Without JavaScript the
   forms simply post.
 
+  Kept clear of names your tests watch: no .card class, no bare <h2>, and no
+  class or id containing pill, score, shared, waiting or dock.
 
   NEEDS FROM THE ROUTE: profile, pronoun_label, majors, minors, years, socials,
-  text_max, code_minutes, password_min, joined, blocked, code_sent, note,
-  the same names account.html uses, questions, selected, optional,
-  pronoun_options, pronouns_now, name_max, counts. invite_count comes from your
-  inject_dock, as in shell.html.
+  text_max, code_minutes, password_min, joined, blocked, code_sent, note, and
+  (RELOCATION, the same names account.html uses) questions, selected, optional,
+  pronoun_options, pronouns_now, name_max, counts.
 #}
 
 {% block appstyle %}
@@ -40,10 +69,10 @@
       .pf textarea { max-width: 34rem; resize: vertical; }
       .pf .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
       .pf .hint { margin: 0; color: var(--muted); font-size: .86rem; }
-      /* two forms in one window, divided like two rows */
+      /* RELOCATION: two forms in one window, divided like two rows */
       .win > .pf + .pf { margin-top: 0; border-top: 2px dashed var(--line); }
 
-      /* the questions from _questions.html, as account.html draws them */
+      /* RELOCATION: the questions from your _questions.html, as account.html draws them */
       .pf fieldset {
         margin: 0; padding: 12px 14px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
@@ -84,11 +113,7 @@
       /* ---------- jump links under the heading ---------- */
       .pf-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
 
-      /* ---------- links to another page (your /report page) ---------- */
-      .pf-place { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px;
-        background: var(--paper); border: 2px dashed var(--line-2); border-radius: var(--r); }
-      .pf-place p { flex: 1 1 16rem; margin: 0; color: var(--navy); font-size: .92rem; }
-      .pf-place .ghost { flex: none; }
+      /* ---------- the locked email line ---------- */
       .pf-locked { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: .88rem; }
       .pf-locked .icon { width: 18px; height: 18px; flex: none; }
 
@@ -134,7 +159,7 @@
       .pf-tags li { padding: 3px 8px; color: var(--navy); background: var(--paper);
         border: 2px solid var(--line); border-radius: var(--r-sm); font: 700 .8rem/1.2 var(--sans); }
 
-      /* ---------- deleting the account, as account.html's .leaving ---------- */
+      /* ---------- RELOCATION: deleting the account, as account.html's .leaving ---------- */
       /* Red, and set apart by a double rule, because it is the one thing on this
          page that cannot be undone. */
       .win > .pf.pf-leaving { border-top: 3px double var(--line); }
@@ -196,27 +221,12 @@
     <a href="#safety">Account and safety</a>
   </nav>
 
-  {# =======================  people and group chats =======================
-     Find people and Group chats, moved here from the account menu. The invite
-     count is the same number the menu showed (invite_count, from your inject_dock);
-     the friends panel in the tab bar shows the invites themselves. #}
-  <section class="win sec-chat" id="around">
-    <div class="bar">{{ ui.icon("search") }}<span class="bar-title">People and group chats</span><span class="grip"></span></div>
-    <div class="pf">
-      <div class="row">
-        <a class="ghost" href="{{ url_for('people') }}">Find people</a>
-        <a class="ghost" href="{{ url_for('chats') }}">Group chats{%
-          if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
-      </div>
-    </div>
-  </section>
-
   {# ======================= 1. your profile ======================= #}
   <section class="win sec-place" id="profile">
     <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Your profile</span><span class="grip"></span></div>
 
-    {#  name and pronouns, moved from Your account. The same fields as
-       account.html's first form (section=who, name, pronouns), saved by the 
+    {# RELOCATION: name and pronouns, moved from Your account. The same fields as
+       account.html's first form (section=who, name, pronouns), saved by your
        account route. Its own form, as on Your account, so saving your name can
        never rewrite anything else. #}
     <form class="pf" id="pf-who" method="post" action="{{ url_for('profile_name_interests') }}"
@@ -489,17 +499,6 @@
         <p class="hint">At least {{ password_min }} characters. The code lasts {{ code_minutes }} minutes.</p>
         <div class="row"><button type="submit">Save</button></div>
       </section>
-
-      {# (n) reporting: your /report page. RELOCATION: these two links used to be
-         in the account menu too; this is now their only place outside /report. #}
-      <section class="pf-row" id="pf-report">
-        <h3>Report a problem</h3>
-        <div class="pf-place">
-          <p>Tell us about a person, something broken, or anything else.</p>
-          <a class="ghost" href="{{ url_for('report_new', kind='abuse') }}">Report someone</a>
-          <a class="ghost" href="{{ url_for('report_new', kind='contact') }}">Get in touch / report a problem</a>
-        </div>
-      </section>
     </form>
 
     {# (p) RELOCATION: delete your account, moved from Your account ("Leaving").
@@ -603,7 +602,7 @@
     ourForms().forEach(function (form) { form.pfStart = values(form); });
     window.pfLeaving = false;
 
-    // after a save, bring its message on screen. _enhance.html
+    // RELOCATION: after a save, bring its message on screen. Your _enhance.html
     // swaps the page in place, which drops the #window part of the address, so
     // the browser never jumps there by itself. Waits a moment, so it comes after
     // the swap has set the scroll position.
@@ -613,7 +612,7 @@
     }
 
     // The names of the settings whose fields differ from how the form started:
-    // a question's own wording inside _questions.html , or the
+    // a question's own wording inside your _questions.html (RELOCATION), or the
     // data-section of the row anywhere else.
     function changes(form) {
       if (!form.pfStart) { return []; }
@@ -664,7 +663,7 @@
       el("pf-confirm-ok").hidden = !!opts.alertOnly;
       el("pf-confirm-cancel").textContent = opts.alertOnly ? "OK" : "Cancel";
       box.returnValue = "";
-      //  the buttons close the box themselves (see the note on the dialog).
+      // RELOCATION: the buttons close the box themselves (see the note on the dialog).
       el("pf-confirm-ok").onclick = function () { box.close("ok"); };
       el("pf-confirm-cancel").onclick = function () { box.close("cancel"); };
       box.onclose = function () { box.onclose = null; if (box.returnValue === "ok" && onOk) { onOk(); } };
@@ -678,8 +677,8 @@
     }
 
     // Installed once per browser tab, on the document and in the capture phase,
-    // so the question comes before anything else that handles a submit.
-    //  The confirmed submit is sent again with requestSubmit.
+    // so the question comes before anything else that handles a submit (your
+    // _enhance.html included). The confirmed submit is sent again with requestSubmit.
     if (!window.pfConfirmInstalled) {
       window.pfConfirmInstalled = true;
       document.addEventListener("submit", function (e) {
