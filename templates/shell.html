@@ -95,17 +95,31 @@
             </span>
             <input type="hidden" name="remove" value="" />
           </form>
-          
-          <a href="{{ url_for('profile') }}">View my profile</a>
+
+           <a href="{{ url_for('profile') }}">Profile Settings</a>
+          <a href="{{ url_for('people') }}">Find people</a>
+          <a href="{{ url_for('chats') }}">Group chats{%
+            if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
           {# Shorter than the page it opens, on purpose. This panel fits six
              items in about twenty characters; the page has the width to say
              what it is. The mismatch is the point, not drift. #}
           <a href="{{ url_for('fixtures') }}">Happening now</a>
+          {# Below the line: the three ways to tell us something. Separated
+             because they are not places you go, they are things you do, and
+             because the list is long enough now that Sign out needs to not
+             be the eighth indistinguishable row. #}
+          <div class="who-sep"></div>
+          <a href="{{ url_for('report_new', kind='abuse') }}">Report someone</a>
+          {# One entry for both, because they are the same errand: something
+             to tell us that is not about a person. The page it opens already
+             offers the choice between a message and something broken, so
+             the switch lives there rather than in a menu this narrow. #}
+          <a href="{{ url_for('report_new', kind='contact') }}">Get In Touch/Report Problem</a>
           <div class="who-sep"></div>
           {% if current_user.is_admin %}
             <a href="{{ url_for('admin') }}">Admin</a>
           {% endif %}
-          <a href="{{ url_for('logout') }}">Sign out</a>
+          <a href="{{ url_for('logout') }}">Sign out</a>        
         </div>
       </details>
       {# what the photo control does in the browser. Installed once
