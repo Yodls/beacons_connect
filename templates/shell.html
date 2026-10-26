@@ -60,20 +60,21 @@
       {% include "_notices.html" %}
 
       {# Where sign out lives, on every page. #}
+      {% set my_picture = current_user.picture_url %}
       <details class="who">
         <summary aria-label="Your account">
-          {{ ui.avatar(current_user.name, current_user.id, square=true) }}
+          {% if my_picture %}
+            <img class="avatar sq" src="{{ my_picture }}" alt="" />
+          {% else %}
+            {{ ui.avatar(current_user.name, current_user.id, square=true) }}
+          {% endif %}
         </summary>
         <div class="who-panel">
           <b>{{ current_user.name }}</b>
           <small>{{ current_user.email }}</small>
-          {# Was "Change your answers", pointing straight at /onboarding.
-             The answers are one of three things you can change about
-             yourself now, so this opens the page that holds all of them --
-             and leaving, which lives there rather than in this list because
-             a destructive action one click from the menu is a misclick
-             waiting to happen. /onboarding is still the first-time flow. #}
-          <a href="{{ url_for('account') }}">Your account</a>
+          {# Your photo is changed on Profile Settings, not here: this menu is
+             places to go, and an upload form does not belong in it. #}
+          <a href="{{ url_for('profile') }}">Profile Settings</a>
           <a href="{{ url_for('people') }}">Find people</a>
           <a href="{{ url_for('chats') }}">Group chats{%
             if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
