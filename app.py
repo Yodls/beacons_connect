@@ -6411,8 +6411,14 @@ def init_map_table_command():
 # accessible spot. 
 
 def beacon_account_page_values(user):
-    """The values the account route gives account.html, under the same names,
-    so the profile can show the same three forms and include _questions.html."""
+    """The values your account route gives account.html, under the same names,
+    so the profile can show the same three forms and include _questions.html.
+
+    If your account route ever changes how it loads the questions, or what it
+    passes as name_max, change the same line here, so the profile and Your
+    account stay in step.
+    `flask --app app beacon-check` calls this function and says if a name in it
+    does not exist."""
     return {
         # The question list: the same list read_answers() and save_answers() check.
         "questions": db.session.scalars(db.select(Question).order_by(Question.id)).all(),
@@ -6426,7 +6432,7 @@ def beacon_account_page_values(user):
         "pronouns_now": user.pronouns,
         # The longest name your account route accepts.
         "name_max": NAME_MAX,
-        # What deleting the account takes with it: account_counts(),
+        # What deleting the account takes with it: your own account_counts(),
         # which reads current_user (the profile only ever shows the signed-in
         # student's own page, so that is this student).
         "counts": account_counts(),
@@ -6434,14 +6440,15 @@ def beacon_account_page_values(user):
 
 
 def beacon_pronoun_label(user):
-    """What to show beside the student's name, or None: pronoun_label(), so
+    """What to show beside the student's name, or None: your pronoun_label(), so
     "prefer not to say" shows nothing here, exactly as everywhere else."""
     return pronoun_label(user.pronouns)
 
 
 def beacon_joined_clubs(user):
     """The student's clubs and hubs (each with .id, .name, .description): every
-    clubs row they have a ClubMember row for."""
+    clubs row they have a ClubMember row for, as in your club_members() helper,
+    the other way round."""
     return db.session.scalars(
         db.select(Club)
         .join(ClubMember, ClubMember.club_id == Club.id)
@@ -6451,7 +6458,7 @@ def beacon_joined_clubs(user):
 
 
 def beacon_leave_club(user, club_id):
-    """Takes the student out of one club: leave_club route, without the
+    """Takes the student out of one club: your leave_club route, without the
     commit, flash and redirect."""
     membership = db.session.get(ClubMember, (user.id, club_id))
     if membership is not None:
@@ -6459,7 +6466,7 @@ def beacon_leave_club(user, club_id):
 
 
 def beacon_end_friendship(user, other):
-    """When `user` blocks `other`: the same call unmatch route makes.
+    """When `user` blocks `other`: the same call your unmatch route makes.
     end_match may commit by itself; that is safe here, because the Block route
     only adds the block row before this call and commits straight after it."""
     matching.end_match(user.id, other.id)
@@ -6508,6 +6515,7 @@ def beacon_set_password(user, new_password):
 #
 # These imports are specific to this part of the code, and it will
 # not start without these references.
+
 import datetime as _bc_dt
 import os as _bc_os
 import re as _bc_re
@@ -6686,12 +6694,8 @@ def _bc_back(section, messages, saved=False):
 # RELOCATION: the two helpers below are new.
 
 def _bc_hand_over(endpoint, section, anchor):
-    """Runs one of YOUR routes (account or account_delete) on this same request,
-    unchanged. The profile's forms send the same fields account.html sends
-    (section, name, pronouns, q<id>, password), so your route reads, checks,
-    saves and flashes exactly as it does for Your account.
-
-    Only where it sends the student next is changed. Your route answers in one
+    """
+    Only where it sends the student next is changed. route answers in one
     of three ways (checked against your account route, Oct 24):
       - it saved, flashed "Saved." and redirected to /account: the student goes
         back to this window of the profile, with your message inside it;
@@ -6773,12 +6777,7 @@ def _bc_store_picture(row, upload):
 
 def beacon_picture_url(user_id):
     """The picture's address, or None (the page then shows your initials avatar).
-    Looked up once per request per student.
-
-    RELOCATION: the account menu now shows the photo on every page, so this runs
-    on every page with your top bar: one small query, by primary key. It makes
-    sure the beacon_ tables exist first, and if they could not be made it shows
-    initials rather than breaking the page."""
+    Looked up once per request per student."""
     cache = _bc_flask.g.setdefault("_bc_pictures", {}) if _bc_flask.has_request_context() else {}
     if user_id not in cache:
         _bc_ensure_tables()
@@ -7039,7 +7038,7 @@ def _bc_block_user(other_id):
     return _bc_back("safety", ["You blocked %s." % other.name], saved=True)
 
 
-# the three routes below are new.
+# RELOCATION: the three routes below are new.
 
 @_bc_login.login_required
 def _bc_profile_name_interests():
@@ -7127,9 +7126,9 @@ BEACON_ROUTES = [
 
 # ----------------------------------------------------------------------------- set-up check
 
-# Your routes that profile.html links to, or hands its forms to.
-# account_delete, people and chats added.
-BEACON_ROUTES_NEEDED = ["account", "account_delete", "report_new", "clubs", "chat", "people", "chats"]
+# routes that profile.html links to, or hands its forms to.
+
+BEACON_ROUTES_NEEDED = ["account", "account_delete", "report_new", "clubs", "chat"]
 BEACON_PART_1 = ["beacon_account_page_values",                                  # RELOCATION: new
                  "beacon_pronoun_label", "beacon_joined_clubs", "beacon_leave_club",
                  "beacon_end_friendship", "beacon_send_email", "beacon_set_password"]
@@ -7190,7 +7189,7 @@ def _bc_tables():
 
 
 _bc_tables_checked = []
-_bc_tables_ready = []        #  [True] once the three tables are known to exist
+_bc_tables_ready = []        # RELOCATION: [True] once the three tables are known to exist
 
 
 def _bc_ensure_tables():
@@ -7254,7 +7253,7 @@ def _bc_cli_check():
                 except Exception as error:
                     problems.append("%s() failed on the student with id %s: %s: %s"
                                     % (name, user.id, type(error).__name__, error))
-            #  the values copied from your account route, read as that
+            # RELOCATION: the values copied from your account route, read as that
             # student (account_counts() reads current_user).
             with app.test_request_context():
                 _bc_login.login_user(user)
@@ -7287,8 +7286,6 @@ def _bc_cli_create():
 
 
 _bc_register()
-
-
 
 
 
