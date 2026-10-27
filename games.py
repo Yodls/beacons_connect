@@ -343,6 +343,10 @@ def _chess_move(state, seat, move):
         "fen": board.fen(),
         "turn": _chess_seat_to_move(board),
         "last": parsed.uci(),
+        # Every move so far, so the board can show the game in notation.
+        # A game begun before this was kept starts its list from here; the
+        # FEN is still the authority on the position.
+        "moves": list(state.get("moves") or []) + [parsed.uci()],
     }, None
 
 
@@ -376,21 +380,84 @@ def _chess_view(state, seat):
             row.append({
                 "name": chess.square_name(square),
                 "glyph": _PIECE_GLYPHS.get(piece.symbol(), "") if piece else "",
+                # The letter as well as the glyph: the board draws its own
+                # pieces, and needs to know which one and whose.
+                "piece": piece.symbol() if piece else "",
                 "mine": piece is not None
                         and (piece.color == chess.WHITE) == (seat == 0),
                 "dark": (file + rank) % 2 == 0,
             })
         rows.append(row)
 
+    king = board.king(board.turn) if board.is_check() else None
     return {
         "rows": rows,
         "fen": state["fen"],
         "last": state.get("last"),
         "check": board.is_check(),
+        "check_square": chess.square_name(king) if king is not None else None,
         "you_are": "White" if seat == 0 else "Black",
         "legal": sorted(m.uci() for m in board.legal_moves) if to_move == seat else [],
         "turn": to_move,
+        "history": _chess_history(state.get("moves") or []),
+        "captured": _chess_captured(board),
     }
+
+
+def _chess_history(moves):
+    """The moves so far in standard notation: ["e4", "e5", "Nf3", ...].
+
+    Replayed from the start, because notation depends on the position each
+    move was made in. A list that does not replay -- a game begun before
+    moves were kept, or anything unexpected -- stops where it stops rather
+    than failing the whole board.
+    """
+    board = chess.Board()
+    out = []
+    for uci in moves:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if move not in board.legal_moves:
+            break
+        out.append(board.san(move))
+        board.push(move)
+    return out
+
+
+# What each side starts with, and what each piece is worth on the trays.
+_CHESS_START = {chess.PAWN: 8, chess.KNIGHT: 2, chess.BISHOP: 2,
+                chess.ROOK: 2, chess.QUEEN: 1}
+_CHESS_VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
+                chess.ROOK: 5, chess.QUEEN: 9}
+
+
+def _chess_captured(board):
+    """What each side has taken, from the material missing off the board.
+
+    Worked out from the position rather than the move list, so it is right
+    for a game begun before moves were kept. A promoted pawn shows as a
+    missing pawn and an extra piece, which is the same thing a player sees.
+    Returns {"white": [letters White took], "black": [...], "lead": n}
+    where lead is White's material advantage (negative favours Black).
+    """
+    took = {"white": [], "black": []}
+    material = {chess.WHITE: 0, chess.BLACK: 0}
+    for color in (chess.WHITE, chess.BLACK):
+        for kind, start in _CHESS_START.items():
+            have = len(board.pieces(kind, color))
+            material[color] += have * _CHESS_VALUE[kind]
+            lost = max(0, start - have)
+            letter = chess.piece_symbol(kind)
+            # Black's lost pieces are on White's tray, and the other way.
+            taker = "white" if color == chess.BLACK else "black"
+            took[taker].extend([letter if color == chess.BLACK else letter.upper()] * lost)
+    order = "qrbnp"
+    for side in took:
+        took[side].sort(key=lambda p: order.index(p.lower()))
+    took["lead"] = material[chess.WHITE] - material[chess.BLACK]
+    return took
 
 
 def _chess_turn_seat(state):

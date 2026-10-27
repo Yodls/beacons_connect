@@ -1,0 +1,92 @@
+{#
+  Chess, as a wooden set. Included by _board.html for a chess game.
+
+  Everything the board needs rides on data- attributes, so
+  static/chess-board.js can mount it on first load and again after every
+  live swap without asking the server anything:
+
+    data-game   the game id, for remembering which move was last animated
+    data-last   the last move in UCI (e2e4), which the module slides in
+    data-legal  the legal moves for you, when it is your turn, else empty
+    data-turn   1 when it is your turn
+
+  The pieces are the filled chess glyphs for both sides, coloured by the
+  stylesheet, each with U+FE0E so iOS does not draw the pawn as an emoji.
+  Without JavaScript the squares do nothing, and "Type a move" still works.
+#}
+{% set state = payload.state %}
+{% set glyph = {"k": "♚", "q": "♛", "r": "♜", "b": "♝", "n": "♞", "p": "♟"} %}
+{% set names = {"k": "king", "q": "queen", "r": "rook", "b": "bishop", "n": "knight", "p": "pawn"} %}
+{% set my_white = payload.seat == 0 %}
+{% set cap = state.captured or {"white": [], "black": [], "lead": 0} %}
+{% set my_lead = (cap.lead if my_white else -cap.lead) %}
+{% set mine_took = cap.white if my_white else cap.black %}
+{% set they_took = cap.black if my_white else cap.white %}
+{% macro tray(pieces, lead, whose) -%}
+  <div class="chess-tray" aria-label="Pieces {{ whose }} taken">
+    {%- for p in pieces -%}
+      <span class="pc {{ 'w' if p.isupper() else 'b' }}" title="{{ names[p.lower()] }}">{{ glyph[p.lower()] }}&#xFE0E;</span>
+    {%- endfor -%}
+    {%- if lead > 0 %}<span class="chess-lead">+{{ lead }}</span>{% endif -%}
+  </div>
+{%- endmacro %}
+<section class="chess-set" data-game="{{ game.id }}" data-last="{{ state.last or '' }}"
+         data-turn="{{ 1 if payload.your_turn else 0 }}"
+         data-legal="{{ state.legal | join(' ') }}">
+  <div class="chess-head">
+    <span class="chess-side {{ 'w' if my_white else 'b' }}" aria-hidden="true">{{ glyph.k }}&#xFE0E;</span>
+    <span class="chess-who">
+      <b>You are {{ state.you_are }}</b>
+      <small>{% if state.check %}Check!{% elif payload.your_turn %}Your move{% else %}Their move{% endif %}</small>
+    </span>
+    <button type="button" class="chess-sound" aria-pressed="false"
+            aria-label="Sound" title="Sound">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="on" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="off" d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  {{ tray(they_took, -my_lead, "they have") }}
+
+  <form method="post" action="{{ url_for('game_move', game_id=game.id) }}" id="chessform">
+    <div class="chess-frame">
+      <div class="board chess chess-board{% if payload.your_turn %} live{% endif %}" role="grid"
+           aria-label="Chess board, {{ state.you_are }} at the bottom">
+        {%- for row in state.rows %}
+          {%- set rank_i = loop.index0 %}
+          {%- for square in row %}
+            {%- set p = square.piece %}
+            <button type="button" data-sq="{{ square.name }}"
+                    class="sq {{ 'dark' if square.dark else 'light' }}
+                           {%- if square.name in (state.last or '') and state.last %} last{% endif %}
+                           {%- if square.name == state.check_square %} check{% endif %}"
+                    aria-label="{{ square.name }}{% if p %}, {{ 'white' if p.isupper() else 'black' }} {{ names[p.lower()] }}{% endif %}">
+              {%- if loop.index0 == 0 %}<span class="coord rank" aria-hidden="true">{{ square.name[1] }}</span>{% endif -%}
+              {%- if rank_i == 7 %}<span class="coord file" aria-hidden="true">{{ square.name[0] }}</span>{% endif -%}
+              {%- if p %}<span class="pc {{ 'w' if p.isupper() else 'b' }}{% if square.mine %} mine{% endif %}" data-piece="{{ p }}">{{ glyph[p.lower()] }}&#xFE0E;</span>{% endif -%}
+            </button>
+          {%- endfor %}
+        {%- endfor %}
+      </div>
+    </div>
+    {# The no-JavaScript and keyboard way in, as before, tucked away. #}
+    <details class="chess-type">
+      <summary>Type a move</summary>
+      <label>Move
+        <input name="move" id="chessmove" placeholder="e2e4" autocomplete="off"
+               {% if not payload.your_turn %}disabled{% endif %} />
+      </label>
+      <button type="submit" {% if not payload.your_turn %}disabled{% endif %}>Play</button>
+    </details>
+  </form>
+
+  {{ tray(mine_took, my_lead, "you have") }}
+
+  {% if state.history %}
+    <ol class="chess-moves" aria-label="Moves so far">
+      {%- for i in range(0, state.history | length, 2) %}
+        <li><span class="n">{{ i // 2 + 1 }}.</span><span>{{ state.history[i] }}</span>
+          {%- if i + 1 < state.history | length %}<span>{{ state.history[i + 1] }}</span>{% endif %}</li>
+      {%- endfor %}
+    </ol>
+  {% endif %}
+</section>

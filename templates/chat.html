@@ -634,30 +634,13 @@
       }
       .boardwrap h3:first-child { margin-top: 0; }
 
-      /* Chess: a paper and sky board in a navy frame. */
-      .board.chess {
-        grid-template-columns: repeat(8, 2.7rem); gap: 0;
-        border: 2px solid var(--navy); border-radius: var(--r-sm); overflow: hidden;
-      }
-      .board.chess .cell, .board.chess .cell:hover, .board.chess .cell:active {
-        height: 2.7rem; font-size: 1.6rem; line-height: 1;
-        background: var(--paper); border: 0; border-radius: 0; box-shadow: none;
-      }
-      .board.chess .cell.dark { background: var(--sky); }
-      .board.chess .cell:hover:not([disabled]) { background: var(--gold); }
-      .board.chess .cell.last { box-shadow: inset 0 0 0 3px var(--gold); }
-      .board.chess .cell.pick { box-shadow: inset 0 0 0 3px var(--orange); }
-      #chessform { width: 100%; }
-      #chessform label { margin-top: 12px; font-size: .9rem; }
-      #chessform input { max-width: 9rem; font-size: 1rem; }
-      #chessform button { margin-top: 8px; }
+      /* Chess is a wooden set with its own stylesheet, static/chess-board.css,
+         and a fluid board, so it has no fixed sizes here. */
 
-      /* The boards are fixed-width grids, and chess at 8 x 2.7rem is wider
-         than the side column and wider than a 375px phone. Everything scales
-         down together so the proportions survive. */
+      /* The other boards are fixed-width grids, wider than the side column
+         and wider than a 375px phone. Everything scales down together so the
+         proportions survive. */
       @media (max-width: 1100px) {
-        .board.chess { grid-template-columns: repeat(8, 2.2rem); }
-        .board.chess .cell, .board.chess .cell:hover { height: 2.2rem; font-size: 1.3rem; }
         .board.bs { grid-template-columns: repeat(10, 1.5rem); }
         .board.bs .cell, .board.bs .cell:hover { height: 1.5rem; font-size: .68rem; }
         .board.c4 { grid-template-columns: repeat(7, 2.4rem); }
@@ -665,8 +648,6 @@
       }
       @media (max-width: 420px) {
         .boardwrap { padding: 10px; }
-        .board.chess { grid-template-columns: repeat(8, 1.95rem); }
-        .board.chess .cell, .board.chess .cell:hover { height: 1.95rem; font-size: 1.15rem; }
         .board.ttt { grid-template-columns: repeat(3, 3.8rem); }
         .board.ttt .cell, .board.ttt .cell:hover { height: 3.8rem; font-size: 1.6rem; }
         /* The board sits in #board-area, which .boardwrap centres as a
@@ -744,6 +725,7 @@
 
 {% block main %}
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='chess-board.css') }}">
   <p class="nav backlink"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
 
   <div class="chathead">
@@ -1145,6 +1127,7 @@
 
 {% block script %}
 <script src="{{ url_for('static', filename='naval-battleship.js') }}"></script>
+<script src="{{ url_for('static', filename='chess-board.js') }}"></script>
 <script>
   // Narrows mode and location to whatever activity is picked. Without this the
   // form still works: every location is listed under its activity and the
@@ -1770,26 +1753,11 @@
       });
     }
 
-    // Chess is the one board that needs a client: click a square, then
-    // another. Re-bound after every swap, because a swap replaces the board
-    // and takes these listeners with it.
+    // Chess is the one board that needs a client: pick a piece up and put it
+    // down (static/chess-board.js). Mounted again after every swap, because a
+    // swap replaces the board and takes its listeners with it.
     function bindChess() {
-      var form = document.getElementById("chessform");
-      var field = document.getElementById("chessmove");
-      if (!form || !field || field.disabled) { return; }
-
-      var from = null;
-      form.querySelectorAll(".cell[data-sq]").forEach(function (cell) {
-        cell.addEventListener("click", function () {
-          if (from === null) {
-            from = cell.dataset.sq;
-            cell.classList.add("pick");
-            return;
-          }
-          field.value = from + cell.dataset.sq;
-          form.submit();
-        });
-      });
+      if (window.BeaconChess) { window.BeaconChess.mount(slot || document); }
     }
 
     function apply(data) {
@@ -1841,18 +1809,31 @@
       var pane = data.game;
       if (pane && slot && wrap && pane.token !== token) {
         token = pane.token;
-        // DOMParser rather than innerHTML. This markup is server-rendered and
-        // already escaped, but chat.html is checked file-wide for innerHTML
-        // assignment -- the guard that keeps a message body from ever being
-        // injected as HTML -- and that guard is worth keeping blunt.
-        var parsed = new DOMParser().parseFromString(pane.html, "text/html");
-        slot.replaceChildren.apply(slot, parsed.body.childNodes);
-        wrap.classList.toggle("playing", !!pane.html);
-        if (launch) { launch.hidden = !!pane.live; }
-        bindChess();
-        // Live updates replace the board DOM; bind the naval controls again.
-        if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
+        // Not under a chess player's finger: a piece in the hand, or one
+        // chosen, waits for the swap until it is put down.
+        if (window.BeaconChess && window.BeaconChess.busy()) {
+          window.BeaconChess.whenIdle(function () { swapPane(pane); });
+        } else {
+          swapPane(pane);
+        }
       }
+    }
+
+    function swapPane(pane) {
+      // DOMParser rather than innerHTML. This markup is server-rendered and
+      // already escaped, but chat.html is checked file-wide for innerHTML
+      // assignment -- the guard that keeps a message body from ever being
+      // injected as HTML -- and that guard is worth keeping blunt.
+      var parsed = new DOMParser().parseFromString(pane.html, "text/html");
+      // The chess board as it stands, so the module can show a captured
+      // piece leaving when the other player's move slides in.
+      if (window.BeaconChess) { window.BeaconChess.before(slot); }
+      slot.replaceChildren.apply(slot, parsed.body.childNodes);
+      wrap.classList.toggle("playing", !!pane.html);
+      if (launch) { launch.hidden = !!pane.live; }
+      bindChess();
+      // Live updates replace the board DOM; bind the naval controls again.
+      if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
     }
 
     bindChess();

@@ -1,0 +1,211 @@
+/* Beacons Connect chess: a classic wooden set.
+   Scoped to .chess-set so nothing else on the chat page changes. The board
+   keeps the "board chess" classes so the layout audit still measures it,
+   and its squares are .sq rather than .cell so the generic game-board
+   button styles in chat.html do not reach them. */
+
+.chess-set {
+  --maple: #f0d9b5; --maple-2: #e8cc9c;
+  --walnut: #b58863; --walnut-2: #a47652;
+  --frame: #5b3a21; --frame-2: #3e2614; --frame-edge: #8a5a33;
+  --ivory: #fbf6ea; --ivory-edge: #2b1c10;
+  --ebony: #221710; --ebony-hi: rgba(255, 240, 220, .35);
+  --hint: rgba(43, 28, 16, .32);
+  --last: rgba(255, 214, 92, .5);
+  --check: #e0402a;
+  width: min(100%, 30rem); margin: 0 auto;
+  color: var(--frame-2);
+  font-family: Georgia, "Times New Roman", serif;
+}
+.chess-set * { box-sizing: border-box; }
+
+/* ---------- the header: whose side, whose move, sound ---------- */
+.chess-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, #7a4f2c, var(--frame));
+  color: #f7e9d2; border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 3px 0 var(--frame-2);
+}
+.chess-side { font-size: 1.7rem; line-height: 1; }
+.chess-who { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.chess-who b { font-size: 1rem; }
+.chess-who small { font: 700 .74rem/1.2 system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+.chess-set .chess-sound {
+  display: grid; place-items: center; flex: none;
+  width: 40px; height: 40px; min-height: 0; margin: 0; padding: 0;
+  background: rgba(0, 0, 0, .18); color: #f7e9d2;
+  border: 1px solid rgba(255, 255, 255, .25); border-radius: 50%; box-shadow: none;
+  cursor: pointer;
+}
+.chess-sound svg { width: 22px; height: 22px; }
+.chess-sound .on { display: none; }
+.chess-sound[aria-pressed="true"] .on { display: inline; }
+.chess-sound[aria-pressed="true"] .off { display: none; }
+
+/* ---------- captured trays ---------- */
+.chess-tray {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+  min-height: 1.9rem; padding: 2px 4px; font-size: 1.25rem; line-height: 1;
+}
+.chess-tray .pc + .pc { margin-left: -.32em; }
+.chess-lead { margin-left: 6px; font: 700 .8rem system-ui, sans-serif; color: var(--frame); }
+
+/* ---------- the board in its frame ---------- */
+.chess-frame {
+  position: relative;
+  padding: clamp(8px, 2.4%, 14px);
+  background:
+    repeating-linear-gradient(95deg, rgba(255, 255, 255, .05) 0 2px, transparent 2px 9px),
+    linear-gradient(135deg, var(--frame-edge), var(--frame) 40%, var(--frame-2));
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 255, 255, .15),
+              0 6px 14px rgba(40, 20, 5, .35);
+}
+.chess-set .board.chess.chess-board {
+  display: grid; gap: 0;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  width: 100%; aspect-ratio: 1;
+  container-type: inline-size;
+  border: 2px solid var(--frame-2); border-radius: 3px; overflow: visible;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .12);
+  touch-action: manipulation;
+}
+/* On your turn a finger drags pieces instead of scrolling the page. */
+.chess-set .board.chess.chess-board.live { touch-action: none; }
+
+.chess-set .sq {
+  position: relative; display: grid; place-items: center;
+  width: 100%; height: auto; aspect-ratio: 1; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none;
+  font: inherit; cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+.chess-set .sq.light {
+  background:
+    repeating-linear-gradient(100deg, rgba(160, 110, 60, .06) 0 1px, transparent 1px 7px),
+    linear-gradient(160deg, var(--maple), var(--maple-2));
+}
+.chess-set .sq.dark {
+  background:
+    repeating-linear-gradient(80deg, rgba(60, 30, 10, .10) 0 1px, transparent 1px 6px),
+    linear-gradient(160deg, var(--walnut), var(--walnut-2));
+}
+.chess-set .sq.last::before {
+  content: ""; position: absolute; inset: 0; background: var(--last); pointer-events: none;
+}
+.chess-set .sq.check::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle, rgba(224, 64, 42, .85) 0 30%, rgba(224, 64, 42, .35) 55%, transparent 72%);
+  animation: chess-check 1.3s ease-in-out infinite;
+}
+@keyframes chess-check { 50% { opacity: .55; } }
+.chess-set .sq:focus-visible { outline: 3px solid #2f7cf6; outline-offset: -3px; z-index: 2; }
+
+/* coordinates in the corners, as on a printed board */
+.chess-set .coord {
+  position: absolute; z-index: 1; pointer-events: none;
+  font: 700 clamp(.5rem, 2.6cqi, .78rem)/1 system-ui, sans-serif;
+}
+.chess-set .coord.rank { top: 3px; left: 3px; }
+.chess-set .coord.file { bottom: 2px; right: 3px; }
+.chess-set .sq.light .coord { color: var(--walnut-2); }
+.chess-set .sq.dark .coord { color: var(--maple); }
+
+/* ---------- pieces ---------- */
+.chess-set .pc {
+  position: relative; z-index: 3; display: block;
+  font-size: 10.4cqi; line-height: 1;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", "Apple Symbols", serif;
+  user-select: none; -webkit-user-select: none; pointer-events: none;
+  transition: transform .14s ease, opacity .14s ease;
+}
+.chess-set .pc.w {
+  color: var(--ivory);
+  text-shadow: 0 0 1px var(--ivory-edge), 1px 1px 0 var(--ivory-edge), -1px -1px 0 var(--ivory-edge),
+               1px -1px 0 var(--ivory-edge), -1px 1px 0 var(--ivory-edge), 0 3px 3px rgba(30, 15, 5, .45);
+}
+.chess-set .pc.b {
+  color: var(--ebony);
+  text-shadow: 0 -1px 0 var(--ebony-hi), 0 3px 3px rgba(30, 15, 5, .5);
+}
+.chess-tray .pc { font-size: inherit; text-shadow: none; }
+.chess-tray .pc.w { color: var(--ivory); -webkit-text-stroke: .6px var(--ivory-edge); }
+.chess-tray .pc.b { color: var(--ebony); }
+
+/* yours, on your turn: something you can pick up */
+.chess-set .board.live .sq:has(.pc.mine) { cursor: grab; }
+.chess-set .board.live .sq:has(.pc.mine):hover .pc { transform: translateY(-2px) scale(1.04); }
+
+/* the square a held piece left, and where it could go */
+.chess-set .sq.from .pc { opacity: .3; }
+.chess-set .sq.from::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px rgba(255, 214, 92, .9); pointer-events: none; }
+.chess-set .sq.hint::after {
+  content: ""; position: absolute; z-index: 2; width: 30%; height: 30%;
+  border-radius: 50%; background: var(--hint); pointer-events: none;
+}
+.chess-set .sq.hint.take::after {
+  width: 92%; height: 92%; background: transparent;
+  box-shadow: inset 0 0 0 .5em var(--hint);
+}
+.chess-set .sq.over { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .8); }
+.chess-set .board.live .sq.hint { cursor: pointer; }
+
+/* the piece in your hand, following the pointer */
+.chess-ghost {
+  position: fixed; z-index: 2000; left: 0; top: 0; pointer-events: none;
+  display: grid; place-items: center;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", "Apple Symbols", serif;
+  line-height: 1;
+  filter: drop-shadow(0 10px 8px rgba(30, 15, 5, .45));
+  transform-origin: center;
+  will-change: transform;
+}
+.chess-ghost.w { color: var(--ivory); text-shadow: 1px 1px 0 var(--ivory-edge), -1px -1px 0 var(--ivory-edge), 1px -1px 0 var(--ivory-edge), -1px 1px 0 var(--ivory-edge); }
+.chess-ghost.b { color: var(--ebony); text-shadow: 0 -1px 0 var(--ebony-hi); }
+.chess-ghost.home { transition: transform .2s cubic-bezier(.3, .7, .4, 1); }
+
+/* a piece arriving: the other player's move, or your drop settling */
+.chess-set .pc.arrive { transition: transform .38s cubic-bezier(.25, .8, .3, 1); z-index: 6; }
+.chess-set .pc.taken { position: absolute; transition: opacity .4s ease, transform .4s ease; opacity: 0; transform: scale(.6); }
+
+/* ---------- promotion ---------- */
+.chess-promo {
+  position: absolute; z-index: 30; display: grid; gap: 4px; padding: 6px;
+  background: linear-gradient(180deg, #7a4f2c, var(--frame)); border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(30, 15, 5, .5);
+}
+.chess-set .chess-promo button {
+  display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 0;
+  margin: 0; padding: 0; background: var(--maple); border: 0; border-radius: 6px; box-shadow: none;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", "Apple Symbols", serif;
+  line-height: 1; cursor: pointer;
+}
+.chess-set .chess-promo button:hover, .chess-set .chess-promo button:focus-visible { background: #ffe8a8; }
+.chess-board-wrap { position: relative; }
+
+/* ---------- move list ---------- */
+.chess-moves {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; max-height: 6.5rem; overflow-y: auto;
+  margin: 8px 0 0; padding: 8px 10px; list-style: none;
+  background: rgba(240, 217, 181, .35); border: 1px solid rgba(91, 58, 33, .3); border-radius: 8px;
+  font: 600 .86rem/1.35 system-ui, sans-serif;
+}
+.chess-moves li { display: inline-flex; gap: 5px; white-space: nowrap; }
+.chess-moves .n { color: #8a6a4a; }
+.chess-moves li:last-child span:last-child { background: var(--last); border-radius: 3px; padding: 0 3px; }
+
+/* ---------- type a move ---------- */
+.chess-type { margin-top: 8px; font: .88rem system-ui, sans-serif; }
+.chess-type summary { cursor: pointer; color: #6b4a2c; font-weight: 700; }
+.chess-type label { display: inline-flex; align-items: center; gap: 6px; margin: 8px 8px 0 0; }
+.chess-type input { max-width: 8rem; font-size: 1rem; }
+
+/* The board lives in the game pane; let it use the pane's width. */
+.boardwrap:has(.chess-set) { display: block; }
+#board-area:has(.chess-set) { width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chess-set .pc, .chess-set .pc.arrive, .chess-ghost.home, .chess-set .pc.taken { transition: none !important; }
+  .chess-set .sq.check::before { animation: none; }
+}

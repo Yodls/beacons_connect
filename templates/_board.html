@@ -36,27 +36,7 @@
   {% include "_battleship_board.html" %}
 
 {% elif game.kind == "chess" %}
-  <form method="post" action="{{ url_for('game_move', game_id=game.id) }}" id="chessform">
-    <div class="board chess">
-      {% for row in state.rows %}
-        {% for square in row %}
-          <button type="button" data-sq="{{ square.name }}"
-                  class="cell {% if square.dark %}dark{% endif %}
-                         {% if square.name in (state.last or '') %}last{% endif %}">
-            {{ square.glyph }}
-          </button>
-        {% endfor %}
-      {% endfor %}
-    </div>
-    <p class="why">
-      You are {{ state.you_are }}{% if state.check %} &mdash; check!{% endif %}
-    </p>
-    <label>Move
-      <input name="move" id="chessmove" placeholder="e2e4" autocomplete="off"
-             {% if not payload.your_turn %}disabled{% endif %} />
-    </label>
-    <button type="submit" {% if not payload.your_turn %}disabled{% endif %}>Play</button>
-  </form>
+  {% include "_chess_board.html" %}
 {% endif %}
 
 <p class="status {% if payload.your_turn %}yours{% endif %}">
