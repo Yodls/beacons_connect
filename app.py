@@ -5053,6 +5053,10 @@ def chat_invite(chat_id):
         flash("People join this chat by RSVPing to the meetup.")
     elif other is None:
         flash("We couldn't find that student.")
+    # Blocked, either way round. The same words as not found, on purpose:
+    # an invite is not a way to learn who has blocked you.
+    elif matching.blocked_between(current_user.id, other.id):
+        flash("We couldn't find that student.")
     elif other.id == current_user.id:
         flash("You are already in it.")
     elif is_member(chat_id, other.id):
@@ -5859,6 +5863,12 @@ def account_delete():
             return redirect(url_for("account"))
 
     # Read now; the cascade makes both unreadable in a moment.
+    # The profile picture file, if there is one. The beacon_profile row goes
+    # with the cascade, but a file on disk is nobody's to cascade, and they
+    # were piling up in static/uploads.
+    profile_row = db.session.get(BeaconProfile, me)
+    picture = profile_row.picture if profile_row is not None else None
+
     friends = [f["user_id"] for f in matching.active_matches(me)]
     owned = db.session.scalars(
         db.select(Chat).where(Chat.owner_id == me, Chat.post_id.is_(None))
@@ -5884,6 +5894,10 @@ def account_delete():
     db.session.flush()
     db.session.delete(db.session.get(User, me))
     db.session.commit()
+    # Only once the row is gone: a file removed before a failed commit would
+    # leave a profile pointing at nothing.
+    if picture:
+        _bc_remove_file(picture)
 
     # After the commit and before anything renders: Flask-Login caches the
     # resolved user on `g`, so a deleted row with a still-"authenticated"
@@ -6910,11 +6924,12 @@ def _bc_id(value):
     return None
 
 
-def _bc_same_site():
-    """Refuses a POST sent by another website (the browser sends Origin on form posts)."""
-    origin = _bc_flask.request.headers.get("Origin")
-    if origin and origin != "null" and _bc_url.urlsplit(origin).netloc != _bc_flask.request.host:
-        _bc_flask.abort(400)
+# There is deliberately no Origin check on these routes. One was here, the
+# same shape as the guard that took registration down: production is https
+# through a proxy in front of gunicorn on http, so what a browser sends as
+# its Origin is not what Flask sees, and every browser POST was refused.
+# Cross-site posts are kept out by the session cookie being SameSite=Lax,
+# which is what the rest of the site relies on.
 
 
 def _bc_too_big():
@@ -7143,7 +7158,6 @@ def _bc_profile_details():
 
     Not major, minor or year: those are registration questions, saved with the
     rest of the answers, and this form no longer asks for them."""
-    _bc_same_site()
     if _bc_too_big():
         return _bc_back("profile", ["The picture must be under 2 MB."])
     problems = []
@@ -7183,7 +7197,6 @@ def _bc_profile_details():
 @_bc_login.login_required
 def _bc_profile_clubs():
     """Leave clubs. Only clubs the student is in can be left."""
-    _bc_same_site()
     me = _bc_login.current_user
     leave = {_bc_id(v) for v in _bc_flask.request.form.getlist("leave")} - {None}
     if not leave:
@@ -7200,7 +7213,6 @@ def _bc_profile_clubs():
 @_bc_login.login_required
 def _bc_profile_account():
     """Unblock people, and set a new password with the emailed code."""
-    _bc_same_site()
     me = _bc_login.current_user
     form = _bc_flask.request.form
     code = _bc_text("code")
@@ -7241,7 +7253,6 @@ def _bc_profile_account():
 @_bc_login.login_required
 def _bc_password_code():
     """Emails a 6-digit code, like your sign-up code. Stored hashed; one a minute."""
-    _bc_same_site()
     me = _bc_login.current_user
     now = _bc_now()
     row = db.session.get(BeaconPasswordCode, me.id)
@@ -7273,7 +7284,6 @@ def _bc_password_code():
 @_bc_login.login_required
 def _bc_block_user(other_id):
     """For a Block button (a form posting here). Ends the friendship and hides both ways."""
-    _bc_same_site()
     me = _bc_login.current_user
     other = db.session.get(User, other_id)
     if other is None or other.id == me.id:
@@ -7292,7 +7302,6 @@ def _bc_profile_name_interests():
     """The profile's "Name and pronouns" and "Your interests" forms. They carry
     the same hidden `section` as account.html's forms ("who" or "answers"), and
     your account route does the rest."""
-    _bc_same_site()
     section = _bc_flask.request.form.get("section")
     if section == "who":
         return _bc_hand_over("account", "who", "profile")
@@ -7306,7 +7315,6 @@ def _bc_profile_delete():
     """The profile's "Delete your account" form: your account_delete route checks
     the password and deletes, exactly as from Your account. A wrong password comes
     back to this window with your route's message."""
-    _bc_same_site()
     return _bc_hand_over("account_delete", "leaving", "pf-delete")
 
 
@@ -7318,7 +7326,6 @@ def _bc_profile_picture():
     Nothing links here at the moment: the account menu's photo control that
     used it was taken out, and the profile page saves its picture through
     profile_details instead."""
-    _bc_same_site()
     # `next` is in the address, not the form, so it can be read without
     # reading a body that may be too big.
     back = _bc_safe_next(_bc_flask.request.args.get("next"))

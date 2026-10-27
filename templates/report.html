@@ -140,5 +140,19 @@
     </form>
   </section>
 
+  {% if kind == "abuse" and about_user and about_user.id != current_user.id %}
+    {# The thing you can do for yourself right now, beside telling us. Its
+       own form, after the report's: a form cannot sit inside another. It
+       lands on your profile's Account and safety, where Unblock lives. #}
+    <form class="tellus blockrow" method="post"
+          action="{{ url_for('block_user', other_id=about_user.id) }}">
+      <p class="hint">You can also block {{ about_user.name }}. They will not
+        be able to find you, add you or invite you anywhere, and any
+        friendship between you ends. You can undo it under Account and safety
+        on your profile.</p>
+      <div class="row"><button type="submit" class="ghost">Block {{ about_user.name }}</button></div>
+    </form>
+  {% endif %}
+
   <p class="nav"><a href="{{ url_for('index') }}">&larr; Back</a></p>
 {% endblock %}

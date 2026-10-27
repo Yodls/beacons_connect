@@ -98,6 +98,28 @@ _CLUBS_SQL = """
     LIMIT :limit
 """
 
+# A block, either way round, takes a pair out of every list that could put
+# them in front of each other: suggestions, search, friend requests and
+# group-chat invites. Written once here and pasted into the two SQL texts,
+# so the two cannot disagree about what "blocked" means. The table is the
+# profile page's (beacon_block), made on the server's first request.
+def _not_blocked(other):
+    return f"""NOT EXISTS (
+        SELECT 1 FROM beacon_block b
+        WHERE (b.blocker_id = :user_id AND b.blocked_id = {other})
+           OR (b.blocker_id = {other} AND b.blocked_id = :user_id)
+    )"""
+
+
+def blocked_between(user_id, other_id):
+    """Whether either of these two has blocked the other."""
+    return db.session.scalar(db.text(
+        "SELECT 1 FROM beacon_block"
+        " WHERE (blocker_id = :a AND blocked_id = :b)"
+        "    OR (blocker_id = :b AND blocked_id = :a)"
+        " LIMIT 1"), {"a": user_id, "b": other_id}) is not None
+
+
 # Who to suggest. The NOT EXISTS below is status-agnostic on purpose, so one
 # clause covers every pair that should stay off the list: people you are
 # already friends with, a request either of you has sent, a decline, and
@@ -164,6 +186,7 @@ _CANDIDATES_SQL = f"""
       -- friends" to add here: the NOT EXISTS above has already excluded
       -- everybody this student has any match row with, friends included.
       AND them.discoverable
+      AND {_not_blocked("s.other_id")}
     ORDER BY rank_score DESC, (me.gender = them.gender) DESC, s.other_id
     LIMIT :limit
 """
@@ -249,6 +272,7 @@ _SEARCH_SQL = f"""
       AND (u.discoverable OR m.status = 'active')
       AND u.name ILIKE :term
       AND EXISTS (SELECT 1 FROM user_answers a WHERE a.user_id = u.id)
+      AND {_not_blocked("u.id")}
     ORDER BY u.name, u.id
     LIMIT :limit
 """
@@ -471,6 +495,10 @@ def request_match(user_id, other_id):
 
     other = db.session.get(User, other_id)
     if other is None or not other.email_verified:
+        return "unknown"
+    # Blocked, either way round, reads as somebody who is not there: a
+    # friend request is not a way to find out who has blocked you.
+    if blocked_between(user_id, other_id):
         return "unknown"
     if not db.session.scalar(
         db.select(db.func.count()).select_from(UserAnswer)
