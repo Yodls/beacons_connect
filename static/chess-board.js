@@ -229,7 +229,7 @@
       arrive(set, board, last, prior);
     }
 
-    var live = set.dataset.turn === '1' && legal.length && field && !field.disabled && board;
+    var live = set.dataset.turn === '1' && legal.length && field && board;
     if (!live) { return; }
 
     // from -> { to: "" for a plain move, "qrbn" for a promotion }
@@ -289,6 +289,11 @@
       sending();
       clearMarks();
       board.classList.remove('live');
+      // Marked seen before it goes, so the board coming back does not play
+      // it again -- and remembered, so a refused move can be unmarked and
+      // the real last move not played a second time either.
+      var wasSeen = stored('sessionStorage', seenKey) || '';
+      root.BeaconChess.unsend = function () { store('sessionStorage', seenKey, wasSeen); };
       store('sessionStorage', seenKey, uci);
       field.value = uci;
       set.dataset.sent = uci;

@@ -29,7 +29,10 @@
     </span>
 
     {% if invitable and not meetup %}
-      <form method="post" action="{{ url_for('chat_invite', chat_id=group.id) }}">
+      {# data-region: an invite is not a membership, so the crowd token does
+         not move; the picker is refreshed on its own once it is sent. #}
+      <form method="post" data-region="#group-slot"
+            action="{{ url_for('chat_invite', chat_id=group.id) }}">
         <select name="other_id" required>
           {% for friend in invitable %}
             <option value="{{ friend.user_id }}">{{ friend.name }}</option>

@@ -189,7 +189,7 @@
   </div>
   <div class="meetcol">
 
-  <section class="sec-place">
+  <section class="sec-place" id="matchmaking">
     {{ ui.section("Matchmaking", "place", "meet") }}
     <div class="queuebox">
       {% if waiting %}
@@ -203,13 +203,13 @@
             Nobody else has picked it yet &mdash; you're first in line.
           {% endif %}
         </p>
-        <form method="post" action="{{ url_for('find_leave') }}">
+        <form method="post" data-region="#matchmaking" action="{{ url_for('find_leave') }}">
           <button type="submit">Leave the queue</button>
         </form>
       {% else %}
         <h3>Get paired with someone</h3>
         <p>You'll be matched with the next student who picks the same game.</p>
-        <form method="post" action="{{ url_for('find_queue') }}">
+        <form method="post" data-region="#matchmaking" action="{{ url_for('find_queue') }}">
           <select name="game" required class="act">
             {% for game in games %}
               <option value="{{ game }}">
@@ -235,7 +235,7 @@
         <div class="alsowaiting">
           <p class="lead">Others are waiting for:</p>
           {% for row in elsewhere %}
-            <form method="post" action="{{ url_for('find_queue') }}">
+            <form method="post" data-region="#matchmaking" action="{{ url_for('find_queue') }}">
               <input type="hidden" name="game" value="{{ other }}" />
               <input type="hidden" name="custom_game" value="{{ row.name }}" />
               {# The count only when there is more than one. Whoever arrives
@@ -354,70 +354,9 @@
 
   <section class="sec-place">
     {{ ui.section("Open meetups", "place", "star", posts | length) }}
-    <div class="grid two">
+    <div class="grid two" id="meetups" data-cards="{{ card_token }}">
       {% for post in posts %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.avatar(post.game, post.id, square=true) }}
-            <div class="grow">
-              <h3>{{ post.game }}</h3>
-              <span class="meta">
-                {{ post.location or "Somewhere on campus" }}
-                {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
-              </span>
-            </div>
-          </div>
-          {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
-          <span class="going {% if post.full %}full{% endif %}">
-            {{ post.count }} of {{ post.max_players }} going{% if post.going %}
-            &middot; {{ post.going | join(", ") }}{% endif %}
-          </span>
-          <div class="actions">
-            {% if post.im_going %}
-              {# Asked before you give up your place, the same as in the chat.
-                 A <details>, so it needs no JavaScript. #}
-              <details class="confirm">
-                <summary class="leave">Leave Meetup</summary>
-                <div class="confirm-body">
-                  <span class="confirm-ask">Are you sure you want to leave this
-                    meetup?</span>
-                  <span class="confirm-row">
-                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-                      <input type="hidden" name="back" value="find" />
-                      <button type="submit" class="leave-yes">Yes, leave</button>
-                    </form>
-                    <button type="button" class="confirm-no">Keep my spot</button>
-                  </span>
-                </div>
-              </details>
-            {% else %}
-              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-                <input type="hidden" name="back" value="find" />
-                <button type="submit"
-                        {% if post.full %}disabled{% endif %}>I'm in</button>
-              </form>
-            {% endif %}
-            {# Only for somebody going: the chat refuses anybody else, so
-               offering it to them would be a door that does not open. #}
-            {% if post.im_going and post.chat_id %}
-              <form method="get"
-                    action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
-                <button type="submit" class="ghost">Open chat</button>
-              </form>
-            {% endif %}
-            {# Its flag on the map above, when this student may see it. #}
-            {% if post.flag %}
-              <a class="key maplink" data-flag="{{ post.flag }}"
-                 href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
-            {% endif %}
-            {% if post.mine %}
-              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
-                <input type="hidden" name="back" value="find" />
-                <button type="submit" class="ghost">Cancel meetup</button>
-              </form>
-            {% endif %}
-          </div>
-        </div>
+        {% include "_findcard.html" %}
       {% else %}
         <div class="empty">No in-person meetups posted yet. Add one above.</div>
       {% endfor %}
@@ -433,7 +372,8 @@
   // still works: every location is listed under its activity and the server
   // validates the pair.
   (function () {
-    document.querySelectorAll("form .act").forEach(function (act) {
+    function bind(scope) {
+    scope.querySelectorAll("form .act").forEach(function (act) {
       var form = act.closest("form");
       var loc = form.querySelector(".loc");
 
@@ -472,7 +412,68 @@
       }
 
       act.addEventListener("change", sync);
+      // So a form reset after a send (the enhancer does that) narrows again.
+      form.addEventListener("beacon:done", function () { setTimeout(sync, 0); });
       sync();
+    });
+    }
+    bind(document);
+    // The queue's section is refreshed on its own after joining or quitting it, and
+    // what came back has to be narrowed too. One listener per tab.
+    if (!window.beaconNarrowBound) {
+      window.beaconNarrowBound = true;
+      document.addEventListener("beacon:refresh", function (e) { bind(e.target); });
+    }
+  })();
+</script>
+<script>
+  // The meetup board, live. The channel watches the cards token (every
+  // RSVP, cancel and new meetup moves it) and answers with every open card;
+  // a card whose own token is unchanged is kept, so an open "are you sure" stays
+  // open, and the rest are replaced, added or dropped in the board's order.
+  (function () {
+    var grid = document.getElementById("meetups");
+    if (!grid || typeof Beacon === "undefined" || !window.fetch) { return; }
+    var deck = grid.dataset.cards || "none";
+
+    function render(cards) {
+      var have = {};
+      grid.querySelectorAll(".card[data-post]").forEach(function (c) { have[c.dataset.post] = c; });
+      var next = document.createDocumentFragment();
+      cards.forEach(function (card) {
+        var old = have[String(card.post)];
+        if (old && old.dataset.token === card.token) { next.appendChild(old); return; }
+        var parsed = new DOMParser().parseFromString(card.html, "text/html");
+        var fresh = parsed.querySelector(".card");
+        if (!fresh) { return; }
+        if (old && old.querySelector("details.confirm[open]")) {
+          var again = fresh.querySelector("details.confirm");
+          if (again) { again.setAttribute("open", ""); }
+        }
+        next.appendChild(fresh);
+      });
+      grid.replaceChildren(next);
+      if (!cards.length) {
+        var empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No in-person meetups posted yet. Add one above.";
+        grid.appendChild(empty);
+      }
+      var head = grid.previousElementSibling;
+      var count = head ? head.querySelector(".count") : null;
+      if (count) { count.textContent = String(cards.length); }
+    }
+
+    Beacon.watch({
+      here: "find:0",
+      state: function () { return {cards: deck}; },
+      apply: function (data) {
+        var deal = data && data.cards;
+        if (deal && deal.token !== deck) {
+          deck = deal.token;
+          render(deal.cards || []);
+        }
+      }
     });
   })();
 </script>

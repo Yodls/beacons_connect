@@ -168,6 +168,100 @@
         });
     }
 
+    // ---- forms on a live page
+    //
+    // A page whose conversation the live channel is watching (a chat, or
+    // the meetup board) is not swapped after one of its forms. The channel
+    // delivers what the form did -- the message, the move, the card -- and
+    // replacing the page under it was the flash on every action in a chat.
+    // The route answers such a form with where it would have redirected and
+    // what it flashed (app.answer_live_form): the flashes become toasts, a
+    // redirect elsewhere is followed, and a redirect back here is left to
+    // the channel.
+    //
+    // The few forms whose effect no live token carries name a region to
+    // refresh (data-region="#club-slot"), and the friends panel always
+    // refreshes itself, so accepting a request there still shows the next.
+    function liveHere() {
+      return !!(Beacon.watching && Beacon.watching.here);
+    }
+
+    // One region of this page, replaced with the same region of a fresh
+    // copy. Open <details> stay open, by class, the way swap() keeps the
+    // friends panel; anything bound inside is told with beacon:refresh.
+    function refresh(selector) {
+      if (!document.querySelector(selector)) { return Promise.resolve(false); }
+      return fetch(location.href, {credentials: "same-origin"})
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          var next = doc.querySelector(selector);
+          var here = document.querySelector(selector);
+          if (!next || !here) { return false; }
+          var open = Array.prototype.map.call(
+            here.querySelectorAll("details[open]"),
+            function (d) { return String(d.className).split(" ")[0]; });
+          here.innerHTML = next.innerHTML;
+          open.forEach(function (cls) {
+            var d = cls ? here.querySelector("details." + cls) : null;
+            if (d) { d.setAttribute("open", ""); }
+          });
+          runScripts(here);
+          here.dispatchEvent(new CustomEvent("beacon:refresh", {bubbles: true}));
+          return true;
+        });
+    }
+    Beacon.refresh = refresh;
+
+    function sendLive(form, action, data) {
+      // No double sends while the answer is on its way.
+      var keys = Array.prototype.filter.call(form.querySelectorAll("button"),
+        function (b) { return !b.type || b.type === "submit"; });
+      keys.forEach(function (b) { b.disabled = true; });
+      var region = form.getAttribute("data-region") || (form.closest(".dock") ? ".dock" : "");
+      return fetch(action, {
+        method: "post", body: data, credentials: "same-origin",
+        headers: {"X-Beacon-Live": "1", "X-Requested-With": "XMLHttpRequest"}
+      }).then(function (r) {
+        var type = r.headers.get("content-type") || "";
+        if (type.indexOf("application/json") < 0) {
+          // Answered with a page after all: the old way, in place.
+          return r.text().then(function (html) {
+            if (!swap(html, r.url, true, !!form.closest(".dock"))) {
+              throw new Error("unswappable");
+            }
+          });
+        }
+        return r.json().then(function (answer) {
+          var flashes = answer.flashes || [];
+          flashes.forEach(function (text) { if (Beacon.toast) { Beacon.toast(text); } });
+          var target = new URL(answer.redirect || location.href, location.href);
+          if (target.pathname !== location.pathname) { return go(target.toString()); }
+          var settled = region ? refresh(region) : Promise.resolve(true);
+          return settled.then(function () {
+            // The route says whether it said no (app.refused). Sent: the
+            // form starts again, and a menu it was in closes. Refused: what
+            // was typed stays where it is, with the toast saying why.
+            if (!answer.refused) {
+              if (!form.hasAttribute("data-keep")) { form.reset(); }
+              var menu = form.closest("details");
+              if (menu && !menu.closest(".dock") && !menu.closest(".bell")) {
+                menu.removeAttribute("open");
+              }
+            }
+            form.dispatchEvent(new CustomEvent("beacon:done", {
+              bubbles: true,
+              detail: {flashes: flashes, refused: !!answer.refused, redirect: target.toString()}}));
+          });
+        });
+      }).then(function () {
+        keys.forEach(function (b) { b.disabled = false; });
+      }, function (err) {
+        keys.forEach(function (b) { b.disabled = false; });
+        throw err;
+      });
+    }
+
     document.addEventListener("submit", function (e) {
       var form = e.target;
       if (!(form instanceof HTMLFormElement)) { return; }
@@ -206,8 +300,11 @@
         return;
       }
 
-      go(new URL(action, location.href).toString(),
-         {method: "post", body: data}, ownForm)
+      var where = new URL(action, location.href).toString();
+      var sent = liveHere()
+        ? sendLive(form, where, data)
+        : go(where, {method: "post", body: data}, ownForm);
+      sent
         // Any failure falls back to a real submit, so the worst case is
         // exactly how the app behaved before this file existed.
         .catch(function () {

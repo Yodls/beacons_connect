@@ -1,0 +1,77 @@
+{#
+  One meetup on the /find board. Rendered two ways from this one file,
+  the way _postcard.html is: included by find.html on first load, and
+  returned on its own by the live channel when an RSVP, a cancel or a new
+  meetup moves the cards token -- so the "2 of 4 going" on an open /find
+  changes the moment somebody joins, with no reload.
+
+  data-post is how the page matches a card it holds; data-token is how it
+  decides whether to replace it. Unchanged cards are left alone, which is
+  what keeps an open "Leave?" question open under somebody deciding.
+
+  "{count} of {max} going" stays one text node with single spaces: tests
+  read it as text.
+#}
+{%- import "_ui.html" as ui -%}
+        <div class="card" data-post="{{ post.id }}" data-token="{{ post.card_token }}">
+          <div class="card-top">
+            {{ ui.avatar(post.game, post.id, square=true) }}
+            <div class="grow">
+              <h3>{{ post.game }}</h3>
+              <span class="meta">
+                {{ post.location or "Somewhere on campus" }}
+                {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
+              </span>
+            </div>
+          </div>
+          {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
+          <span class="going {% if post.full %}full{% endif %}">
+            {{ post.count }} of {{ post.max_players }} going{% if post.going %}
+            &middot; {{ post.going | join(", ") }}{% endif %}
+          </span>
+          <div class="actions">
+            {% if post.im_going %}
+              {# Asked before you give up your place, the same as in the chat.
+                 A <details>, so it needs no JavaScript. #}
+              <details class="confirm">
+                <summary class="leave">Leave Meetup</summary>
+                <div class="confirm-body">
+                  <span class="confirm-ask">Are you sure you want to leave this
+                    meetup?</span>
+                  <span class="confirm-row">
+                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                      <input type="hidden" name="back" value="find" />
+                      <button type="submit" class="leave-yes">Yes, leave</button>
+                    </form>
+                    <button type="button" class="confirm-no">Keep my spot</button>
+                  </span>
+                </div>
+              </details>
+            {% else %}
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                <input type="hidden" name="back" value="find" />
+                <button type="submit"
+                        {% if post.full %}disabled{% endif %}>I'm in</button>
+              </form>
+            {% endif %}
+            {# Only for somebody going: the chat refuses anybody else, so
+               offering it to them would be a door that does not open. #}
+            {% if post.im_going and post.chat_id %}
+              <form method="get"
+                    action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+                <button type="submit" class="ghost">Open chat</button>
+              </form>
+            {% endif %}
+            {# Its flag on the map above, when this student may see it. #}
+            {% if post.flag %}
+              <a class="key maplink" data-flag="{{ post.flag }}"
+                 href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
+            {% endif %}
+            {% if post.mine %}
+              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
+                <input type="hidden" name="back" value="find" />
+                <button type="submit" class="ghost">Cancel meetup</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>

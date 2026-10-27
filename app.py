@@ -17,6 +17,7 @@ from flask import (
     Flask,
     flash,
     g,
+    get_flashed_messages,
     has_request_context,
     jsonify,
     redirect,
@@ -403,6 +404,44 @@ def _send_batch(batch):
                                        .values(emailed_at=None))
                     db.session.commit()
         db.session.remove()
+
+
+@app.after_request
+def answer_live_form(response):
+    """A form sent from a live page gets its answer as data, not as a page.
+
+    The enhancer used to follow every redirect and put the whole page that
+    came back in place of the one on screen -- which, in a chat, rebuilt the
+    header, the board, the whole log and the composer, and re-ran every
+    script: the flash on every move, message and RSVP. A page whose
+    conversation the live channel is watching does not need the page: the
+    channel delivers the message, the move, the card, within a fifth of a
+    second. So a POST that says X-Beacon-Live is answered with where the
+    redirect pointed and what was flashed, and the page decides -- stay and
+    let the channel deliver, toast, or go.
+
+    No route changes for this. Without the header the same redirect goes
+    out, which is what the test client and a browser without JavaScript see.
+    """
+    if (request.method == "POST"
+            and request.headers.get("X-Beacon-Live") == "1"
+            and 300 <= response.status_code < 400 and response.location):
+        return jsonify({"redirect": response.location,
+                        "flashes": get_flashed_messages(),
+                        "refused": bool(getattr(g, "refused", False))})
+    return response
+
+
+def refused(message):
+    """flash(), for a route saying no.
+
+    A route flashes on success as well ("Asked them to meet up."), so the
+    page cannot tell the two apart by a flash being there. This is the
+    difference: after a refusal the page keeps what was typed and the menu
+    it was typed in; after a success it starts the form again.
+    """
+    flash(message)
+    g.refused = True
 
 
 @app.after_request
@@ -1866,14 +1905,14 @@ def chat(kind, target_id):
         body = request.form.get("body", "").strip()
 
         if not body:
-            flash("Write something first.")
+            refused("Write something first.")
         # A meetup's chat stops taking messages once the meetup has been and
         # gone, or the moment it is cancelled. Refused here as well as hidden
         # in the template: the composer going away is not a rule.
         elif kind == "group" and chat_ended(parent):
-            flash("That meetup has ended, so its chat is closed.")
+            refused("That meetup has ended, so its chat is closed.")
         elif len(body) > MESSAGE_MAX:
-            flash(f"Messages are limited to {MESSAGE_MAX} characters.")
+            refused(f"Messages are limited to {MESSAGE_MAX} characters.")
         else:
             message = Message(user_id=current_user.id, body=body)
             attach_parent(message, kind, parent)
@@ -2304,7 +2343,10 @@ def live_reply(kind, target_id):
         stamp_seen(me)
         db.session.commit()
 
-    watching = kind is not None
+    # /find watches the meetup board: no conversation, no messages, no game
+    # -- only the cards, by the same token every room with cards uses.
+    finding = kind == "find"
+    watching = kind is not None and not finding
     parent = None
     if watching:
         parent, _ = chat_target(kind, target_id)
@@ -2405,6 +2447,8 @@ def live_reply(kind, target_id):
                 deck = live_cards_token()
             if react_token:
                 reacts = live_reacts_token(where)
+        if finding:
+            deck = live_cards_token()
 
         if (newest > after or fresh != token or bell_now != bell
                 or crowd != group_token or deck != card_token
@@ -2431,7 +2475,8 @@ def live_reply(kind, target_id):
                          if watch_other else None),
                 "group": (live_group(db.session.get(Chat, target_id))
                           if kind == "group" else None),
-                "cards": live_cards(kind, deck, parent, target_id),
+                "cards": (find_cards(deck) if finding
+                          else live_cards(kind, deck, parent, target_id)),
                 # Only when they moved. New rows carry their own reactions,
                 # so a message arriving does not need the whole map again.
                 "reacts": ({"token": reacts, "rows": live_reacts(where)}
@@ -2463,6 +2508,10 @@ def live():
 
     kind, _, raw = here.partition(":")
     if kind == COMMUNITY:
+        return live_reply(kind, 0)
+    # The meetup board on /find: not a conversation, but its cards move the
+    # same way a room's do, and it wants them the moment they do.
+    if kind == "find":
         return live_reply(kind, 0)
     if kind not in MESSAGE_PARENTS or not raw.isdigit():
         return jsonify({"error": "unavailable"}), 403
@@ -3289,13 +3338,13 @@ def game_new():
         db.select(Match).filter_by(user_lo=lo, user_hi=hi, status="active")
     )
     if match is None:
-        flash("You can only start a game with one of your friends.")
+        refused("You can only start a game with one of your friends.")
         return redirect(url_for("game_lobby"))
 
     # One at a time, so the chat pane always has a single game to show.
     busy = live_game_with(opponent_id)
     if busy is not None:
-        flash(f"You already have {rules.LABELS[busy.kind]} going with them. "
+        refused(f"You already have {rules.LABELS[busy.kind]} going with them. "
               "Finish that one first.")
         return redirect(url_for("chat", kind="match", target_id=opponent_id))
 
@@ -3395,15 +3444,15 @@ def game_move(game_id):
         return redirect(url_for("game_lobby"))
 
     if game.status != "active":
-        flash("That game isn't in play.")
+        refused("That game isn't in play.")
     elif not rules.can_move(game.kind, game.state, seat):
-        flash("It isn't your turn.")
+        refused("It isn't your turn.")
     else:
         state, error = rules.apply_move(
             game.kind, game.state, seat, request.form.get("move")
         )
         if error:
-            flash(error)
+            refused(error)
         else:
             # Reassign, never mutate: db.JSON does not track in-place edits.
             game.state = state
@@ -3576,24 +3625,52 @@ def game_close(game_id):
 POST_NOTE_MAX = 300
 
 
+def open_campus_posts():
+    """The /find board: open, in person, campus-wide, and not yet past.
+
+    Campus-wide only. A meetup arranged inside a conversation belongs to the
+    people in it and has no business on a public board -- this is the filter
+    that makes "private" mean anything. Newest first, and only a screenful:
+    the board is for finding something to do now, not an archive.
+
+    One query for the page and for the live channel, so what the board
+    shows and what it is told has changed can never be two different sets.
+    """
+    return db.session.scalars(
+        db.select(GamePost)
+        .where(GamePost.mode == "inperson", GamePost.status == "open",
+               GamePost.audience == "campus", still_on())
+        .order_by(GamePost.created_at.desc())
+        .limit(FIND_POSTS)
+    ).all()
+
+
+def find_cards(token):
+    """The /find board's cards for a live answer, in the board's order.
+
+    live_cards' shape, keyed by post rather than by message: the board has
+    no messages. Every open card is rendered, each with its own token, so
+    the page replaces the ones that moved and leaves the rest alone.
+    """
+    posts = open_campus_posts()
+    ids = [p.id for p in posts]
+    rooms = chats_for(ids)
+    pins = flags_for(ids)
+    card_markup = app.jinja_env.get_template("_findcard.html")
+    cards = []
+    for post in posts:
+        card = post_payload(post, chats=rooms, flags=pins)
+        cards.append({"post": post.id, "token": card["card_token"],
+                      "html": card_markup.render(post=card)})
+    return {"token": token, "cards": cards}
+
+
 @app.route("/find")
 @login_required
 def find_game():
     waiting = db.session.get(GameQueue, current_user.id)
 
-    posts = db.session.scalars(
-        db.select(GamePost)
-        # Campus-wide only. A meetup arranged inside a conversation belongs to
-        # the two people in it and has no business on a public board -- this
-        # is the filter that makes "private" mean anything.
-        .where(GamePost.mode == "inperson", GamePost.status == "open",
-               GamePost.audience == "campus", still_on())
-        # Most recently posted first, and only a screenful: the board is for
-        # finding something to do now, not an archive of everything anybody
-        # ever suggested.
-        .order_by(GamePost.created_at.desc())
-        .limit(FIND_POSTS)
-    ).all()
+    posts = open_campus_posts()
 
     pairings = []
     for pairing in db.session.scalars(
@@ -3655,6 +3732,8 @@ def find_game():
         custom_max=CUSTOM_GAME_MAX,
         posts=[post_payload(p, chats=rooms, flags=pins) for p in posts],
         pairings=pairings,
+        # What the board starts from, so the first live round is quiet.
+        card_token=live_cards_token(),
     )
 
 
@@ -3841,46 +3920,46 @@ def post_new():
     allowed = [] if activity is None else [loc.name for loc in activity.locations]
 
     if not game:
-        flash("Say which activity you're looking for."
+        refused("Say which activity you're looking for."
               if not wrote_in else "Type what you want to play.")
     elif wrote_in and len(game) > CUSTOM_GAME_MAX:
-        flash(f"Keep the activity under {CUSTOM_GAME_MAX} characters.")
+        refused(f"Keep the activity under {CUSTOM_GAME_MAX} characters.")
     elif wrote_in and not location:
-        flash("Say where you'll be meeting up.")
+        refused("Say where you'll be meeting up.")
     elif wrote_in and len(location) > CUSTOM_LOCATION_MAX:
-        flash(f"Keep the location under {CUSTOM_LOCATION_MAX} characters.")
+        refused(f"Keep the location under {CUSTOM_LOCATION_MAX} characters.")
     elif not wrote_in and activity is None:
-        flash("Pick an activity from the list.")
+        refused("Pick an activity from the list.")
     elif mode not in POST_MODES:
-        flash("Pick online or in person.")
+        refused("Pick online or in person.")
     elif not wrote_in and mode == "online" and not activity.online:
-        flash(f"{activity.name} can't be played online.")
+        refused(f"{activity.name} can't be played online.")
     elif not wrote_in and mode == "inperson" and not activity.in_person:
-        flash(f"{activity.name} is online only.")
+        refused(f"{activity.name} is online only.")
     elif not wrote_in and mode == "inperson" and not location:
-        flash("Pick where you'll be playing.")
+        refused("Pick where you'll be playing.")
     elif not wrote_in and mode == "inperson" and location not in allowed:
-        flash(f"You can't play {activity.name} at that spot.")
+        refused(f"You can't play {activity.name} at that spot.")
     # Only once an hour has been picked. Asking for AM or PM when nobody has
     # named a time would turn an optional field into a required one.
     elif hour and not ampm:
-        flash("Please select AM or PM.")
+        refused("Please select AM or PM.")
     elif ampm and not hour:
-        flash("Pick an hour to go with the AM or PM.")
+        refused("Pick an hour to go with the AM or PM.")
     elif hour and (hour not in WHEN_HOURS or minute not in WHEN_MINUTES
                    or ampm not in WHEN_MERIDIEM):
         # Only reachable by posting the form by hand.
-        flash("That isn't a time we offer.")
+        refused("That isn't a time we offer.")
     elif on_bad:
-        flash("That isn't a date we can read.")
+        refused("That isn't a date we can read.")
     elif on is None:
         # Required, so its chat has a day to end after and so two meetups can
         # be told apart by when they are.
-        flash("Pick the date of the meetup.")
+        refused("Pick the date of the meetup.")
     elif len(note) > POST_NOTE_MAX:
-        flash(f"Keep the note under {POST_NOTE_MAX} characters.")
+        refused(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
-        flash("Pick between 2 and 50 players.")
+        refused("Pick between 2 and 50 players.")
     else:
         post = GamePost(
             author_id=current_user.id,
@@ -3961,9 +4040,9 @@ def post_rsvp(post_id):
     post = db.session.get(GamePost, post_id)
 
     if post is None:
-        flash("That post is gone.")
+        refused("That post is gone.")
     elif post.status != "open":
-        flash("That post is closed.")
+        refused("That post is closed.")
     else:
         # The meetup's chat, if it has one. Posts made before this feature do
         # not, and nothing below needs them to.
@@ -3993,7 +4072,7 @@ def post_rsvp(post_id):
             # Joining by a guessed id. Leaving is still allowed above: an RSVP
             # somebody already holds -- say from before they left the club --
             # should never be impossible to give back.
-            flash("That meetup isn't available to you.")
+            refused("That meetup isn't available to you.")
             return redirect(url_for("index"))
         else:
             going = db.session.scalar(
@@ -4001,7 +4080,7 @@ def post_rsvp(post_id):
                 .where(GamePostRsvp.post_id == post_id)
             )
             if going >= post.max_players:
-                flash("That one is full.")
+                refused("That one is full.")
             else:
                 db.session.add(
                     GamePostRsvp(post_id=post_id, user_id=current_user.id)

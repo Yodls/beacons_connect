@@ -43,6 +43,10 @@
       }, 5600);
     }
 
+    // The same toast the bell uses, for the enhancer: what a route flashed
+    // after a form sent without a page swap is shown here instead.
+    if (typeof Beacon !== "undefined") { Beacon.toast = toast; }
+
     function applyNotices(data) {
       if (!data) { return; }
       token = data.token;

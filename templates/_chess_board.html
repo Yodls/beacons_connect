@@ -12,7 +12,7 @@
 
   The pieces are the filled chess glyphs for both sides, coloured by the
   stylesheet, each with U+FE0E so iOS does not draw the pawn as an emoji.
-  Without JavaScript the squares do nothing, and "Type a move" still works.
+  The board needs JavaScript: without it the squares do nothing.
 #}
 {% set state = payload.state %}
 {% set glyph = {"k": "♚", "q": "♛", "r": "♜", "b": "♝", "n": "♞", "p": "♟"} %}
@@ -68,15 +68,9 @@
         {%- endfor %}
       </div>
     </div>
-    {# The no-JavaScript and keyboard way in, as before, tucked away. #}
-    <details class="chess-type">
-      <summary>Type a move</summary>
-      <label>Move
-        <input name="move" id="chessmove" placeholder="e2e4" autocomplete="off"
-               {% if not payload.your_turn %}disabled{% endif %} />
-      </label>
-      <button type="submit" {% if not payload.your_turn %}disabled{% endif %}>Play</button>
-    </details>
+    {# Filled by the board when a piece is put down, and sent with the form.
+       There is no typed-move field any more: the board is the way in. #}
+    <input type="hidden" name="move" id="chessmove" value="" />
   </form>
 
   {{ tray(mine_took, my_lead, "you have") }}

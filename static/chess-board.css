@@ -195,12 +195,6 @@
 .chess-moves .n { color: #8a6a4a; }
 .chess-moves li:last-child span:last-child { background: var(--last); border-radius: 3px; padding: 0 3px; }
 
-/* ---------- type a move ---------- */
-.chess-type { margin-top: 8px; font: .88rem system-ui, sans-serif; }
-.chess-type summary { cursor: pointer; color: #6b4a2c; font-weight: 700; }
-.chess-type label { display: inline-flex; align-items: center; gap: 6px; margin: 8px 8px 0 0; }
-.chess-type input { max-width: 8rem; font-size: 1rem; }
-
 /* The board lives in the game pane; let it use the pane's width. */
 .boardwrap:has(.chess-set) { display: block; }
 #board-area:has(.chess-set) { width: 100%; }

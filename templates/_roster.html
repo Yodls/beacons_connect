@@ -38,15 +38,19 @@
       <span class="dock-quiet">Friend</span>
     {% elif state == "you_asked" %}
       <span class="dock-quiet">Requested</span>
+    {# data-region: a friendship moves no live token, so the list this row
+       is in is refreshed on its own once the request is sent. #}
+    {% set region = "#club-slot" if home_kind == "club" else "#group-slot" %}
     {% elif state == "they_asked" %}
-      <form method="post"
+      <form method="post" data-region="{{ region }}"
             action="{{ url_for('match_respond', other_id=person.id, action='accept') }}">
         <input type="hidden" name="from_kind" value="{{ home_kind }}" />
         <input type="hidden" name="from_id" value="{{ home_id }}" />
         <button type="submit">Accept</button>
       </form>
     {% elif state == "none" %}
-      <form method="post" action="{{ url_for('match_ask', other_id=person.id) }}">
+      <form method="post" data-region="{{ region }}"
+            action="{{ url_for('match_ask', other_id=person.id) }}">
         <input type="hidden" name="from_kind" value="{{ home_kind }}" />
         <input type="hidden" name="from_id" value="{{ home_id }}" />
         <button type="submit" class="ghost">Add friend</button>

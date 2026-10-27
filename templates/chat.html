@@ -765,14 +765,17 @@
       {% elif state == "you_asked" %}
         <span class="dock-quiet">Requested</span>
       {% elif state == "they_asked" %}
-        <form method="post"
+        {# data-region: nothing the live channel carries says whether you
+           are friends, so this header is refreshed on its own after. #}
+        <form method="post" data-region=".chathead"
               action="{{ url_for('match_respond', other_id=partner_id, action='accept') }}">
           <input type="hidden" name="from_kind" value="pair" />
           <input type="hidden" name="from_id" value="{{ target_id }}" />
           <button type="submit">Accept friend request</button>
         </form>
       {% else %}
-        <form method="post" action="{{ url_for('match_ask', other_id=partner_id) }}">
+        <form method="post" data-region=".chathead"
+              action="{{ url_for('match_ask', other_id=partner_id) }}">
           <input type="hidden" name="from_kind" value="pair" />
           <input type="hidden" name="from_id" value="{{ target_id }}" />
           <button type="submit" class="ghost">Add friend</button>
@@ -1889,6 +1892,45 @@
 
     bindChess();
     if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
+
+    // A form on this page is sent without a page swap (see _enhance.html):
+    // the channel brings the message, the move, the card. Two forms need a
+    // word afterwards.
+    //
+    // The composer: the reply chip goes once the message is sent, and the
+    // field keeps focus. Refused (too long, say), the text stays.
+    var composer = document.querySelector("form.composer");
+    if (composer) {
+      composer.addEventListener("beacon:done", function (ev) {
+        var refused = !!(ev.detail && ev.detail.refused);
+        if (!refused) {
+          var chip = document.getElementById("replying");
+          if (chip) { chip.hidden = true; }
+        }
+        var field = composer.querySelector("input[name=body]");
+        if (field) { field.focus({ preventScroll: true }); }
+      });
+    }
+    // A chess move the server refused -- the game ended as it was made, or
+    // the page was behind -- used to be put right by the page swap. The
+    // board moved the piece before sending, so the pane is fetched afresh
+    // and swapped in, which puts it back. On the slot, which outlives the
+    // pane: the form inside is replaced on every swap.
+    var paneUrl = {{ (url_for('chat_game', other_id=target_id) if kind == 'match' else none) | tojson }};
+    if (slot && paneUrl) {
+      slot.addEventListener("beacon:done", function (ev) {
+        var form = ev.target;
+        if (!form || form.id !== "chessform") { return; }
+        if (!(ev.detail && ev.detail.refused)) { return; }
+        if (window.BeaconChess && window.BeaconChess.unsend) { window.BeaconChess.unsend(); }
+        fetch(paneUrl, {credentials: "same-origin"})
+          .then(function (r) { return r.json(); })
+          .then(function (pane) {
+            if (pane && typeof pane.token === "string") { token = pane.token; swapPane(pane); }
+          })
+          .catch(function () {});
+      });
+    }
 
     // Everything this page wants from the channel. `state` is read fresh every
     // round rather than captured, because `after` and `token` move as messages
