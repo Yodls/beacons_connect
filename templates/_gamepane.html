@@ -19,50 +19,53 @@
     {{ ui.avatar(payload.label, game.id, square=true) }}
     <div class="grow">
       <h3>{{ payload.label }}</h3>
-      <span class="vs">against {{ payload.opponent }}</span>
+      <span class="vs">against {{ payload.opponent }}
+        {#- Whether the other player is actually at the board, as a few words
+            on this line rather than a box of its own. Nothing ends on a timer
+            any more, so a game can be paused for as long as the two of them
+            like -- which only works if somebody waiting can tell a long
+            think from an empty chair. -#}
+        {%- if game.status == "active" %}
+          {%- set away = payload.opponent_away %}
+          {%- set never = away and not payload.opponent_arrived %}
+          {%- set waiting = away and not payload.can_claim %}
+          <span class="presence {{ 'never' if never else ('gone' if away else 'here') }}"
+                {%- if waiting %} title="The game keeps until they are back."{% endif %}>
+            <span class="dot" aria-hidden="true"></span>
+            {%- if never -%}
+              hasn't opened it yet
+            {%- elif away -%}
+              left {{ payload.away_label }} ago
+            {%- else -%}
+              at the board
+            {%- endif -%}
+            {#- The tooltip's sentence, for a screen reader too. -#}
+            {%- if waiting %}<span class="sr">. The game keeps until they are back.</span>{% endif -%}
+          </span>
+        {%- endif -%}
+      </span>
     </div>
-    {% if game.status == "active" %}
-      <form method="post"
-            action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
-        <button type="submit" class="ghost">Resign</button>
-      </form>
-    {% elif game.status in ("finished", "declined") %}
-      {# Only offered once the game is over; the route refuses it otherwise. #}
-      <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
-        <button type="submit" class="ghost">Close</button>
-      </form>
-    {% endif %}
-  </div>
-
-  {# Whether the other player is actually at the board. Nothing ends on a
-     timer any more, so a game can be paused for as long as the two of them
-     like -- which only works if somebody waiting can tell the difference
-     between a long think and an empty chair. #}
-  {% if game.status == "active" %}
-    <div class="presence {% if payload.opponent_away %}gone{% endif %}">
-      {% if payload.opponent_away %}
-        <span class="dot" aria-hidden="true"></span>
-        <span>
-          {%- if payload.opponent_arrived -%}
-            {{ payload.opponent }} left {{ payload.away_label }} ago.
-          {%- else -%}
-            {{ payload.opponent }} hasn't opened this yet.
-          {%- endif -%}
-        </span>
+    <div class="gamehead-acts">
+      {% if game.status == "active" %}
+        {# Only once they have been gone long enough and the move is theirs;
+           the route checks the same rule (claimable_by) before it acts. #}
         {% if payload.can_claim %}
-          <form method="post"
-                action="{{ url_for('game_claim', game_id=game.id) }}">
+          <form method="post" action="{{ url_for('game_claim', game_id=game.id) }}">
             <button type="submit" class="claim">Claim the win</button>
           </form>
-        {% else %}
-          <span class="hint">The game keeps until they are back.</span>
         {% endif %}
-      {% else %}
-        <span class="dot" aria-hidden="true"></span>
-        <span>{{ payload.opponent }} is here.</span>
+        <form method="post"
+              action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
+          <button type="submit" class="ghost">Resign</button>
+        </form>
+      {% elif game.status in ("finished", "declined") %}
+        {# Only offered once the game is over; the route refuses it otherwise. #}
+        <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
+          <button type="submit" class="ghost">Close</button>
+        </form>
       {% endif %}
     </div>
-  {% endif %}
+  </div>
 
   {# An invite appears here only where the panel would otherwise be empty.
      It normally arrives as a message in the log with its own Accept and

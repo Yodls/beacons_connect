@@ -547,46 +547,65 @@
       /* The game is one window: orange title bar, then who is at the
          board, then the board (or the invite, or the result). */
       .gamepane {
+        /* Its own stacking context, so a game's layering stays inside its
+           window. The chat beside a board is position: sticky, which gives
+           the chat a stacking context of its own -- and the chess pieces'
+           z-index (3, against the whole page) then beat the chat's menus
+           (30, but only inside the chat), so pieces were drawn on top of the
+           Meet up form wherever it reached over the board. */
+        isolation: isolate;
         min-width: 0; overflow: hidden;
         background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
-      .gamepane > .presence, .gamepane > .empty { margin: 12px; }
+      .gamepane > .empty { margin: 12px; }
       /* The two buttons under an invite shown in the panel. Here rather than
          in base.html because the panel only ever appears on this page. */
       .invite-row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
       .invite-row form { margin: 0; }
-      /* Who is at the board. Quiet when they are here, and only loud enough
-         to be noticed when they are not. */
-      .presence {
-        display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-        margin: 0 0 10px; padding: 8px 10px;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
-        font-size: .88rem; font-weight: 700;
-      }
-      .presence .dot { width: 10px; height: 10px; flex: 0 0 auto; background: var(--beacon); border: 2px solid var(--navy); }
-      .presence.gone { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
-      .presence.gone .dot { background: var(--danger); }
-      .presence form { margin: 0 0 0 auto; }
-      .presence .hint { margin-left: auto; }
-      .presence button { min-height: 34px; margin: 0; padding: 0 10px; font-size: .85rem; }
-      button.claim, button.claim:hover { background: var(--danger); color: #fff; }
-      button.claim:hover { background: #8a2119; }
-
-      /* the game's title bar: orange, like every game window */
+      /* the game's title bar: orange, like every game window. It also says
+         who is at the board -- a few words on the "against" line rather
+         than a box of its own under the bar, which cost the window a row. */
       .gamehead {
-        display: flex; align-items: center; gap: 10px;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
         min-height: 52px; padding: 6px 10px;
         background: var(--orange); color: var(--navy);
         border-bottom: 2px solid var(--navy);
       }
-      .gamehead .grow { flex: 1 1 auto; min-width: 0; }
+      /* Narrow enough that Resign stays beside the title on a phone; Claim
+         and Resign together still drop under it, since they need the room. */
+      .gamehead .grow { flex: 1 1 8rem; min-width: 0; }
       .gamehead h3 { margin: 0; font: 400 24px/1 var(--px); }
-      .gamehead .vs { color: var(--navy); font-size: .85rem; font-weight: 700; }
+      .gamehead .vs {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+        color: var(--navy); font-size: .85rem; font-weight: 700;
+      }
+      /* The status: a pixel dot and a few words, in navy -- red text would
+         not read on the orange. The dot says it: filled blue at the board,
+         filled red when they have left, hollow if they never came. */
+      .gamehead .presence {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-weight: 600; white-space: nowrap;
+      }
+      .gamehead .presence[title] { cursor: help; }
+      .gamehead .presence .dot {
+        width: 9px; height: 9px; flex: none;
+        background: var(--beacon); border: 2px solid var(--navy);
+      }
+      .gamehead .presence.gone .dot { background: var(--danger); }
+      .gamehead .presence.never .dot { background: #fff; }
+      .gamehead .sr {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap;
+      }
+      /* Claim and Resign together on the right; on a narrow pane they drop
+         under the title rather than squeezing it. */
+      .gamehead-acts { display: flex; gap: 6px; margin-left: auto; }
       .gamehead form { margin: 0; }
       .gamehead button { min-height: 40px; margin: 0; padding: 0 12px; font-size: .85rem; }
+      button.claim, button.claim:hover { background: var(--danger); color: #fff; }
+      button.claim:hover { background: #8a2119; }
 
       .boardwrap {
         display: grid; grid-template-columns: minmax(0, 1fr);
