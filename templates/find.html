@@ -94,6 +94,24 @@
          row wraps instead. .newpost .ondate rather than .ondate, because
          `.newpost input` (element plus class) would outrank a bare class. */
       .newpost .ondate { width: auto; flex: 0 0 10rem; margin: 0; }
+      /* Where the meetup's pin is on the campus map: a line of its own, a
+         navy pixel pin (a meetup's colour on the map), the spot in words,
+         and the button that hands the pin to the map. */
+      .onmap {
+        flex: 1 1 100%; display: flex; align-items: center; gap: 10px; min-width: 0;
+        padding: 5px 5px 5px 10px;
+        background: var(--paper);
+        border: 2px dashed var(--line-2); border-radius: var(--r);
+        color: var(--navy); font-size: .92rem;
+      }
+      .onmap[hidden] { display: none; }
+      .onmap-pin {
+        flex: none; width: 12px; height: 12px;
+        background: var(--navy); box-shadow: 2px 2px 0 var(--orange);
+      }
+      .onmap-where { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+      .onmap-where.unset { color: var(--muted); font-weight: 400; }
+      .newpost .onmap button { flex: none; min-height: 36px; padding: 0 12px; }
       /* What stands where the composer was once a meetup is over. */
       .chat-ended {
         margin: 0; padding: 10px 12px;
@@ -317,6 +335,17 @@
                placeholder="What are you playing?" aria-label="Activity" />
         <input name="custom_location" class="custom" maxlength="120"
                placeholder="Where?" aria-label="Meetup location" />
+        {# Where its pin goes on the campus map above, in words, with the
+           button that hands the pin to the map to drag. Hidden until the
+           script below shows it: without JavaScript the point stays empty
+           and the server puts the pin on the place's landmark. #}
+        <input type="hidden" name="latitude" />
+        <input type="hidden" name="longitude" />
+        <span class="onmap" hidden>
+          <span class="onmap-pin" aria-hidden="true"></span>
+          <span class="onmap-where" aria-live="polite">Not on the map yet</span>
+          <button type="button" class="ghost onmap-move">Put it on the map</button>
+        </span>
         <input name="max_players" type="number" min="2" max="50" value="4"
              aria-label="How many players" title="How many players" />
         {# The day in words, and the time as three choices. AM/PM starts blank
@@ -475,6 +504,100 @@
         }
       }
     });
+  })();
+</script>
+<script>
+  // The meetup form's pin. Choosing a place puts it on that place's
+  // landmark; "Move pin" hands it to the campus map above to drag
+  // (BeaconMap.pick, static/community-map.js). The form only holds the
+  // point -- the meetup's flag is made by the server when it is posted.
+  (function () {
+    var POINTS = {{ place_points | tojson }};
+    var form = document.querySelector("form.newpost");
+    if (!form) { return; }
+    var line = form.querySelector(".onmap");
+    var where = form.querySelector(".onmap-where");
+    var move = form.querySelector(".onmap-move");
+    var lat = form.querySelector("input[name=latitude]");
+    var lng = form.querySelector("input[name=longitude]");
+    var act = form.querySelector(".act");
+    var loc = form.querySelector(".loc");
+    var writeIn = form.querySelector("input[name=custom_location]");
+    var point = null;    // {lat, lng, near}, or null: not on the map yet
+    var moved = false;   // put there by hand
+    var typed = false;   // the write-in place was typed, so the pin leaves it alone
+    var picking = false;
+
+    function show() {
+      lat.value = point ? point.lat.toFixed(6) : "";
+      lng.value = point ? point.lng.toFixed(6) : "";
+      where.textContent = point ? point.near : "Not on the map yet";
+      where.classList.toggle("unset", !point);
+      move.textContent = point ? "Move pin" : "Put it on the map";
+    }
+
+    // A place with a landmark puts the pin there. One without (the
+    // Harborwalk, a write-in) keeps a pin that was put somewhere by hand.
+    function fromPlace() {
+      var spot = act.value === "other" ? null : POINTS[loc.value];
+      if (spot) {
+        point = { lat: spot.lat, lng: spot.lng, near: spot.near };
+        moved = false;
+      } else if (!moved) {
+        point = null;
+      }
+      show();
+      if (picking && point && window.BeaconMap) { window.BeaconMap.pickAt(point.lat, point.lng); }
+    }
+
+    move.addEventListener("click", function () {
+      var start = point || POINTS["Campus Center"];
+      var started = window.BeaconMap && window.BeaconMap.pick({
+        lat: start.lat, lng: start.lng,
+        onMove: function (p) {
+          point = { lat: p.lat, lng: p.lng, near: p.near };
+          moved = true;
+          if (act.value === "other" && writeIn && !typed && p.near.indexOf("Near ") === 0) {
+            writeIn.value = p.near;
+          }
+          show();
+        },
+        onDone: function () {
+          picking = false;
+          form.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+      if (!started) {
+        where.textContent = "The map is still loading. Try again in a moment.";
+        return;
+      }
+      picking = true;
+      if (!point) { point = { lat: start.lat, lng: start.lng, near: start.near }; moved = true; show(); }
+      // The stage, centred, rather than the card's top: on a phone that left
+      // the bottom of the map -- where its bar and Done are -- behind the tab bar.
+      document.getElementById("mapStage").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    if (writeIn) { writeIn.addEventListener("input", function () { typed = writeIn.value !== ""; }); }
+    act.addEventListener("change", fromPlace);
+    loc.addEventListener("change", fromPlace);
+    form.addEventListener("submit", function () {
+      if (picking && window.BeaconMap) { window.BeaconMap.unpick(); }
+    });
+    // Posted: show where it landed, then start the form's pin again from
+    // its reset place. After the enhancer's reset, hence the timeout.
+    form.addEventListener("beacon:done", function (event) {
+      if (event.detail && event.detail.refused) { return; }
+      var posted = point;
+      setTimeout(function () {
+        moved = false; typed = false;
+        fromPlace();
+        if (posted && window.BeaconMap) { window.BeaconMap.focusAt(posted.lat, posted.lng); }
+      }, 0);
+    });
+
+    line.hidden = false;
+    fromPlace();
   })();
 </script>
 <script src="{{ url_for('static', filename='community-map.js') }}"></script>

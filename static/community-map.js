@@ -73,7 +73,8 @@
     friendChips: $("mapFriendChips"), friendSearch: $("mapFriendSearch"),
     friendList: $("mapFriendList"), friendMore: $("mapFriendMore"),
     clubWrap: $("mapFlagClubWrap"), club: $("mapFlagClub"),
-    error: $("mapFormError"), submit: $("mapFlagSubmit"), cancel: $("mapFlagCancel")
+    error: $("mapFormError"), submit: $("mapFlagSubmit"), cancel: $("mapFlagCancel"),
+    pickBar: $("mapPickBar"), pickDone: $("mapPickDone")
   };
   var urls = {
     flags: root.dataset.flagsUrl,
@@ -86,8 +87,9 @@
   var map, placeLayer, flagLayer, userLayer;
   var info = { flags: [], categories: {}, order: [], durations: [], places: [],
                clubs: [], friends: [], mine: 0, limit: 3 };
-  var mode = "idle";      // idle | placing | draft
+  var mode = "idle";      // idle | placing | draft | pick
   var draft = null;       // the flag being drafted or edited (see startDraft)
+  var pick = null;        // the meetup pin the form on /find is placing (see 6b)
   var selected = null;    // id of the flag shown in the card
   var dragging = false;   // a pin is being dragged: hold refreshes
   var focusId = root.dataset.focus || "";
@@ -291,6 +293,7 @@
 
     map.on("click", function (event) {
       if (mode === "idle") { return; }
+      if (mode === "pick") { movePick(event.latlng); return; }
       if (!campusContains(event.latlng)) {
         announce("Flags have to go inside the dashed campus area.", "error");
         return;
@@ -334,6 +337,7 @@
       marker.on("click", function () {
         if (mode === "placing") { startDraft(marker.getLatLng()); }
         else if (mode === "draft") { moveDraft(marker.getLatLng()); }
+        else if (mode === "pick") { movePick(marker.getLatLng()); }
       });
     });
   }
@@ -390,6 +394,13 @@
         }
         moveDraft(next);
       });
+    }
+    if (pick) {
+      var spot = L.marker([pick.lat, pick.lng], {
+        icon: flagIcon("event", { draft: true, keepIcon: true }),
+        draggable: true, title: "Your meetup. Drag to move it.", zIndexOffset: 2000
+      }).addTo(flagLayer);
+      spot.on("dragend", function () { movePick(spot.getLatLng()); });
     }
   }
 
@@ -571,8 +582,10 @@
   function setMode(next) {
     mode = next;
     root.classList.toggle("placing", mode !== "idle");
+    root.classList.toggle("picking", mode === "pick");
     el.form.hidden = mode !== "draft";
-    el.drop.parentNode.hidden = mode === "draft";
+    el.drop.parentNode.hidden = mode === "draft" || mode === "pick";
+    if (el.pickBar) { el.pickBar.hidden = mode !== "pick"; }
     el.drop.classList.toggle("cancel", mode === "placing");
     el.drop.querySelector("span").textContent = mode === "placing" ? "Cancel" : "Drop a flag";
     renderCount();
@@ -623,10 +636,49 @@
   }
 
   function cancelDraft() {
+    if (pick) { endPick(); return; }
     draft = null;
     el.error.hidden = true;
     setMode("idle");
     announce("");
+  }
+
+  // ---------- 6b. a meetup's pin, for the form on /find ----------
+  // Not a flag of its own: the meetup form owns the point, and the server
+  // makes the meetup's flag when it is posted. This only lets the person
+  // put the pin somewhere and tells the form where, in words as well.
+  function startPick(options) {
+    if (mode === "placing" || mode === "draft") { draft = null; el.error.hidden = true; }
+    selected = null;
+    pick = { lat: options.lat, lng: options.lng, onMove: options.onMove, onDone: options.onDone };
+    setMode("pick");
+    unlockMap();
+    map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), 17));
+    announce("");   // the bar along the bottom says what to do
+  }
+
+  function movePick(latlng) {
+    if (!pick) { return; }
+    if (!campusContains(latlng)) {
+      announce("Meetups have to be inside the dashed campus area.", "error");
+      renderMarkers();   // puts a dragged pin back where it was
+      return;
+    }
+    pick.lat = latlng.lat; pick.lng = latlng.lng;
+    announce("");
+    renderMarkers();
+    if (pick.onMove) {
+      pick.onMove({ lat: pick.lat, lng: pick.lng, near: nearestPlaceName(latlng) });
+    }
+  }
+
+  function endPick() {
+    if (!pick) { return; }
+    var done = pick.onDone;
+    pick = null;
+    setMode("idle");
+    announce("");
+    if (done) { done(); }
   }
 
   function option(value, text) {
@@ -925,6 +977,10 @@
     setMode("placing");
     announce("Tap the map where you want people to find you.");
   });
+  if (el.pickDone) { el.pickDone.addEventListener("click", endPick); }
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && mode === "pick") { endPick(); }
+  });
   el.form.addEventListener("submit", submitDraft);
   el.cancel.addEventListener("click", cancelDraft);
   el.visibility.addEventListener("change", audienceChanged);
@@ -977,7 +1033,35 @@
       select(id, true);
       return true;
     },
-    resize: function () { if (map) { map.invalidateSize(); } }
+    resize: function () { if (map) { map.invalidateSize(); } },
+    // The meetup form on /find: put its pin on the map and let it be moved.
+    // `onMove({lat, lng, near})` hears every move; `onDone()` hears Done.
+    pick: function (options) {
+      if (!map) { return false; }
+      startPick(options);
+      return true;
+    },
+    // Moves the pin without the person touching the map (a place was picked).
+    pickAt: function (lat, lng) {
+      if (!pick || !map) { return; }
+      pick.lat = lat; pick.lng = lng;
+      renderMarkers();
+      map.panTo([lat, lng]);
+    },
+    unpick: function () { endPick(); },
+    // After a meetup is posted: show its flag, found as your own meetup
+    // flag at the point it was posted with.
+    focusAt: function (lat, lng) {
+      return loadFlags(true).then(function () {
+        var found = null;
+        info.flags.forEach(function (f) {
+          if (f.mine && f.category === "event" &&
+              Math.abs(f.latitude - lat) < 1e-5 && Math.abs(f.longitude - lng) < 1e-5) { found = f; }
+        });
+        if (found) { select(found.id, true, true); renderMarkers(); }
+        return !!found;
+      });
+    }
   };
 
   loadLeaflet().then(function () {

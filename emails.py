@@ -349,6 +349,29 @@ def verification(name, code, minutes):
     return subject, text, html
 
 
+def verified(name, login_url):
+    """Subject, text and HTML for an account an admin verified by hand.
+
+    For the students whose code never reached them: what happened, that
+    nothing more is needed from them, and the way in. No unsubscribe footer
+    -- it is a one-off about their own account, like the code it replaces.
+    """
+    subject = "You're in: your Beacons Connect account is ready"
+    line = ("We had trouble getting a sign-up code to you, so we've verified "
+            "your account ourselves.")
+    text = (
+        f"Hi {_first(name)},\n\n"
+        f"{line} You can sign in now with the email and password you chose.\n\n"
+        f"Sign in: {login_url}\n\n"
+        "Beacons Connect - Connect on Campus @ UMass Boston\n"
+    )
+    rows = (_hello(name, escape(line))
+            + _box("You can sign in now with the email and password you chose.")
+            + _button("Sign in", login_url))
+    return subject, text, _frame(subject, "Your account is verified. Sign in "
+                                          "whenever you're ready.", rows)
+
+
 # What each instant email says. {actor} is the other person's name; {what}
 # is the game for a challenge and the plan for a meetup.
 ALERTS = {

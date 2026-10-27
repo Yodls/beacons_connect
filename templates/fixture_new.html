@@ -1,25 +1,26 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}Post a campus-wide meetup{% endblock %}
+{% block title %}{{ "Change a campus-wide meetup" if editing else "Post campus-wide meetups" }}{% endblock %}
 
 {#
-  The fixture form, with its own small map picker.
+  Campus-wide meetups, one or many at a time, each up straight away or at a
+  time of its own (app.fixture_new). Each row is _fixrow.html; the same file
+  is the <template> "Add another row" copies.
 
-  The picker is deliberately NOT community-map.js. That file is one large
+  One map for the whole page, moved under whichever row's "Set pin" was
+  pressed. It is deliberately NOT community-map.js: that file is one large
   IIFE wired to the ids in _community_map.html and built around the flag
-  flow -- draft state, audiences, durations, a limit, drag-to-move. All this
-  page needs is one marker inside the campus box, and borrowing the other
-  script would mean either loading its whole flow or picking it apart.
+  flow, and all this page needs is one marker inside the campus box. Leaflet
+  comes from the same CDN at the same version the map uses, so a browser
+  that has been to /find has it cached -- and it is only loaded once a pin
+  is set.
 
-  Leaflet is loaded from the same CDN and pinned to the same version the map
-  uses, so a browser that has already been to /find has it cached.
-
-  Without JavaScript the two coordinate boxes are still there and still
-  posted, so the form works -- it just asks for numbers instead of a click.
+  Without JavaScript the page is one plain row, its coordinates typed into
+  two number boxes, and it posts exactly what the single form always did.
 #}
 
 {% block appstyle %}
-      .fixform { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+      .fixform { display: flex; flex-direction: column; gap: 14px; }
       .fixform label { display: block; color: var(--navy); font-size: .88rem; font-weight: 700; }
       .fixform input[type="text"], .fixform input[type="date"],
       .fixform input[type="number"], .fixform textarea, .fixform select {
@@ -28,169 +29,297 @@
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         font: 400 1rem/1.35 var(--sans);
       }
-      .fixform input[type="text"], .fixform textarea { width: 100%; }
+      .fixform input[type="text"], .fixform input[type="date"],
+      .fixform textarea { width: 100%; }
       .fixform textarea { resize: vertical; }
-      .clock { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .clock { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
       /* The shared stylesheet draws a select full width, which turns three
          of them into three stacked rows instead of a clock. */
       .clock select { flex: 1 1 4rem; width: auto; min-width: 0; }
+      .hint { margin: 0; color: var(--muted); font-size: .84rem; font-weight: 400; }
+
+      /* One meetup: a window of its own, numbered, with its problem on it. */
+      .fixrow {
+        min-width: 0; margin: 0; padding: 0 14px 14px;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
+      }
+      .fixrow.bad { border-color: var(--danger); box-shadow: 4px 4px 0 var(--danger); }
+      .fixrow-head {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        margin: 0 -14px 12px; padding: 0 10px; box-sizing: content-box;
+        min-height: 40px;
+        background: var(--place); color: var(--place-ink);
+        border-bottom: 2px solid var(--navy); border-radius: 6px 6px 0 0;
+      }
+      .fixrow-num { flex: 1; font: 400 22px/1 var(--px); }
+      .fixrow-x { min-height: 32px; padding: 0 10px; margin: 0; }
+      .fixrow-problem {
+        margin: 0 0 12px; padding: 8px 10px;
+        background: #fff0f0; color: var(--danger);
+        border-left: 4px solid var(--danger); border-radius: var(--r-sm);
+        font-weight: 700;
+      }
+      .fixgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+      .fixgrid .wide { grid-column: 1 / -1; }
+      .fixgrid label > input, .fixgrid label > .clock, .fixgrid label > textarea { margin-top: 4px; }
+      .fixmore { margin-top: 12px; }
+      .fixmore > summary { cursor: pointer; color: var(--navy); font-weight: 700; font-size: .9rem; }
+      .fixmore > .fixgrid { margin-top: 10px; }
+
+      /* The pin: a navy pixel square (a fixture's colour on the map), where
+         it is in words, and the button that brings the map under the row. */
+      .fixpin {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+        margin-top: 12px; padding: 6px 6px 6px 10px;
+        background: var(--paper);
+        border: 2px dashed var(--line-2); border-radius: var(--r);
+      }
+      .pin-dot { flex: none; width: 12px; height: 12px; background: var(--navy);
+                 box-shadow: 2px 2px 0 var(--orange); }
+      .pin-where { flex: 1 1 10rem; min-width: 0; color: var(--navy); font-weight: 700; }
+      .pin-where.unset { color: var(--muted); font-weight: 400; }
+      .fixpin-set { flex: none; min-height: 36px; padding: 0 12px; margin: 0; }
+      .rowpoint { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+      .rowpoint input { width: 10rem; }
+      .fixform.js .rowpoint { display: none; }
+      /* Buttons only the script can answer, hidden when there is no script. */
+      .fixform:not(.js) .fixpin-set, .fixform:not(.js) .fixrow-x { display: none; }
       .pickmap {
         /* Its own stacking context, for the same reason as the campus
            map's stage: Leaflet layers its tiles at z-index 200-400 and its
            zoom buttons at 1000, and with nothing to contain them the whole
            map painted over the top bar, the account menu and the tab bar. */
         isolation: isolate;
-        height: 300px; margin-top: 6px;
+        height: 300px; margin-top: 10px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         background: var(--paper);
       }
-      .atpoint { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-      .atpoint input { width: 10rem; }
-      .hint { margin: 0; color: var(--muted); font-size: .86rem; }
+      .pickmap[hidden] { display: none; }
+      .fixtail { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+      .fixtail button { margin: 0; }
+      @media (max-width: 640px) {
+        .fixgrid { grid-template-columns: 1fr; }
+      }
       /* The main map's rule, for this picker: Leaflet's zoom buttons are
          30px, which is a miss on a phone. */
       @media (max-width: 560px) {
         .pickmap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
+        .fixform input, .fixform select, .fixform textarea { font-size: 16px; }
       }
 {% endblock %}
 
 {% block main %}
   <div class="pagehead">
-    <h1>Post a campus-wide meetup</h1>
+    <h1>{{ "Change a campus-wide meetup" if editing else "Post campus-wide meetups" }}</h1>
     <p class="lede">
-      Everybody on campus is told, the community room carries it, and a pin
-      goes on the map until the end of that day.
+      One or many. Each goes up straight away, or at the time you give it --
+      then everybody on campus is told, the community room carries it, and a
+      pin goes on the map until the end of its day.
     </p>
   </div>
 
-  <section class="win sec-place">
-    <div class="bar">{{ ui.icon("meet") }}<span class="bar-title">The meetup</span><span class="grip"></span></div>
-    <form class="fixform" method="post" action="{{ url_for('fixture_new') }}">
-      <div>
-        <label for="title">Title</label>
-        <input id="title" name="title" type="text" maxlength="{{ title_max }}"
-               required placeholder="Home Game" autocomplete="off" />
-        <p class="hint">What people will see first. Call it whatever you like.</p>
-      </div>
-      {# Both optional: a carnival has no opponent, and a careers fair has
-         no sport. They are the detail line under the title when they are
-         given, and simply absent when they are not. #}
-      <div>
-        <label for="sport">Sport (optional)</label>
-        <input id="sport" name="sport" type="text" maxlength="60"
-               placeholder="Men's Basketball" autocomplete="off" />
-      </div>
-      <div>
-        <label for="opponent">Playing (optional)</label>
-        <input id="opponent" name="opponent" type="text" maxlength="80"
-               placeholder="Salem State" autocomplete="off" />
-      </div>
-      <div>
-        <label for="when_on">Date</label>
-        <input id="when_on" name="when_on" type="date" required />
-      </div>
-      <div>
-        <label for="when_hour">Starts at</label>
-        <span class="clock">
-          <select id="when_hour" name="when_hour" required>
-            {% for h in hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-          </select>
-          <select name="when_minute">
-            {% for m in minutes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-          </select>
-          <select name="when_ampm" required>
-            <option value="">--</option>
-            {% for a in meridiem %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
-          </select>
-          <span class="hint">Boston time.</span>
-        </span>
-      </div>
-      <div>
-        <label for="venue">Venue</label>
-        <input id="venue" name="venue" type="text" maxlength="120" required
-               placeholder="Clark Athletic Center" autocomplete="off" />
-      </div>
-      <div>
-        <label for="note">Anything else (optional)</label>
-        <textarea id="note" name="note" rows="2" maxlength="300"
-                  placeholder="Doors at 6:30. Free for students with an ID."></textarea>
-      </div>
+  <form class="fixform" id="fixrows" method="post"
+        action="{{ url_for('fixture_edit', fixture_id=editing) if editing else url_for('fixture_new') }}"
+        data-max="{{ 1 if editing else rows_max }}"
+        data-places="{{ places | tojson | forceescape }}">
+    {% for row in rows %}
+      {% with problem = problems[loop.index0] %}{% include "_fixrow.html" %}{% endwith %}
+    {% endfor %}
+    <template id="fixrow-template">
+      {% with row = {}, problem = none %}{% include "_fixrow.html" %}{% endwith %}
+    </template>
+    <div class="fixtail">
+      {% if not editing %}
+        <button type="button" class="ghost" id="addrow" hidden>+ Add another meetup</button>
+      {% endif %}
+      <button type="submit" id="fixsubmit">{{ "Save changes" if editing else "Post it and tell everyone" }}</button>
+    </div>
+  </form>
 
-      <div>
-        <label>Where on campus</label>
-        <p class="hint">Click the map to put the pin where it is happening.</p>
-        <div class="pickmap" id="pickmap"
-             data-south="{{ bounds.south }}" data-west="{{ bounds.west }}"
-             data-north="{{ bounds.north }}" data-east="{{ bounds.east }}"></div>
-        <p class="atpoint">
-          <label for="latitude">Latitude</label>
-          <input id="latitude" name="latitude" type="number" step="0.000001"
-                 value="{{ places['clark-athletic-center'].latitude }}" required />
-          <label for="longitude">Longitude</label>
-          <input id="longitude" name="longitude" type="number" step="0.000001"
-                 value="{{ places['clark-athletic-center'].longitude }}" required />
-        </p>
-      </div>
-
-      <div><button type="submit">Post it and tell everyone</button></div>
-    </form>
-  </section>
+  {# The one map, parked here until a row asks for it. #}
+  <div class="pickmap" id="pickmap" hidden
+       data-south="{{ bounds.south }}" data-west="{{ bounds.west }}"
+       data-north="{{ bounds.north }}" data-east="{{ bounds.east }}"></div>
 
   <p class="nav"><a href="{{ url_for('fixtures') }}">&larr; Back to the list</a></p>
 {% endblock %}
 
 {% block script %}
 <script>
-  // One marker inside the campus box, writing its position into the two
-  // number fields the form posts. Nothing else: no draft, no audience, no
-  // limit. If Leaflet does not load, the fields keep working by hand.
   (function () {
+    var form = document.getElementById("fixrows");
     var stage = document.getElementById("pickmap");
-    var lat = document.getElementById("latitude");
-    var lng = document.getElementById("longitude");
-    if (!stage || !lat || !lng) { return; }
-
+    var tpl = document.getElementById("fixrow-template");
+    var add = document.getElementById("addrow");
+    var submit = document.getElementById("fixsubmit");
+    if (!form || !stage || !tpl) { return; }
+    form.classList.add("js");
+    var MAX = parseInt(form.dataset.max, 10) || 1;
+    var PLACES = JSON.parse(form.dataset.places || "{}");
+    var editing = !add;
     var bounds = [
       [parseFloat(stage.dataset.south), parseFloat(stage.dataset.west)],
       [parseFloat(stage.dataset.north), parseFloat(stage.dataset.east)]
     ];
+    var map = null, pin = null, active = null, loading = null;
 
-    function load(tag, attrs, done) {
-      var el = document.createElement(tag);
-      Object.keys(attrs).forEach(function (k) { el[k] = attrs[k]; });
-      el.onload = done;
-      document.head.appendChild(el);
+    function rows() { return Array.prototype.slice.call(form.querySelectorAll(":scope > .fixrow")); }
+    function field(row, name) { return row.querySelector("[name='" + name + "']"); }
+
+    // The numbers, the remove buttons and what the submit button says.
+    function renumber() {
+      var all = rows();
+      all.forEach(function (row, i) {
+        row.querySelector(".fixrow-num").textContent = all.length > 1 ? "Meetup " + (i + 1) : "The meetup";
+        row.querySelector(".fixrow-x").hidden = all.length < 2;
+      });
+      if (add) {
+        add.hidden = all.length >= MAX;
+      }
+      if (!editing) {
+        var later = all.some(function (row) { return field(row, "appear_on").value; });
+        submit.textContent = all.length > 1 ? "Save " + all.length + " meetups"
+          : (later ? "Schedule it" : "Post it and tell everyone");
+      }
     }
 
-    load("link", {
-      rel: "stylesheet",
-      href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    }, null);
-    load("script", {
-      src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    }, function () {
-      if (!window.L) { return; }
-      var start = [parseFloat(lat.value), parseFloat(lng.value)];
-      var map = L.map(stage, {
-        minZoom: 15, maxZoom: 19,
-        maxBounds: bounds, maxBoundsViscosity: 0.85
-      }).setView(start, 17);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap", maxZoom: 19
-      }).addTo(map);
-      L.rectangle(bounds, {
-        color: "#005a8b", weight: 2, opacity: 0.6, dashArray: "6 6",
-        fillColor: "#005a8b", fillOpacity: 0.04, interactive: false
-      }).addTo(map);
+    // "Near Healey Library" for a point within 200m of a landmark, the way
+    // the campus map words it.
+    function nearest(lat, lng) {
+      var best = null;
+      Object.keys(PLACES).forEach(function (key) {
+        var p = PLACES[key];
+        var dy = (p.latitude - lat) * 111320;
+        var dx = (p.longitude - lng) * 111320 * Math.cos(lat * Math.PI / 180);
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (!best || d < best.d) { best = { name: p.name, d: d }; }
+      });
+      return best && best.d <= 200 ? "Pin: near " + best.name : "Pin: on campus";
+    }
 
-      var pin = L.marker(start, { draggable: true }).addTo(map);
-      function put(point) {
-        lat.value = point.lat.toFixed(6);
-        lng.value = point.lng.toFixed(6);
+    function showPin(row) {
+      var lat = parseFloat(field(row, "latitude").value);
+      var lng = parseFloat(field(row, "longitude").value);
+      var where = row.querySelector(".pin-where");
+      var set = !isNaN(lat) && !isNaN(lng);
+      where.textContent = set ? nearest(lat, lng) : "No pin yet";
+      where.classList.toggle("unset", !set);
+      row.querySelector(".fixpin-set").textContent = row === active ? "Done" : (set ? "Move pin" : "Set pin");
+    }
+
+    function put(latlng) {
+      if (!active) { return; }
+      field(active, "latitude").value = latlng.lat.toFixed(6);
+      field(active, "longitude").value = latlng.lng.toFixed(6);
+      showPin(active);
+    }
+
+    function leaflet() {
+      if (loading) { return loading; }
+      loading = new Promise(function (resolve, reject) {
+        if (window.L) { resolve(); return; }
+        var css = document.createElement("link");
+        css.rel = "stylesheet"; css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(css);
+        var js = document.createElement("script");
+        js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        js.onload = resolve; js.onerror = reject;
+        document.head.appendChild(js);
+      });
+      return loading;
+    }
+
+    // The map comes to the row, rather than a map per row: twenty Leaflet
+    // maps on one page is twenty sets of tiles.
+    function openPin(row) {
+      var previous = active;
+      active = row;
+      if (previous && previous !== row) { showPin(previous); }
+      row.querySelector(".pin-slot").appendChild(stage);
+      stage.hidden = false;
+      showPin(row);
+      leaflet().then(function () {
+        var lat = parseFloat(field(row, "latitude").value);
+        var lng = parseFloat(field(row, "longitude").value);
+        var start = !isNaN(lat) && !isNaN(lng) ? [lat, lng]
+          : [PLACES["campus-center"].latitude, PLACES["campus-center"].longitude];
+        if (!map) {
+          map = L.map(stage, { minZoom: 15, maxZoom: 19, maxBounds: bounds,
+                               maxBoundsViscosity: 0.85 }).setView(start, 17);
+          L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      { attribution: "&copy; OpenStreetMap", maxZoom: 19 }).addTo(map);
+          L.rectangle(bounds, { color: "#005a8b", weight: 2, opacity: 0.6, dashArray: "6 6",
+                                fillColor: "#005a8b", fillOpacity: 0.04,
+                                interactive: false }).addTo(map);
+          pin = L.marker(start, { draggable: true }).addTo(map);
+          map.on("click", function (e) { pin.setLatLng(e.latlng); put(e.latlng); });
+          pin.on("dragend", function () { put(pin.getLatLng()); });
+        } else {
+          map.invalidateSize();
+          map.setView(start, Math.max(map.getZoom(), 17));
+          pin.setLatLng(start);
+        }
+        // A row with no pin yet gets the starting point, so "Set pin" then
+        // "Done" is a real choice rather than an empty field.
+        if (isNaN(lat) || isNaN(lng)) { put(L.latLng(start[0], start[1])); }
+        stage.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }).catch(function () {
+        // No map: the coordinate boxes are the way in.
+        form.classList.remove("js");
+        stage.hidden = true;
+      });
+    }
+
+    function closePin() {
+      var row = active;
+      active = null;
+      stage.hidden = true;
+      form.parentNode.insertBefore(stage, form.nextSibling);
+      if (row) { showPin(row); }
+    }
+
+    form.addEventListener("click", function (e) {
+      var set = e.target.closest(".fixpin-set");
+      if (set) {
+        var row = set.closest(".fixrow");
+        if (active === row) { closePin(); } else { openPin(row); }
+        return;
       }
-      map.on("click", function (e) { pin.setLatLng(e.latlng); put(e.latlng); });
-      pin.on("dragend", function () { put(pin.getLatLng()); });
+      var x = e.target.closest(".fixrow-x");
+      if (x && rows().length > 1) {
+        var gone = x.closest(".fixrow");
+        if (active === gone) { closePin(); }
+        gone.remove();
+        renumber();
+      }
     });
+    form.addEventListener("input", renumber);
+    form.addEventListener("change", renumber);
+
+    if (add) {
+      add.addEventListener("click", function () {
+        var all = rows();
+        if (all.length >= MAX) { return; }
+        var last = all[all.length - 1];
+        var row = tpl.content.firstElementChild.cloneNode(true);
+        // Batches tend to share a day and a time: start from the last row's.
+        ["when_on", "when_hour", "when_minute", "when_ampm",
+         "appear_on", "appear_hour", "appear_minute", "appear_ampm"].forEach(function (name) {
+          field(row, name).value = field(last, name).value;
+        });
+        form.insertBefore(row, form.querySelector(".fixtail"));
+        renumber();
+        showPin(row);
+        field(row, "title").focus();
+      });
+    }
+
+    rows().forEach(showPin);
+    renumber();
+    var bad = form.querySelector(".fixrow.bad");
+    if (bad) { bad.scrollIntoView({ block: "center" }); }
   })();
 </script>
 {% endblock %}

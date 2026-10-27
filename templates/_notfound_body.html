@@ -1,0 +1,9 @@
+{#- What both not-found pages say. Home is the index for everybody: signed
+    out, it sends them on to sign in. -#}
+{%- import "_ui.html" as ui -%}
+<div class="lost-body">
+  <p class="lost-code" aria-hidden="true">404</p>
+  <p class="lost-say">This page doesn't exist.</p>
+  <p class="lost-why">The link may be old, or the address may have a typo.</p>
+  <a class="btn lost-home" href="{{ url_for('index') }}">{{ ui.icon("home") }}<span>Back to home</span></a>
+</div>

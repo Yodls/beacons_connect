@@ -1,0 +1,101 @@
+{#-
+  One campus-wide meetup on the entry page (fixture_new.html): drawn for each
+  row the server hands back, and once more inside a <template> for "Add
+  another row" -- one source, so a row added on the page cannot differ from
+  one drawn by the server. `row` is a dict of the strings typed (empty for a
+  new row); `problem` is what is wrong with it, or none.
+
+  Every field posts under the name the single form always used; app.py reads
+  them as lists, one entry per row. The coordinate boxes are there for a
+  browser with no JavaScript; with it, the script hides them behind the
+  "Set pin" line and the shared map.
+-#}
+<fieldset class="fixrow{% if problem %} bad{% endif %}">
+  <legend class="fixrow-head">
+    <span class="fixrow-num">Meetup</span>
+    <button type="button" class="ghost fixrow-x" aria-label="Remove this meetup">&times;</button>
+  </legend>
+  {% if problem %}<p class="fixrow-problem" role="alert">{{ problem }}</p>{% endif %}
+
+  <div class="fixgrid">
+    <label class="wide">Title
+      <input name="title" type="text" maxlength="{{ title_max }}" value="{{ row.title }}"
+             required placeholder="Home Game" autocomplete="off" />
+    </label>
+    <label>Date
+      <input name="when_on" type="date" value="{{ row.when_on }}" required />
+    </label>
+    <label>Starts at <span class="hint">(Boston time)</span>
+      <span class="clock">
+        <select name="when_hour" required aria-label="Hour">
+          <option value="">Hour</option>
+          {% for h in hours %}<option value="{{ h }}"{% if row.when_hour == h %} selected{% endif %}>{{ h }}</option>{% endfor %}
+        </select>
+        <select name="when_minute" aria-label="Minutes">
+          {% for m in minutes %}<option value="{{ m }}"{% if row.when_minute == m %} selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <select name="when_ampm" required aria-label="AM or PM">
+          <option value="">--</option>
+          {% for a in meridiem %}<option value="{{ a }}"{% if row.when_ampm == a %} selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+      </span>
+    </label>
+    <label class="wide">Venue
+      <input name="venue" type="text" maxlength="120" value="{{ row.venue }}" required
+             placeholder="Clark Athletic Center" autocomplete="off" />
+    </label>
+    {# When it appears: empty means the moment it is saved. #}
+    <label>Appears on <span class="hint">(empty: now)</span>
+      <input name="appear_on" type="date" value="{{ row.appear_on }}" />
+    </label>
+    <label>Appears at
+      <span class="clock">
+        <select name="appear_hour" aria-label="Hour it appears">
+          <option value="">Hour</option>
+          {% for h in hours %}<option value="{{ h }}"{% if row.appear_hour == h %} selected{% endif %}>{{ h }}</option>{% endfor %}
+        </select>
+        <select name="appear_minute" aria-label="Minutes it appears">
+          {% for m in minutes %}<option value="{{ m }}"{% if row.appear_minute == m %} selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <select name="appear_ampm" aria-label="AM or PM it appears">
+          <option value="">--</option>
+          {% for a in meridiem %}<option value="{{ a }}"{% if row.appear_ampm == a %} selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+      </span>
+    </label>
+  </div>
+
+  {# Both optional: a carnival has no opponent, and a careers fair has no
+     sport. Open already when any of them was filled in. #}
+  <details class="fixmore"{% if row.sport or row.opponent or row.note %} open{% endif %}>
+    <summary>Sport, opponent and a note</summary>
+    <div class="fixgrid">
+      <label>Sport (optional)
+        <input name="sport" type="text" maxlength="60" value="{{ row.sport }}"
+               placeholder="Men's Basketball" autocomplete="off" />
+      </label>
+      <label>Playing (optional)
+        <input name="opponent" type="text" maxlength="80" value="{{ row.opponent }}"
+               placeholder="Salem State" autocomplete="off" />
+      </label>
+      <label class="wide">Anything else (optional)
+        <textarea name="note" rows="2" maxlength="300"
+                  placeholder="Doors at 6:30. Free for students with an ID.">{{ row.note }}</textarea>
+      </label>
+    </div>
+  </details>
+
+  <div class="fixpin">
+    <span class="pin-dot" aria-hidden="true"></span>
+    <span class="pin-where{% if not row.latitude %} unset{% endif %}" aria-live="polite">
+      {{- "Pin set" if row.latitude else "No pin yet" -}}
+    </span>
+    <button type="button" class="ghost fixpin-set">Set pin</button>
+    <span class="rowpoint">
+      <label>Latitude <input name="latitude" type="number" step="0.000001" value="{{ row.latitude }}" /></label>
+      <label>Longitude <input name="longitude" type="number" step="0.000001" value="{{ row.longitude }}" /></label>
+    </span>
+  </div>
+  {# Where the shared map goes while this row's pin is being set. #}
+  <div class="pin-slot"></div>
+</fieldset>

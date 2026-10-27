@@ -62,10 +62,6 @@
       }
       .who-row:first-child { border-top: 0; }
       .acctnote { margin: 0; padding: 10px 14px 0; color: var(--muted); font-size: .88rem; }
-      .testmail { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 14px 14px 0; }
-      .testmail label { flex: 1 1 14rem; margin: 0; }
-      .testmail button { margin: 0; }
-      #email .acctnote { padding-bottom: 14px; }
       /* Long addresses wrap rather than push the chips off a phone. */
       .acct-row small { display: block; overflow-wrap: anywhere; }
       .who-row .grow { flex: 1 1 auto; min-width: 0; }
@@ -77,52 +73,57 @@
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         font-size: .82rem; font-weight: 700;
       }
-      .dbwhere, .dbnote { margin: 0; padding: 12px 14px 0; }
+      /* ---------- Site tools ---------- */
+      .dbwhere { margin: 0; padding: 12px 14px 0; line-height: 1.45; }
       .dbwhere b { color: var(--navy); }
-      .dbnote { color: var(--muted); font-size: .88rem; }
-      .dbrows { padding: 10px 0 0; }
-      .dbrow button { min-height: 40px; }
+      .dbwhere .real { color: var(--danger); font-weight: 700; }
+      .dbgroup {
+        margin: 18px 14px 0; padding-bottom: 6px;
+        color: var(--navy); font: 400 21px/1 var(--px);
+        border-bottom: 2px solid var(--navy);
+      }
+      .dbrows { padding: 0; }
       .dbrow {
         display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-        padding: 10px 14px;
+        padding: 12px 14px;
         border-top: 2px dashed var(--line);
       }
-      .dbrow .grow { flex: 1 1 16rem; min-width: 0; }
+      .dbrows > .dbrow:first-child { border-top: 0; }
+      .dbrow .grow { flex: 1 1 18rem; min-width: 0; }
       .dbrow b { display: block; color: var(--navy); }
-      .dbrow small { color: var(--muted); }
-      .dbrow input.dbarg {
-        flex: 0 1 13rem; padding: 7px 9px;
+      .dbrow small { display: block; margin-top: 2px; color: var(--muted); line-height: 1.45;
+                     overflow-wrap: anywhere; }
+      .dbrow .dbarg {
+        flex: 1 1 12rem; width: auto; min-width: 0; margin: 0; padding: 8px 10px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         font: 400 1rem/1.3 var(--sans);
       }
-      .dblive {
-        display: inline-flex; align-items: center; gap: 5px;
-        font-size: .85rem; font-weight: 700; color: var(--navy);
-      }
-      .dbout {
-        margin: 12px 14px; padding: 10px 12px;
-        max-height: 22rem; overflow: auto;
-        background: var(--paper); color: var(--navy);
+      .dbrow button { flex: none; min-height: 40px; margin: 0; }
+      /* A tool that deletes, after its first tap: asking, in red. */
+      .dbrow button.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
+      .dbrow.done b { color: var(--muted); }
+      .dbempty { margin: 0; padding: 12px 14px; color: var(--muted); }
+      .dbresult {
+        margin: 16px 14px 14px; padding: 10px 12px;
+        background: var(--paper);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      .dbresult.ok { border-color: var(--beacon); }
+      .dbresult.bad { border-color: var(--danger); }
+      .dbsummary { margin: 0; color: var(--navy); font-weight: 700; white-space: pre-line; }
+      .dbresult.bad .dbsummary { color: var(--danger); }
+      .dbdetails { margin-top: 8px; }
+      .dbdetails > summary { cursor: pointer; color: var(--navy); font-size: .9rem; }
+      .dbout {
+        margin: 8px 0 0; padding: 10px 12px;
+        max-height: 22rem; overflow: auto;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
         font: 400 .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
         white-space: pre-wrap; word-break: break-word;
       }
-      .dbapply {
-        margin: 0 14px 14px; padding: 12px;
-        background: #fff;
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-      }
-      .dbapply p { margin: 0 0 8px; }
-      .dbapply b { color: var(--navy); }
-      .dbapply input.dbconfirm {
-        width: 100%; max-width: 18rem; padding: 8px 10px;
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 1rem/1.35 var(--sans);
-      }
-      .dbsure[hidden] { display: none; }
-      .dbsure {
-        display: block; margin: 8px 0;
-        font-size: .88rem; font-weight: 700; color: var(--navy);
+      @media (max-width: 560px) {
+        .dbrow .dbarg { font-size: 16px; }
       }
 
       .findwho { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; }
@@ -196,7 +197,7 @@
            they do. There is no hide-this-content mechanism in the app. #}
         <p class="done">Closing a report records that you looked at it. To
           act, use the tools themselves &mdash; a chat owner can remove a
-          member, and an account can be deleted from the Database section.</p>
+          member, and an account can be deleted from Site tools below.</p>
       {% endif %}
     </div>
   </section>
@@ -332,8 +333,8 @@
      anything more precise would not be. #}
   <section class="win sec-friend">
     <div class="bar">{{ ui.icon("people") }}<span class="bar-title">All accounts</span><span class="count">{{ accounts | length }}</span><span class="grip"></span></div>
-    <p class="acctnote">Newest first. The site doesn't record sign-up dates,
-      so accounts are ordered, not dated.</p>
+    <p class="acctnote">Newest first. Sign-up dates are only recorded for
+      accounts made from now on, so the list is ordered, not dated.</p>
     <div class="grid">
       {% for person in accounts %}
         <div class="who-row acct-row">
@@ -352,84 +353,105 @@
     </div>
   </section>
 
-  {# A sample of any email the site sends, to any address, sent there and
-     then: the way to check the mail server works, and to see what people
-     get. The samples are made up -- nobody's real notifications go out. #}
-  <section class="win sec-chat" id="email">
-    <div class="bar">{{ ui.icon("talk") }}<span class="bar-title">Email</span><span class="grip"></span></div>
-    <form class="testmail" method="post" action="{{ url_for('admin_test_email') }}">
-      <label>Send to
-        <input type="email" name="email" required maxlength="255"
-               value="{{ current_user.email }}" autocomplete="email" />
-      </label>
-      <label>Which email
-        <select name="which">
-          {% for key, label in test_emails.items() %}
-            <option value="{{ key }}">{{ label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <button type="submit">Send a test email</button>
-    </form>
-    <p class="acctnote">Sent straight away, with "[Test]" in the subject. If
-      the mail server refuses it, its own error is shown here.
-      {% if not site_url_set %}<b>SITE_URL is not set</b>, so links in
-      emails use the address this page was opened at.{% endif %}</p>
-  </section>
-
-  <section class="win sec-place">
-    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Database</span><span class="grip"></span></div>
+  {# Site tools: everything an admin runs against the site itself, on the
+     database this site is running on. One click runs a tool; the ones that
+     delete ask for a second tap. One result box under them all. #}
+  <section class="win sec-place" id="tools">
+    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Site tools</span><span class="grip"></span></div>
     {% if db_why %}
       <div class="empty"><b>No database configured.</b> {{ db_why }}</div>
     {% else %}
       <p class="dbwhere">
-        This app is on <b>{{ db_here }}</b> at {{ db_host }}.
-        Live is <b>{{ db_live }}</b>{% if db_live_host != db_host %} at {{ db_live_host }}{% endif %}.
+        These act on <b>{{ db_here }}</b>, the database this site is running
+        on{% if db_dev %} (a development copy){% else %} &mdash;
+        <span class="real">the real site</span>{% endif %}. Each one runs as
+        soon as you press it; the ones that delete something ask you to press
+        twice.
       </p>
-      {# Dry run first, always. Every Run shows what would happen and
-         leaves an Apply button underneath -- the existing discipline of
-         these commands made visible rather than a new one. #}
-      <p class="dbnote">
-        Every command runs as a dry run first: it does the work and throws
-        the transaction away, so you see real numbers before anything is
-        kept. Applying asks you to type the database name.
-      </p>
+
+      {# Students whose code never reached them. Verifying one does what a
+         right code would, and emails them to say so. #}
+      <h3 class="dbgroup">Waiting for verification</h3>
+      <div class="dbrows waitlist">
+        {% if waiting_signups %}
+          <div class="dbrow">
+            <div class="grow">
+              <b>Verify everyone waiting</b>
+              <small>Marks all {{ waiting_signups | length }} account{{ "" if waiting_signups | length == 1 else "s" }}
+                below as verified, and emails each person to say they can
+                sign in now.</small>
+            </div>
+            <button type="button" class="dbverifyall"
+                    data-url="{{ url_for('admin_verify_all') }}">Verify all</button>
+          </div>
+          {% for person in waiting_signups %}
+            <div class="dbrow" data-user="{{ person.id }}">
+              <div class="grow">
+                <b>{{ person.name }}</b>
+                <small>{{ person.email }} &middot;
+                  {% if person.created_at %}signed up {{ person.created_at.strftime("%b %d") }}{% else %}signed up a while ago{% endif %}</small>
+              </div>
+              <button type="button" class="ghost dbverify"
+                      data-url="{{ url_for('admin_verify', user_id=person.id) }}">Verify</button>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="dbempty">Nobody is waiting. Anyone stuck at the sign-up
+            code step shows up here.</p>
+        {% endif %}
+      </div>
+
+      <h3 class="dbgroup">Database</h3>
       <div class="dbrows">
         {% for cmd in db_commands %}
           <div class="dbrow" data-command="{{ cmd.id }}"
-               data-writes="{{ 'yes' if cmd.writes else 'no' }}"
-               data-live="{{ 'yes' if cmd.live else 'no' }}"
-               data-needs="{{ cmd.needs | default('') }}">
+               data-danger="{{ 'yes' if cmd.danger else 'no' }}">
             <div class="grow">
               <b>{{ cmd.label }}</b>
               <small>{{ cmd.note }}</small>
             </div>
             {% if cmd.needs == "email" %}
               <input class="dbarg" name="email" type="email" maxlength="120"
-                     placeholder="email" aria-label="Which account" />
+                     placeholder="their@umb.edu" aria-label="Which account" />
             {% endif %}
-            {% if cmd.live %}
-              <label class="dblive">
-                <input type="checkbox" class="dbtarget" /> live
-              </label>
-            {% endif %}
-            <button type="button" class="dbgo{{ ' ghost' if not cmd.writes }}">
-              {{ "Dry run" if cmd.writes else "Run" }}
-            </button>
+            <button type="button" class="dbgo{{ '' if cmd.danger else ' ghost' }}">Run</button>
           </div>
         {% endfor %}
       </div>
-      <pre class="dbout" aria-live="polite">Nothing has been run yet.</pre>
-      <div class="dbapply" hidden>
-        <p>
-          To keep this, type <b class="dbname">{{ db_here }}</b> exactly:
-        </p>
-        <input class="dbconfirm" autocomplete="off" aria-label="Confirm the database name" />
-        <label class="dbsure" hidden>
-          <input type="checkbox" class="dbsurebox" />
-          yes, against live
-        </label>
-        <button type="button" class="dbkeep">Apply it</button>
+
+      <h3 class="dbgroup">Email</h3>
+      <div class="dbrows">
+        {# data-full: the page-swapping script leaves this form to the one
+           below, which shows the mail server's answer in the result box. #}
+        <form class="dbrow testmail" data-full method="post"
+              action="{{ url_for('admin_test_email') }}">
+          <div class="grow">
+            <b>Send a test email</b>
+            <small>Sends a sample of any email the site sends to the address
+              you enter, so you can check that mail works and see what people
+              receive. It has "[Test]" in the subject, and if the mail server
+              refuses it, its own reason is shown below.{% if not site_url_set %}
+              <b>SITE_URL is not set</b>, so links in emails use the address
+              this page was opened at.{% endif %}</small>
+          </div>
+          <input class="dbarg" type="email" name="email" required maxlength="255"
+                 value="{{ current_user.email }}" autocomplete="email"
+                 aria-label="Send to" />
+          <select class="dbarg" name="which" aria-label="Which email">
+            {% for key, label in test_emails.items() %}
+              <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="ghost">Send</button>
+        </form>
+      </div>
+
+      <div class="dbresult" aria-live="polite">
+        <p class="dbsummary">Nothing has been run yet.</p>
+        <details class="dbdetails" hidden>
+          <summary>Details</summary>
+          <pre class="dbout"></pre>
+        </details>
       </div>
     {% endif %}
   </section>
@@ -437,117 +459,144 @@
   <p class="nav"><a href="{{ url_for('clubs') }}">&larr; Back to the hubs</a></p>
 
 <script>
-/* The Database section.
+/* Site tools.
  *
- * Runs one command at a time against /admin/db/run and polls
- * /admin/db/output until it stops. Dry run first: the Apply panel only
- * appears once a dry run has come back, and it carries the same command
- * and target forward, so what you apply is what you just read.
+ * A database tool starts on /admin/db/run and this polls /admin/db/output
+ * until it stops; verifying and the test email answer straight away. All
+ * three report in the one result box under the tools: a plain sentence,
+ * and the full output under Details. Anything that deletes asks for a
+ * second tap, and the server refuses it without that.
  */
 (function () {
-  const out = document.querySelector(".dbout");
-  if (!out) return;
-  const applyBox = document.querySelector(".dbapply");
-  const confirmField = document.querySelector(".dbconfirm");
-  const nameLabel = document.querySelector(".dbname");
-  const sureWrap = document.querySelector(".dbsure");
-  const sureBox = document.querySelector(".dbsurebox");
-  const keepButton = document.querySelector(".dbkeep");
-  const here = {{ db_here | tojson }};
-  const liveName = {{ db_live | tojson }};
-  let last = null;
+  const box = document.querySelector("#tools .dbresult");
+  if (!box) return;
+  const summary = box.querySelector(".dbsummary");
+  const details = box.querySelector(".dbdetails");
+  const out = box.querySelector(".dbout");
+  const RUN = {{ url_for('admin_db_run') | tojson }};
+  const OUTPUT = {{ url_for('admin_db_output') | tojson }};
   let polling = null;
 
-  function show(text) { out.textContent = text || "(no output)"; }
+  function report(text, ok, full) {
+    summary.textContent = text;
+    box.classList.toggle("ok", ok === true);
+    box.classList.toggle("bad", ok === false);
+    details.hidden = !full;
+    out.textContent = full || "";
+    box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function busy(on) {
+    document.querySelectorAll("#tools button").forEach((b) => {
+      if (!b.closest(".dbrow.done")) b.disabled = on;
+    });
+  }
+
+  // The first tap asks, the second runs. Five seconds to change your mind.
+  function confirmed(button) {
+    if (button.classList.contains("armed")) {
+      clearTimeout(button.beaconArm);
+      button.classList.remove("armed");
+      button.textContent = button.dataset.label;
+      return true;
+    }
+    button.dataset.label = button.textContent;
+    button.classList.add("armed");
+    button.textContent = "Run it? This can't be undone";
+    button.beaconArm = setTimeout(() => {
+      button.classList.remove("armed");
+      button.textContent = button.dataset.label;
+    }, 5000);
+    return false;
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+      body: body instanceof FormData ? body : new URLSearchParams(body),
+    }).then((r) => r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data })));
+  }
+
+  function failed() {
+    busy(false);
+    report("The page couldn't reach the server. Nothing was changed.", false);
+  }
 
   function poll() {
-    fetch("{{ url_for('admin_db_output') }}")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.output) show(data.output);
-        if (data.running) return;
-        clearInterval(polling);
-        polling = null;
-        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
-        /* Offer Apply only after a dry run that worked and would change
-           something. A refusal is not something to confirm past. */
-        if (last && last.writes && !last.apply && data.ok) {
-          nameLabel.textContent = last.live ? liveName : here;
-          sureWrap.hidden = !last.live;
-          confirmField.value = "";
-          if (sureBox) sureBox.checked = false;
-          applyBox.hidden = false;
-        }
-      })
-      .catch(() => {
-        clearInterval(polling);
-        polling = null;
-        show("The page could not reach the server. Nothing was committed.");
-        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
-      });
+    fetch(OUTPUT).then((r) => r.json()).then((data) => {
+      if (data.running) return;
+      clearInterval(polling);
+      polling = null;
+      busy(false);
+      report(data.summary || (data.ok ? "Done." : "That didn't work."), !!data.ok, data.output);
+    }).catch(() => { clearInterval(polling); polling = null; failed(); });
   }
 
-  function send(body, pending) {
-    document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = true; });
-    applyBox.hidden = true;
-    show("running " + pending.command + "...");
-    fetch("{{ url_for('admin_db_run') }}", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(body),
-    })
-      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
-      .then(({ ok, data }) => {
-        if (!ok) {
-          if (data.blocked) {
-            show(data.why + "\n\n    " + data.command);
-          } else {
-            show(data.error || "That did not start.");
-          }
-          document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
-          return;
-        }
-        last = pending;
-        if (!polling) polling = setInterval(poll, 700);
-        poll();
-      })
-      .catch(() => {
-        show("The page could not reach the server.");
-        document.querySelectorAll(".dbgo").forEach((b) => { b.disabled = false; });
-      });
-  }
-
-  document.querySelectorAll(".dbrow").forEach((row) => {
-    row.querySelector(".dbgo").addEventListener("click", () => {
-      const target = row.querySelector(".dbtarget");
+  document.querySelectorAll("#tools .dbrow[data-command]").forEach((row) => {
+    const button = row.querySelector(".dbgo");
+    const danger = row.dataset.danger === "yes";
+    button.addEventListener("click", () => {
+      if (danger && !confirmed(button)) return;
       const arg = row.querySelector(".dbarg");
-      const pending = {
-        command: row.dataset.command,
-        writes: row.dataset.writes === "yes",
-        live: !!(target && target.checked),
-        apply: false,
-        email: arg ? arg.value.trim() : "",
-      };
-      send({
-        command: pending.command,
-        live: pending.live ? "yes" : "no",
-        apply: "no",
-        email: pending.email,
-      }, pending);
+      busy(true);
+      report("Running “" + row.querySelector("b").textContent + "”…", null);
+      post(RUN, { command: row.dataset.command, sure: danger ? "yes" : "",
+                  email: arg ? arg.value.trim() : "" })
+        .then(({ ok, data }) => {
+          if (!ok) { busy(false); report(data.error || "That didn't start.", false); return; }
+          if (!polling) polling = setInterval(poll, 700);
+          poll();
+        })
+        .catch(failed);
     });
   });
 
-  keepButton.addEventListener("click", () => {
-    if (!last) return;
-    send({
-      command: last.command,
-      live: last.live ? "yes" : "no",
-      apply: "yes",
-      confirm: confirmField.value,
-      live_sure: sureBox && sureBox.checked ? "yes" : "no",
-      email: last.email,
-    }, Object.assign({}, last, { apply: true }));
+  // Verifying: one person, or everyone waiting (asked twice).
+  document.querySelectorAll("#tools .dbverify, #tools .dbverifyall").forEach((button) => {
+    const all = button.classList.contains("dbverifyall");
+    button.addEventListener("click", () => {
+      if (all && !confirmed(button)) return;
+      busy(true);
+      report(all ? "Verifying everyone waiting…" : "Verifying…", null);
+      post(button.dataset.url, all ? { sure: "yes" } : {}).then(({ ok, data }) => {
+        busy(false);
+        const results = data.results || [];
+        results.forEach((r) => {
+          const row = r.verified && document.querySelector(
+            '#tools .waitlist .dbrow[data-user="' + r.id + '"]');
+          if (!row) return;
+          row.classList.add("done");
+          const b = row.querySelector("button");
+          b.textContent = "Verified";
+          b.disabled = true;
+        });
+        const unsent = results.filter((r) => r.verified && !r.ok).length;
+        if (results.length > 1) {
+          report(results.filter((r) => r.verified).length + " verified." +
+                 (unsent ? " " + unsent + " email(s) couldn't be sent; see Details." : ""),
+                 ok && !unsent, results.map((r) => r.said).join("\n"));
+        } else {
+          const one = results[0] || {};
+          report(one.said || "Done.", ok && one.ok !== false);
+        }
+      }).catch(failed);
+    });
   });
+
+  // The test email, answered here rather than with a page reload.
+  const mail = document.querySelector("#tools form.testmail");
+  if (mail) {
+    mail.addEventListener("submit", (e) => {
+      e.preventDefault();
+      busy(true);
+      report("Sending…", null);
+      post(mail.action, new FormData(mail)).then(({ data }) => {
+        busy(false);
+        report(data.summary || "That didn't send.", !!data.ok);
+      }).catch(failed);
+    });
+  }
 })();
 </script>
 {% endblock %}

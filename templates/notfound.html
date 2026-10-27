@@ -1,0 +1,19 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{#
+  An address that is not a page, for somebody signed in: inside the app, with
+  its top bar and tab bar, so they are lost on a page and not lost in the
+  site. The signed-out version is notfound_public.html; app.not_found picks.
+#}
+{% block title %}Page not found{% endblock %}
+
+{% block appstyle %}
+      {% include "_notfound.css" %}
+{% endblock %}
+
+{% block main %}
+  <section class="win sec-chat lost">
+    {{ ui.section("Page not found", "chat", "lighthouse") }}
+    {% include "_notfound_body.html" %}
+  </section>
+{% endblock %}

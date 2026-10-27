@@ -78,10 +78,10 @@
           <a href="{{ url_for('people') }}">Find people</a>
           <a href="{{ url_for('chats') }}">Group chats{%
             if invite_count %} <span class="invites">{{ invite_count }}</span>{% endif %}</a>
-          {# Shorter than the page it opens, on purpose. This panel fits six
-             items in about twenty characters; the page has the width to say
-             what it is. The mismatch is the point, not drift. #}
-          <a href="{{ url_for('fixtures') }}">Happening now</a>
+          {# Says what is there rather than when: these are the meetups
+             everybody on campus can see. Kept under about twenty characters,
+             which is what this panel fits. #}
+          <a href="{{ url_for('fixtures') }}">Campus wide meetups</a>
           {# Below the line: the three ways to tell us something. Separated
              because they are not places you go, they are things you do, and
              because the list is long enough now that Sign out needs to not

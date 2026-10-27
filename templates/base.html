@@ -1075,6 +1075,19 @@
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .chev { flex: none; color: var(--navy); font-size: 1.4rem; line-height: 1; }
+      /* How many things wait in a conversation: the bell's badge, in the
+         pixel face, sat on the row rather than hanging off a corner. */
+      .chatrow .unread {
+        flex: none; display: grid; place-items: center;
+        min-width: 28px; height: 28px; padding: 0 6px;
+        background: var(--alert); color: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 2px 2px 0 var(--navy);
+        font: 400 17px/1 var(--px);
+      }
+      /* the display above would beat the browser's own [hidden] rule */
+      .chatrow .unread[hidden] { display: none; }
+      .chatrow.has-unread .last { color: var(--navy); font-weight: 700; }
       /* each kind of chat wears its own colour */
       .tag.community { background: var(--beacon); color: #fff; }
       .tag.match     { background: var(--sky);    color: var(--navy); }

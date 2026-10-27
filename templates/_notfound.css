@@ -1,0 +1,14 @@
+      /* The not-found pages (notfound.html, notfound_public.html). */
+      .lost { max-width: 34rem; margin-left: auto; margin-right: auto; }
+      .lost-body { padding: 22px 18px 24px; text-align: center; }
+      /* The number in the app's pixel face, big, with the drop shadow the
+         title bars' keys carry. */
+      .lost-code {
+        margin: 0; color: var(--navy);
+        font: 400 clamp(64px, 22vw, 96px)/1 var(--px); letter-spacing: .06em;
+        text-shadow: 4px 4px 0 var(--orange);
+      }
+      .lost-say { margin: 14px 0 4px; color: var(--navy); font-size: 1.15rem; font-weight: 700; }
+      .lost-why { margin: 0 0 20px; color: var(--muted); }
+      .lost-home { display: inline-flex; align-items: center; gap: 8px; }
+      .lost-home .icon { width: 18px; height: 18px; }

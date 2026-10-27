@@ -100,6 +100,11 @@ class User(UserMixin, db.Model):
                              server_default="true")
     # When the last summary went out, so it goes at most every other day.
     digest_sent_at = db.Column(db.DateTime)
+    # When the account was made. An unverified account that has one goes a
+    # day after it was made (app.sweep_unverified). Null for every account
+    # older than the column, which is never removed automatically: those are
+    # left for an admin to verify by hand.
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         db.CheckConstraint(
@@ -1170,6 +1175,12 @@ class Fixture(db.Model):
     status = db.Column(db.String(12), nullable=False, default="scheduled",
                        server_default="scheduled")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # When it should appear (UTC), for one entered ahead of time; null means
+    # at once. And when it did: its flag, its line in the campus room and
+    # everybody's notice are all made at that moment (app.publish_fixture),
+    # so until then nobody but the people who post them can see it.
+    publish_at = db.Column(db.DateTime)
+    published_at = db.Column(db.DateTime)
 
     def billing(self):
         """The sport and the opponent as one phrase, or an empty string.

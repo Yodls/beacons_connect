@@ -31,6 +31,9 @@
       .fix .where { color: var(--muted); font-size: .9rem; }
       .fix .note { display: block; margin-top: 6px; color: var(--navy); }
       .fix .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .fix .row form { margin: 0; }
+      .fix .row .btn.ghost { background: #fff; color: var(--navy); border-color: var(--navy); }
+      .fix.waiting .where { display: block; margin-top: 4px; }
       .off { color: var(--muted); }
       .off b { color: var(--navy); text-decoration: line-through; }
 {% endblock %}
@@ -45,7 +48,7 @@
   </div>
 
   {% if can_post %}
-    <p class="nav"><a href="{{ url_for('fixture_new') }}">Post a campus-wide meetup &rarr;</a></p>
+    <p class="nav"><a href="{{ url_for('fixture_new') }}">Post campus-wide meetups &rarr;</a></p>
   {% endif %}
 
   <section class="win sec-place">
@@ -81,6 +84,34 @@
       {% endfor %}
     </div>
   </section>
+
+  {# Only for the people who post them: entered ahead of time and not up
+     yet. Nobody else can see these anywhere until their moment. #}
+  {% if can_post and waiting %}
+    <section class="win sec-place">
+      <div class="bar">{{ ui.icon("meet") }}<span class="bar-title">Scheduled</span><span class="grip"></span></div>
+      <div class="grid">
+        {% for fixture, appears in waiting %}
+          <div class="fix waiting">
+            <div class="fix-top">
+              <h3>{{ fixture.title }}</h3>
+              <span class="when">{{ fixture.when_text }}</span>
+            </div>
+            <span class="where">Appears {{ appears }} &middot; {{ fixture.venue }}</span>
+            <div class="row">
+              <a class="btn ghost" href="{{ url_for('fixture_edit', fixture_id=fixture.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('fixture_publish', fixture_id=fixture.id) }}">
+                <button type="submit">Publish now</button>
+              </form>
+              <form method="post" action="{{ url_for('fixture_cancel', fixture_id=fixture.id) }}">
+                <button type="submit" class="ghost">Cancel</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 
   {% if called_off %}
     <section class="win sec-place">

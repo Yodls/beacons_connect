@@ -116,6 +116,21 @@
         if (fresh) { list.replaceWith(fresh); }
       }
 
+      // The badges on a list of chats (home, /chats/all), from the same
+      // answer: every change to them is a change to the bell, so this keeps
+      // them live without a poller of their own.
+      if (data.chats) {
+        document.querySelectorAll(".chatrow[data-chat]").forEach(function (row) {
+          var badge = row.querySelector(".unread");
+          if (!badge) { return; }
+          var n = data.chats[row.dataset.chat] || 0;
+          badge.textContent = n > 99 ? "99+" : String(n);
+          badge.setAttribute("aria-label", n + " unread");
+          badge.hidden = !n;
+          row.classList.toggle("has-unread", !!n);
+        });
+      }
+
       var arrived = data.toasts || [];
       if (!arrived.length) { return; }
       if (document.hidden) {
@@ -167,7 +182,9 @@
              // every round by a token it never sent.
              "&cards=" + encodeURIComponent(state.cards || "") +
              // The reactions it is showing, on the same terms.
-             "&reacts=" + encodeURIComponent(state.reacts || "");
+             "&reacts=" + encodeURIComponent(state.reacts || "") +
+             // And how many messages it holds, so a deleted one is noticed.
+             "&log=" + encodeURIComponent(state.log || "");
         // Only presence cares about this: a tab behind another window should
         // still collect notices, but it is not somebody sitting at a board.
         // Saying so is the whole fix -- this loop re-issues on each response

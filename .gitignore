@@ -15,3 +15,4 @@ db/
 tests/
 .env.bak.20261008-003250
 static/uploads/
+server.sh

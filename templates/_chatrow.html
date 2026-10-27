@@ -9,8 +9,10 @@
   Takes `chat`, one entry from chat_list().
 #}
 {%- import "_ui.html" as ui -%}
-<a class="chatrow"
-   href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}">
+{%- set waiting = chat.unread or 0 -%}
+<a class="chatrow{% if waiting %} has-unread{% endif %}"
+   href="{{ url_for('chat', kind=chat.kind, target_id=chat.target_id) }}"
+   data-chat="{{ chat.url }}">
   {% if chat.kind == "club" %}
     {{ ui.club_badge(chat.title) }}
   {% else %}
@@ -21,5 +23,11 @@
     <span class="last">{{ chat.subtitle }}</span>
   </span>
   <span class="tag {{ chat.kind }}">{{ chat.tag }}</span>
+  {# What is waiting in here: unread messages, plus any invite or meetup
+     request in this chat. Always drawn, hidden at none, so the live channel
+     can fill it in (_channel.html) without building it from nothing. #}
+  <span class="unread" aria-label="{{ waiting }} unread"{% if not waiting %} hidden{% endif %}>
+    {{- "99+" if waiting > 99 else waiting -}}
+  </span>
   <span class="chev">&rsaquo;</span>
 </a>

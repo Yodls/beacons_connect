@@ -41,6 +41,13 @@
     <button class="iconbtn map-locate" id="mapLocate" type="button"
             aria-label="Show where I am" title="Show where I am">{{ ui.icon("locate") }}</button>
     <p class="map-status" id="mapStatus" aria-live="polite">Loading the campus map&hellip;</p>
+    {# Shown while the meetup form below is placing its pin (Move pin on
+       /find). Inside the stage, under its isolation, so it can never sit
+       over the top bar or the tab bar. #}
+    <div class="map-pickbar" id="mapPickBar" hidden>
+      <span>Drag the pin to where you'll meet</span>
+      <button type="button" id="mapPickDone">Done</button>
+    </div>
   </div>
 
   <div class="campus-map-pane">

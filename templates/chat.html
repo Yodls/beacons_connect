@@ -195,6 +195,14 @@
       .msg.mine .row-acts { color: rgba(255, 255, 255, .85); }
       .msg.mine .row-acts button:hover,
       .msg.mine .row-acts button[aria-expanded="true"] { color: #fff; }
+      /* Delete after its first tap: asking, in red, until the second tap or
+         four seconds. */
+      .msg .row-acts .act-delete.armed,
+      .msg.mine .row-acts .act-delete.armed {
+        margin: -2px 0; padding: 2px 7px;
+        background: var(--danger); color: #fff;
+        border-radius: var(--r-sm); text-decoration: none;
+      }
       /* A row the script turns into a shared-flag card has no bubble to
          react to; Report stays. */
       .msg.has-card .act-react, .msg.has-card .act-reply, .msg.has-card .act-sep { display: none; }
@@ -940,7 +948,8 @@
     <div class="talkcol">
   {# data-cards is the deck token, handed over on the markup the way
      the game pane and the roster hand theirs over. #}
-  <div id="log" data-cards="{{ card_token }}" data-reacts="{{ reacts_token }}">
+  <div id="log" data-cards="{{ card_token }}" data-reacts="{{ reacts_token }}"
+       data-log="{{ log_token }}">
     {% for message in messages %}
       {% if message.event %}
         {# A game moment, not speech. It keeps the .msg class because the
@@ -980,7 +989,10 @@
         <span class="who">{{ message.name }}</span>
         {# What this answers, from the copy taken when it was sent. data-to
            only while the original is still there to jump to. #}
-        {% if message.reply %}
+        {% if message.reply and message.reply.gone %}
+          {# Its author deleted the original, and the copy went with it. #}
+          <span class="quote gone"><span class="quote-text">Deleted message</span></span>
+        {% elif message.reply %}
           <span class="quote"{% if message.reply.id %} data-to="{{ message.reply.id }}"{% endif %}><b class="quote-name">{{ message.reply.name }}</b><span class="quote-text">{{ message.reply.body }}</span></span>
         {% endif %}
         <span class="body">{{ message.body }}</span>
@@ -1000,20 +1012,29 @@
            are added in the JS builder below as well -- a message that could
            only be answered until the next live update would be worse than
            one that could not be answered at all. #}
+        {# Delete is on your own words only, at any time -- including once a
+           meetup's chat has closed. Never on a meetup card: that is
+           cancelled from the card. Mine and theirs never meet, so Report
+           and Delete never share a row. #}
         {% set answerable = not ended and not message.post %}
-        {% if answerable or not message.mine %}
+        {% set deletable = message.mine and not message.post %}
+        {% if answerable or not message.mine or deletable %}
           <span class="row-acts">
             {%- if answerable -%}
               <button type="button" class="act-react" aria-expanded="false">React</button>
               <span class="act-sep" aria-hidden="true">&middot;</span>
               <button type="button" class="act-reply">Reply</button>
             {%- endif -%}
-            {%- if answerable and not message.mine -%}
+            {%- if answerable and (not message.mine or deletable) -%}
               <span class="act-sep" aria-hidden="true">&middot;</span>
             {%- endif -%}
             {%- if not message.mine -%}
               <a class="report-link"
                  href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
+            {%- endif -%}
+            {%- if deletable -%}
+              <button type="button" class="act-delete"
+                      data-url="{{ url_for('message_delete', message_id=message.id) }}">Delete</button>
             {%- endif -%}
           </span>
         {% endif %}
@@ -1500,6 +1521,9 @@
     // the channel only when it moves. A reaction writes no message, so
     // nothing else would bring one to another tab.
     var reacts = log.dataset.reacts || "none";
+    // How many messages the log holds and its newest id, as the server
+    // counted them. A deletion anywhere moves it; see apply.
+    var logTok = log.dataset.log || "";
     // [name, emoji, what a screen reader calls it], in the order they show.
     var REACTIONS = {{ reactions | tojson }};
     var closed = {{ (ended or false) | tojson }};
@@ -1658,7 +1682,12 @@
         p.appendChild(face);
       }
       p.appendChild(span("who", message.name));
-      if (message.reply) {
+      if (message.reply && message.reply.gone) {
+        // Its author deleted the original, and the copy went with it.
+        var cleared = span("quote gone", "");
+        cleared.appendChild(span("quote-text", "Deleted message"));
+        p.appendChild(cleared);
+      } else if (message.reply) {
         // The same quote the server draws, from the same copy.
         var quote = span("quote", "");
         if (message.reply.id) { quote.dataset.to = message.reply.id; }
@@ -1674,14 +1703,20 @@
       // than pasted as markup: this file is checked file-wide for innerHTML.
       var answerable = !closed && !message.post;
       var theirs = message.user_id !== me;
-      if (answerable || theirs) {
+      var deletable = !theirs && !message.post;
+      if (answerable || theirs || deletable) {
         var acts = span("row-acts", "");
         if (answerable) {
           acts.appendChild(actButton("act-react", "React"));
           acts.appendChild(actSep());
           acts.appendChild(actButton("act-reply", "Reply"));
         }
-        if (answerable && theirs) { acts.appendChild(actSep()); }
+        if (answerable && (theirs || deletable)) { acts.appendChild(actSep()); }
+        if (deletable) {
+          var gone = actButton("act-delete", "Delete");
+          gone.dataset.url = "/messages/" + encodeURIComponent(message.id) + "/delete";
+          acts.appendChild(gone);
+        }
         if (theirs) {
           var tell = document.createElement("a");
           tell.className = "report-link";
@@ -1787,9 +1822,65 @@
       target.classList.add("flash");
       setTimeout(function () { target.classList.remove("flash"); }, 1200);
     }
+    // A message gone from the log: its row, a reaction bar open under it,
+    // a reply being written to it, and every quote of it -- which now reads
+    // "Deleted message", as the server draws it from now on.
+    function forget(id) {
+      var row = log.querySelector('.msg[data-id="' + Number(id) + '"]');
+      if (row) {
+        if (bar && bar.previousElementSibling === row) { closeBar(); }
+        row.remove();
+      }
+      log.querySelectorAll('.quote[data-to="' + Number(id) + '"]').forEach(function (q) {
+        q.removeAttribute("data-to");
+        q.classList.add("gone");
+        q.replaceChildren(span("quote-text", "Deleted message"));
+      });
+      var field = document.getElementById("reply-to");
+      if (field && field.value === String(id)) {
+        field.value = "";
+        document.getElementById("replying").hidden = true;
+      }
+    }
+
+    // Two taps: the first asks, the second deletes. There is nothing to
+    // undo it with, so the question is the safety.
+    function deleteMessage(button) {
+      if (!button.classList.contains("armed")) {
+        button.classList.add("armed");
+        button.textContent = "Delete?";
+        button.beaconArm = setTimeout(function () {
+          button.classList.remove("armed");
+          button.textContent = "Delete";
+        }, 4000);
+        return;
+      }
+      clearTimeout(button.beaconArm);
+      button.disabled = true;
+      var row = button.closest(".msg");
+      fetch(button.dataset.url, {
+        method: "POST",
+        headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          if (!r.ok) { throw new Error(body.error || "That message couldn't be deleted."); }
+          return body;
+        });
+      }).then(function () {
+        forget(row.dataset.id);
+      }).catch(function (err) {
+        button.disabled = false;
+        button.classList.remove("armed");
+        button.textContent = "Delete";
+        if (typeof Beacon !== "undefined" && Beacon.toast) { Beacon.toast(err.message); }
+      });
+    }
+
     log.addEventListener("click", function (e) {
       var t = e.target;
       if (t.closest(".msgbar")) { return; }
+      var del = t.closest(".act-delete");
+      if (del) { deleteMessage(del); return; }
       // The buttons written out on the message.
       var act = t.closest(".act-react, .act-reply");
       if (act) {
@@ -1841,6 +1932,23 @@
         if (stuck) { log.scrollTop = log.scrollHeight; }
       }
       if (typeof data.after === "number") { after = data.after; }
+
+      // Deletions. Only when the count moved in a way new messages do not
+      // explain does the answer list what is left, up to the newest id this
+      // page knew of; anything here that is not on the list has been
+      // deleted by whoever wrote it.
+      var lg = data.log;
+      if (lg && lg.token !== logTok) {
+        logTok = lg.token;
+        if (lg.present) {
+          var keep = {};
+          lg.present.forEach(function (id) { keep[id] = true; });
+          log.querySelectorAll(".msg[data-id]").forEach(function (row) {
+            var id = Number(row.dataset.id);
+            if (id <= lg.upto && !keep[id]) { forget(id); }
+          });
+        }
+      }
 
       // Reactions, when anybody's moved. The map lists every reacted
       // message in the chat, so a row with chips that is not in it has had
@@ -1959,7 +2067,7 @@
       here: {{ (kind ~ ":" ~ target_id) | tojson }},
       state: function () {
         return {after: after, token: token, crowd: crowd,
-                cards: deck, reacts: reacts};
+                cards: deck, reacts: reacts, log: logTok};
       },
       apply: apply
     });

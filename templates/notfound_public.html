@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{#
+  An address that is not a page, for somebody signed out: the same card the
+  sign-in page uses. The signed-in version is notfound.html.
+#}
+{% block title %}Page not found{% endblock %}
+
+{% block style %}
+      {% include "_notfound.css" %}
+{% endblock %}
+
+{% block content %}
+  <div class="auth">
+    <div class="auth-stack">
+      {% include "_brandpanel.html" %}
+      <div class="auth-card lost">
+        <div class="bar sec-chat">{{ ui.icon("lighthouse") }}<h1>Page not found</h1><span class="grip"></span></div>
+        {% include "_notfound_body.html" %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

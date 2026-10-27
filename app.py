@@ -90,7 +90,7 @@ from models import (
 
 load_dotenv()
 
-CODE_TTL = timedelta(minutes=10)
+CODE_TTL = timedelta(minutes=5)
 MAX_VERIFICATION_ATTEMPTS = 5
 OPTIONAL_QUESTIONS = {"minor"}
 
@@ -255,12 +255,109 @@ def has_onboarded(user_id):
 
 
 def issue_verification_code(user):
+    """Store a new code and email it. Returns whether the email went.
+
+    A failed send is logged and reported, never raised. The account is
+    already saved by then, and a raise here used to turn every registration
+    into a server error while the mail server was refusing the site's login
+    -- leaving an account the student could neither verify nor register
+    again. The callers say "try Resend code" instead.
+    """
     code = f"{secrets.randbelow(1_000_000):06d}"
     user.verification_code_hash = generate_password_hash(code)
     user.verification_expires_at = datetime.now(timezone.utc) + CODE_TTL
     user.verification_attempts = 0
     db.session.commit()
-    send_verification_email(user, code)
+    try:
+        send_verification_email(user, code)
+    except Exception:  # noqa: BLE001 -- whatever the mail server says, the page goes on
+        app.logger.exception("verification email to %s failed", user.email)
+        return False
+    return True
+
+
+# What a student is told when their code could not be sent. Names the
+# button on the code page as it reads there.
+CODE_NOT_SENT = "We couldn't send your code. Press Send a new code to try again."
+# And when they come back to a sign-up that has gone.
+SIGNUP_EXPIRED = ("Your sign-up expired before it was verified. "
+                  "Please register again.")
+
+# An unverified account is kept for SIGNUP_TTL after it is made, then goes
+# and the student registers again. A code still runs out after CODE_TTL, but
+# that only means pressing Send a new code -- the account stays for the
+# whole day. It never got past /verify, so there is nothing of theirs to
+# hand over or tell friends about -- and left alone it would hold its
+# address, so whoever mistyped a code or never got the email could not sign
+# up again.
+SIGNUP_TTL = timedelta(hours=24)
+SWEEP_EVERY = 60            # seconds between sweeps, per process
+_sweep = {"at": None, "lock": threading.Lock()}
+
+
+def _unverified_and_expired(now):
+    """The rule, as a WHERE clause: unverified, and made more than
+    SIGNUP_TTL ago.
+
+    `created_at` is what marks an account as made under this rule. One from
+    before it has no sign-up time and is never removed automatically: those
+    are the students who got stuck while the mail server was refusing the
+    site, and an admin verifies them by hand (admin_verify) rather than the
+    sweep deleting them the minute this is deployed."""
+    return db.and_(
+        User.email_verified.is_(False),
+        User.created_at.is_not(None),
+        User.created_at < now - SIGNUP_TTL)
+
+
+def signup_expired(user, now=None):
+    """Whether this account is past saving: unverified, and a day old."""
+    now = now or datetime.utcnow()
+    return db.session.scalar(db.select(db.func.count()).select_from(User).where(
+        User.id == user.id, _unverified_and_expired(now))) > 0
+
+
+def sweep_unverified(now=None):
+    """Delete every account left unverified for SIGNUP_TTL. Returns how many.
+
+    Through the ORM, the way account_delete removes one, so the same
+    cascades run.
+    """
+    stale = db.session.scalars(db.select(User).where(
+        _unverified_and_expired(now or datetime.utcnow()))).all()
+    for user in stale:
+        app.logger.info("unverified for a day, removed: %s", user.email)
+        db.session.delete(user)
+    if stale:
+        db.session.commit()
+    return len(stale)
+
+
+@app.before_request
+def housekeeping():
+    """The jobs that run on the clock, at most every SWEEP_EVERY seconds, on
+    whatever request comes along -- no thread to start, and nothing to switch
+    off in tests: unverified accounts past their code go, and campus-wide
+    meetups whose moment has come appear. Each is on its own, so one failing
+    is logged and does not stop the other, or the request."""
+    now = time.monotonic()
+    last = _sweep["at"]
+    if last is not None and now - last < SWEEP_EVERY:
+        return None
+    if not _sweep["lock"].acquire(blocking=False):
+        return None
+    try:
+        _sweep["at"] = now
+        for job, what in ((sweep_unverified, "the unverified-account sweep"),
+                          (publish_due_fixtures, "publishing scheduled fixtures")):
+            try:
+                job()
+            except Exception:  # noqa: BLE001 -- housekeeping must not break a page
+                app.logger.exception("%s failed", what)
+                db.session.rollback()
+    finally:
+        _sweep["lock"].release()
+    return None
 
 
 def send_verification_email(user, code):
@@ -444,6 +541,23 @@ def refused(message):
     g.refused = True
 
 
+@app.errorhandler(404)
+def not_found(error):
+    """An address that is not a page.
+
+    A page in the app's own look, saying so, with the way home -- inside the
+    app for somebody signed in, on the sign-in card for somebody who is not.
+    A script asking for JSON (the live channel, the map) gets JSON back
+    instead, so it reads a 404 rather than choking on a page.
+    """
+    if (request.path.startswith("/api/")
+            or request.accept_mimetypes.best == "application/json"):
+        return jsonify({"error": "not found"}), 404
+    if current_user.is_authenticated:
+        return render_template("notfound.html"), 404
+    return render_template("notfound_public.html"), 404
+
+
 @app.after_request
 def send_queued_emails(response):
     """Send what this request queued, now that it has committed.
@@ -606,6 +720,7 @@ def email_off(token):
 # What the admin can send themselves to see what people get.
 TEST_EMAILS = {
     "verification": "Verification code",
+    "verified": "Verified by an admin",
     "message": "A message while away",
     "meetup": "A meetup request",
     "game": "A game challenge",
@@ -627,19 +742,29 @@ def admin_test_email():
     away = not_admin()
     if away:
         return away
+
+    def said(text, ok):
+        # As JSON for the Site tools page, which shows it in its result box;
+        # as a flash and the admin page without JavaScript.
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"ok": ok, "summary": text}), (200 if ok else 400)
+        flash(text)
+        return redirect(url_for("admin") + "#tools")
+
     to = request.form.get("email", "").strip()
     which = request.form.get("which", "message")
     if not _EMAIL_SHAPE.match(to) or len(to) > 255:
-        flash("That doesn't look like an email address.")
-        return redirect(url_for("admin") + "#email")
+        return said("That doesn't look like an email address.", False)
     if which not in TEST_EMAILS:
-        flash("Pick which email to send.")
-        return redirect(url_for("admin") + "#email")
+        return said("Pick which email to send.", False)
     name = current_user.name
     off = site_url("/email/off/sample")
     settings = site_url(EMAIL_SETTINGS)
     if which == "verification":
-        subject, text, html = emails.verification(name, "482913", 10)
+        subject, text, html = emails.verification(
+            name, "482913", int(CODE_TTL.total_seconds() // 60))
+    elif which == "verified":
+        subject, text, html = emails.verified(name, site_url("/login"))
     elif which == "digest":
         subject, text, html = emails.digest(
             name, [{"body": "Sample Friend sent you a message.", "url": site_url("/chats")},
@@ -658,10 +783,10 @@ def admin_test_email():
                               body=text, html=html))
     except Exception as error:  # noqa: BLE001 -- shown to the admin as it is
         app.logger.exception("test email to %s failed", to)
-        flash(f"Not sent: {type(error).__name__}: {error}")
-        return redirect(url_for("admin") + "#email")
-    flash(f"Sent \"{TEST_EMAILS[which]}\" to {to}.")
-    return redirect(url_for("admin") + "#email")
+        return said(f"Not sent. The mail server said: "
+                    f"{type(error).__name__}: {error}", False)
+    return said(f"Sent \"{TEST_EMAILS[which]}\" to {to}. Check that inbox, "
+                "and its spam folder.", True)
 
 
 # What User.name holds. The two registration fields are joined with a space,
@@ -1411,10 +1536,13 @@ def chat_rows(kind, parent, after=0):
             "reactions": reacted.get(m.id, []),
         }
         # A reply carries a copy of what it quoted, made when it was sent.
-        # `id` goes null if the original is deleted; the copy stays.
+        # When its author deletes the original, the copy is cleared too
+        # (message_delete) and the quote reads "Deleted message" -- or the
+        # words would outlive their own deletion in every reply to them.
         if m.reply_name is not None:
             entry["reply"] = {"id": m.reply_to_id, "name": m.reply_name,
-                              "body": m.reply_body}
+                              "body": m.reply_body,
+                              "gone": m.reply_body is None}
         post = posts.get(m.post_id)
         if post is not None:
             entry["post"] = post_payload(
@@ -1662,6 +1790,10 @@ def chat_list():
         ):
             last[(kind, parent_id)] = (body, when)
 
+    # What is waiting in each, for the badge on its row. Keyed by the same
+    # address a notice stores, so a chat's messages, a game invite and a
+    # meetup request in it all count toward the one number.
+    waiting = notices.unread_by_url(current_user.id)
     for entry in entries:
         kind = entry["kind"]
         key = ((COMMUNITY, 0) if kind == COMMUNITY
@@ -1669,6 +1801,8 @@ def chat_list():
         preview, when = last.get(key, (None, None))
         entry["preview"] = preview
         entry["when"] = when
+        entry["url"] = notices.chat_url(kind, entry["target_id"])
+        entry["unread"] = waiting.get(entry["url"], 0)
 
     # Sorted here and sliced by the caller, never the other way round: the
     # the most recent few is a different answer from the first few found.
@@ -1892,6 +2026,54 @@ def message_react(message_id):
     return redirect(url_for("chat", kind=kind, target_id=target_id))
 
 
+@app.route("/messages/<int:message_id>/delete", methods=["POST"])
+@login_required
+def message_delete(message_id):
+    """Delete one of your own messages, for everybody, at any time.
+
+    Gone without a trace: the row goes, and its reactions with it (CASCADE).
+    Replies to it keep their own words, but the copy of it each one carries
+    is cleared, so the quote reads "Deleted message" -- otherwise deleting
+    would remove nothing that anybody had answered. A report about it keeps
+    its own snapshot (Report.message_id is SET NULL), so deleting cannot
+    take back what has already been reported.
+
+    Only words: a meetup card is cancelled, not deleted, and a game's notes
+    are the game's. Answered as JSON for the page's fetch, like
+    message_react; without JavaScript it is a form and a redirect.
+    """
+    fetched = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    def refuse(why, status=403):
+        if fetched:
+            return jsonify({"error": why}), status
+        flash(why)
+        return redirect(url_for("index"))
+
+    message = db.session.get(Message, message_id)
+    # The same answer for "not there" and "not yours to see", as
+    # message_react gives, so an id cannot be probed for.
+    if message is None:
+        return refuse("That message is not available to you.")
+    kind, target_id, _, _ = message_chat(message)
+    if kind is None:
+        return refuse("That message is not available to you.")
+    if message.user_id != current_user.id:
+        return refuse("You can only delete your own messages.")
+    if message.event or message.post_id:
+        return refuse("That one can't be deleted. A meetup is cancelled "
+                      "from its card instead.", 400)
+
+    db.session.execute(
+        db.update(Message).where(Message.reply_to_id == message.id)
+        .values(reply_body=None))
+    db.session.delete(message)
+    db.session.commit()
+    if fetched:
+        return jsonify({"deleted": message_id})
+    return redirect(url_for("chat", kind=kind, target_id=target_id))
+
+
 @app.route("/chats/<kind>/<int:target_id>", methods=["GET", "POST"])
 @login_required
 def chat(kind, target_id):
@@ -2035,6 +2217,7 @@ def chat(kind, target_id):
         # back at once with every card in it.
         card_token=(live_cards_token() if kind in CARD_CHATS else "none"),
         reacts_token=live_reacts_token(message_filter(kind, parent)),
+        log_token=live_log_token(message_filter(kind, parent)),
         reactions=REACTIONS,
     )
 
@@ -2166,6 +2349,43 @@ def live_reacts_token(where):
     return f"{count}:{newest.isoformat() if newest else '-'}"
 
 
+def live_log_token(where):
+    """How many messages a conversation holds, and its newest id.
+
+    A new message moves it, and so does a deleted one -- which is the one
+    change nothing else here notices: `after` only ever looks forward.
+    """
+    count, newest = db.session.execute(
+        db.select(db.func.count(), db.func.max(Message.id))
+        .select_from(Message).where(where)).one()
+    return f"{count}:{newest or 0}"
+
+
+def live_log(where, had, now):
+    """The log half of a live answer: the new token, and -- only when
+    something was deleted -- every message id the page should still have.
+
+    `had` is the token the page holds. New messages alone account for the
+    whole difference most of the time, and then no list is sent; when they
+    do not, something the page is showing has gone, and it is told what
+    remains up to the newest id it knew about.
+    """
+    out = {"token": now}
+    try:
+        had_count, had_newest = (int(part) for part in had.split(":"))
+    except ValueError:
+        return out
+    count = int(now.split(":")[0])
+    added = db.session.scalar(
+        db.select(db.func.count()).select_from(Message)
+        .where(where, Message.id > had_newest))
+    if count != had_count + added:
+        out["upto"] = had_newest
+        out["present"] = list(db.session.scalars(
+            db.select(Message.id).where(where, Message.id <= had_newest)))
+    return out
+
+
 def live_reacts(where):
     """Every reacted message in a conversation, keyed by id as a string.
 
@@ -2279,6 +2499,10 @@ def notice_slice(user_id, seen, skip_url=None):
                                 notice_back=at),
         "toasts": [{"id": n.id, "body": n.body}
                    for n in notices.since(user_id, seen, skip_url)],
+        # What waits in each conversation, for the badges on a list of chats
+        # (home, /chats/all). Sent with every change to the bell, which is
+        # every change to these numbers, so those pages need no poller.
+        "chats": notices.unread_by_url(user_id),
     }
 
 
@@ -2376,6 +2600,10 @@ def live_reply(kind, target_id):
     # page sent one -- an empty token is a page that does not show them, and
     # comparing a fresh token to it would wake that page on every round.
     react_token = request.args.get("reacts", "")
+    # And how many messages it holds, the same way: a deleted message writes
+    # nothing and moves no id forward, so only this notices it. Only probed
+    # when the page sent one.
+    log_token = request.args.get("log", "")
 
     # Built from primitives, because the ORM object behind `parent` is
     # released along with the session between probes.
@@ -2437,6 +2665,7 @@ def live_reply(kind, target_id):
         deck = card_token
         # Defaulted for both of those reasons too.
         reacts = react_token
+        logs = log_token
         if watching:
             newest = db.session.scalar(
                 db.select(db.func.max(Message.id)).where(where)
@@ -2456,12 +2685,14 @@ def live_reply(kind, target_id):
                 deck = live_cards_token()
             if react_token:
                 reacts = live_reacts_token(where)
+            if log_token:
+                logs = live_log_token(where)
         if finding:
             deck = live_cards_token()
 
         if (newest > after or fresh != token or bell_now != bell
                 or crowd != group_token or deck != card_token
-                or reacts != react_token):
+                or reacts != react_token or logs != log_token):
             # Looked up again before anything reads it. The session this
             # request started in has been handed back between probes, and
             # current_user went with it -- expired by the commits above as
@@ -2500,6 +2731,8 @@ def live_reply(kind, target_id):
                 # so a message arriving does not need the whole map again.
                 "reacts": ({"token": reacts, "rows": live_reacts(where)}
                            if watching and reacts != react_token else None),
+                "log": (live_log(where, log_token, logs)
+                        if watching and logs != log_token else None),
                 "notices": notice_slice(
                     me, seen,
                     skip_url=notices.chat_url(kind, target_id) if watching
@@ -3539,7 +3772,12 @@ def game_action(game_id, action):
     elif action in ("accept", "decline"):
         # Answered either way, so the notice that offered the game stops
         # offering it -- including when the answer came from the chat instead.
+        # The bell's own form names its notice; the chat's Accept and Decline
+        # do not, so it is also retired by game, the way a withdrawal does.
+        # Without that, a challenge answered in the chat stayed unread in the
+        # bell -- and on the chat's badge -- for ever.
         notices.close(current_user.id, request.form.get("notice"))
+        notices.close_invite(current_user.id, game.id)
         db.session.commit()
 
         if game.status != "invited":
@@ -3753,6 +3991,9 @@ def find_game():
         pairings=pairings,
         # What the board starts from, so the first live round is quiet.
         card_token=live_cards_token(),
+        # Where each preset place is, so the meetup form can say "Near …"
+        # and the map can put the pin there before anybody moves it.
+        place_points=place_points(),
     )
 
 
@@ -3893,6 +4134,20 @@ def post_new():
     mode = request.form.get("mode", "online")
     note = request.form.get("note", "").strip()
     location = request.form.get("location", "").strip()
+    # Where its pin goes, when it was put on the map on /find. Optional --
+    # every other form, and /find without JavaScript, sends none and the
+    # pin goes on the place's landmark -- but a point that is sent has to be
+    # a real one inside the campus area, the rule fixtures already follow.
+    lat_text = request.form.get("latitude", "").strip()
+    lng_text = request.form.get("longitude", "").strip()
+    point, point_bad = None, False
+    if lat_text or lng_text:
+        try:
+            point = (float(lat_text), float(lng_text))
+        except ValueError:
+            point_bad = True
+        else:
+            point_bad = not map_flag_point_is_allowed(*point)
     # The day in words, and the time as three separate choices. Splitting
     # them is what lets the time be strict without making the field itself
     # mandatory: "Tonight" with no hour is still a perfectly good answer.
@@ -3979,6 +4234,8 @@ def post_new():
         refused(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
         refused("Pick between 2 and 50 players.")
+    elif point_bad and mode == "inperson":
+        refused("That spot is off campus. Move the pin onto the map's campus area.")
     else:
         post = GamePost(
             author_id=current_user.id,
@@ -4021,10 +4278,10 @@ def post_new():
         db.session.add(said)
         # The author is the first one going.
         db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
-        # An in-person meetup goes on the campus map too, seen only by the
-        # people who are in until its author makes it public.
+        # An in-person meetup goes on the campus map too: where its author
+        # put the pin, or on its place's landmark.
         if post.mode == "inperson":
-            make_event_flag(post)
+            make_event_flag(post, point=None if point_bad else point)
         # The other person in a private chat is told: in the bell, which a
         # meetup posted there never reached before, and by email if they are
         # away. A club's or the campus room's is for a room of people.
@@ -4394,30 +4651,29 @@ def admin_reports():
 
 
 def admin_db_context():
-    """The Database section's facts: where we are, and what it can run.
+    """The Site tools section's facts: which database, and what it can run.
 
     Host and database name only -- never the URL, never the user, never the
-    password. Nothing here opens a connection: the name comes from the URL
-    the app already holds, so a database that is down does not stop the
-    admin page rendering. Whether dev and live agree is a command you run,
-    not something computed on every page load.
+    password. Nothing here opens a connection of db_ops' own: the name comes
+    from the URL the app already holds, so a database that is down does not
+    stop the admin page rendering.
     """
     import db_ops
 
     try:
         here, host = db_ops.where(False)
-        live_name, live_host = db_ops.where(True)
     except db_ops.Refuse as exc:
-        return {"db_here": "?", "db_host": "?", "db_live": None,
-                "db_why": str(exc), "db_commands": [], "db_job": DB_JOB}
+        return {"db_here": "?", "db_host": "?", "db_why": str(exc),
+                "db_commands": [], "db_job": DB_JOB, "db_dev": DEV_DB,
+                "waiting_signups": []}
     return {
         "db_here": here,
         "db_host": host,
-        "db_live": live_name,
-        "db_live_host": live_host,
         "db_why": None,
-        "db_commands": db_commands(),
+        "db_commands": site_tools(),
         "db_job": DB_JOB,
+        "db_dev": DEV_DB,
+        "waiting_signups": waiting_signups(),
     }
 
 
@@ -4912,11 +5168,20 @@ def make_fixture_flag(fixture):
 @app.route("/fixtures")
 @login_required
 def fixtures():
-    """What is coming up, and what has just been. Everybody may read this."""
+    """What is coming up, and what has just been. Everybody may read this.
+
+    Only what has been published: one entered ahead of time is invisible
+    until its moment. The people who post them also see those waiting, with
+    when each will appear.
+    """
+    # Here as well as in the hourly-or-so housekeeping, so the list is never
+    # behind the clock it is showing.
+    publish_due_fixtures()
     now = datetime.utcnow()
     rows = db.session.scalars(
         db.select(Fixture)
-        .where(Fixture.starts_at > now - timedelta(days=1))
+        .where(Fixture.starts_at > now - timedelta(days=1),
+               Fixture.published_at.is_not(None))
         .order_by(Fixture.starts_at)
     ).all()
     flags = {
@@ -4926,111 +5191,343 @@ def fixtures():
             .where(MapFlag.fixture_id.in_([f.id for f in rows] or [0]),
                    MapFlag.expires_at > now))
     }
+    waiting = []
+    if current_user.can_post_fixtures:
+        waiting = [(f, boston_label(f.publish_at)) for f in db.session.scalars(
+            db.select(Fixture)
+            .where(Fixture.published_at.is_(None), Fixture.status == "scheduled")
+            .order_by(Fixture.publish_at))]
     return render_template(
         "fixtures.html",
         fixtures=[f for f in rows if f.status == "scheduled"],
         called_off=[f for f in rows if f.status != "scheduled"],
+        waiting=waiting,
         flags=flags,
         can_post=current_user.can_post_fixtures,
     )
 
 
+# ---------- entering campus-wide meetups, one or many ----------
+
+# At most this many in one go. Twenty is a season of home games; a typo
+# that adds a thousand rows should be refused, not posted.
+FIXTURE_ROWS_MAX = 20
+# Every field a row sends. Read as lists, one entry per row, in the order
+# the rows are on the page; a single-row form is a batch of one, so the
+# names are the ones the form has always posted.
+FIXTURE_FIELDS = ("title", "sport", "opponent", "venue", "note",
+                  "when_on", "when_hour", "when_minute", "when_ampm",
+                  "latitude", "longitude",
+                  "appear_on", "appear_hour", "appear_minute", "appear_ampm")
+
+
+def boston_label(moment):
+    """A naive UTC moment as Boston reads it: "Tue 3 Nov at 6:30 PM"."""
+    if moment is None:
+        return ""
+    local = utc_to_boston(moment)
+    return (f"{local:%a} {local.day} {local:%b} at "
+            f"{int(local.strftime('%I'))}:{local:%M} {local:%p}")
+
+
+def fixture_rows_from(form):
+    """The rows a poster sent, as dicts of strings, in page order."""
+    lists = {f: form.getlist(f) for f in FIXTURE_FIELDS}
+    count = max((len(v) for v in lists.values()), default=0)
+    return [{f: (lists[f][i] if i < len(lists[f]) else "").strip()
+             for f in FIXTURE_FIELDS} for i in range(count)]
+
+
+def _form_date(text):
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date() if text else None
+    except ValueError:
+        return None
+
+
+def read_fixture_row(row, now):
+    """One row checked: (values, None), or (None, what is wrong with it).
+
+    Today's rules for a single fixture, unchanged and in the same order, and
+    two more: a row must have its pin (there is no default spot), and a row
+    that is to appear later must appear before it starts. An appear time
+    already past means now.
+    """
+    on = _form_date(row["when_on"])
+    minute = row["when_minute"] or WHEN_MINUTES[0]
+    try:
+        latitude, longitude = float(row["latitude"]), float(row["longitude"])
+    except ValueError:
+        latitude = longitude = None
+
+    if not row["title"]:
+        return None, "Give it a title, so people know what it is."
+    if len(row["title"]) > FIXTURE_TITLE_MAX:
+        return None, f"Keep the title under {FIXTURE_TITLE_MAX} characters."
+    if len(row["sport"]) > FIXTURE_SPORT_MAX:
+        return None, f"Keep the sport under {FIXTURE_SPORT_MAX} characters."
+    if len(row["opponent"]) > FIXTURE_OPPONENT_MAX:
+        return None, f"Keep the opponent under {FIXTURE_OPPONENT_MAX} characters."
+    if on is None:
+        return None, "Pick the date of the game."
+    if (row["when_hour"] not in WHEN_HOURS or row["when_ampm"] not in WHEN_MERIDIEM
+            or minute not in WHEN_MINUTES):
+        return None, "Pick what time it starts."
+    if not row["venue"]:
+        return None, "Name the venue."
+    if len(row["venue"]) > FIXTURE_VENUE_MAX:
+        return None, f"Keep the venue under {FIXTURE_VENUE_MAX} characters."
+    if len(row["note"]) > FIXTURE_NOTE_MAX:
+        return None, f"Keep the note under {FIXTURE_NOTE_MAX} characters."
+    if latitude is None or longitude is None:
+        return None, "Put the pin on the map so people can find it."
+    # The same rule a student's flag obeys, checked with the same function.
+    if not map_flag_point_is_allowed(latitude, longitude):
+        return None, "Put the pin inside the campus boundary."
+
+    starts_at = boston_to_utc(on, row["when_hour"], minute, row["when_ampm"])
+    publish_at = None
+    if row["appear_on"] or row["appear_hour"] or row["appear_ampm"]:
+        appear_on = _form_date(row["appear_on"])
+        appear_minute = row["appear_minute"] or WHEN_MINUTES[0]
+        if appear_on is None:
+            return None, ("Pick the day it should appear, or clear its time "
+                          "to post it straight away.")
+        if (row["appear_hour"] not in WHEN_HOURS
+                or row["appear_ampm"] not in WHEN_MERIDIEM
+                or appear_minute not in WHEN_MINUTES):
+            return None, "Pick what time it should appear."
+        publish_at = boston_to_utc(appear_on, row["appear_hour"], appear_minute,
+                                   row["appear_ampm"])
+        if publish_at >= starts_at:
+            return None, "It has to appear before it starts."
+        if publish_at <= now:
+            publish_at = None
+    return {
+        "title": row["title"], "sport": row["sport"] or None,
+        "opponent": row["opponent"] or None, "venue": row["venue"],
+        "note": row["note"] or None, "starts_at": starts_at,
+        "when_text": when_label(on, row["when_hour"], minute, row["when_ampm"]) or "",
+        "latitude": latitude, "longitude": longitude, "publish_at": publish_at,
+    }, None
+
+
+def fixture_row_of(fixture):
+    """A saved fixture as the strings its row on the form shows."""
+    def clock(moment, prefix):
+        if moment is None:
+            return {f"{prefix}_on": "", f"{prefix}_hour": "",
+                    f"{prefix}_minute": "", f"{prefix}_ampm": ""}
+        local = utc_to_boston(moment)
+        return {f"{prefix}_on": local.strftime("%Y-%m-%d"),
+                f"{prefix}_hour": str(int(local.strftime("%I"))),
+                f"{prefix}_minute": local.strftime("%M"),
+                f"{prefix}_ampm": local.strftime("%p")}
+    return {"title": fixture.title, "sport": fixture.sport or "",
+            "opponent": fixture.opponent or "", "venue": fixture.venue,
+            "note": fixture.note or "",
+            "latitude": f"{fixture.latitude:.6f}", "longitude": f"{fixture.longitude:.6f}",
+            **clock(fixture.starts_at, "when"), **clock(fixture.publish_at, "appear")}
+
+
+def publish_fixture(fixture):
+    """Put a fixture up for everybody. Inside the caller's transaction.
+
+    The three things posting one has always done -- its map pin, its line in
+    the campus room carrying the pin's link, and a notice to every student --
+    now done at the moment it is meant to appear rather than the moment it
+    was typed. Returns how many students were told. One whose start has
+    already gone by (the site was down at its moment) is marked up but not
+    announced: telling the campus about something that is over helps nobody.
+    """
+    now = datetime.utcnow()
+    fixture.published_at = fixture.published_at or now
+    if fixture.starts_at <= now:
+        return 0
+    flag = make_fixture_flag(fixture)
+    # chat.html already unfurls a /find?flag=... link into a card, so the
+    # announcement needs no markup of its own and cannot drift from the map.
+    said = " ".join(p for p in (f"{fixture.title}:", fixture.billing(),
+                                f"{fixture.when_text}.") if p)
+    if flag is not None:
+        said += " " + url_for("find_game", flag=flag.public_id, _external=False)
+    announcement = Message(user_id=fixture.posted_by, body=said)
+    attach_parent(announcement, COMMUNITY, None)
+    db.session.add(announcement)
+    return notices.fixture_posted(fixture.title, fixture.billing(), fixture.when_text)
+
+
+def claim_fixture(fixture_id, now):
+    """Mark one fixture published, if nobody else has. Returns whether we did.
+
+    One UPDATE with the condition in it, the way claim_digest takes a
+    summary: gunicorn runs more than one worker, each running the publisher,
+    and two of them announcing the same meetup would tell every student
+    twice. The row stays locked until the caller commits, so the second
+    worker's UPDATE waits, re-reads, and finds nothing to claim.
+    """
+    return db.session.execute(
+        db.update(Fixture)
+        .where(Fixture.id == fixture_id, Fixture.published_at.is_(None),
+               Fixture.status == "scheduled")
+        .values(published_at=now)
+    ).rowcount == 1
+
+
+def publish_due_fixtures(now=None):
+    """Publish every scheduled fixture whose moment has come. Returns how many."""
+    now = now or datetime.utcnow()
+    due = db.session.scalars(
+        db.select(Fixture.id).where(
+            Fixture.status == "scheduled", Fixture.published_at.is_(None),
+            Fixture.publish_at.is_not(None), Fixture.publish_at <= now)
+        .order_by(Fixture.publish_at)).all()
+    done = 0
+    for fixture_id in due:
+        if not claim_fixture(fixture_id, now):
+            db.session.rollback()
+            continue
+        fixture = db.session.get(Fixture, fixture_id)
+        db.session.refresh(fixture)
+        publish_fixture(fixture)
+        db.session.commit()
+        done += 1
+    return done
+
+
+def fixture_form(rows, problems=None, editing=None):
+    """The entry page, with these rows on it (and what is wrong with them)."""
+    return render_template(
+        "fixture_new.html", rows=rows, problems=problems or [None] * len(rows),
+        editing=editing, bounds=MAP_FLAG_BOUNDS, title_max=FIXTURE_TITLE_MAX,
+        places=APPROVED_MAP_LOCATIONS, hours=WHEN_HOURS, minutes=WHEN_MINUTES,
+        meridiem=WHEN_MERIDIEM, rows_max=FIXTURE_ROWS_MAX)
+
+
+def read_fixture_rows(rows, now):
+    """Every row checked. Returns (values for each, problem for each, any bad)."""
+    if not rows:
+        rows = [{f: "" for f in FIXTURE_FIELDS}]
+    read = [read_fixture_row(row, now) for row in rows]
+    problems = [problem for _, problem in read]
+    if len(rows) > FIXTURE_ROWS_MAX:
+        problems = [f"Up to {FIXTURE_ROWS_MAX} at a time."] + problems[1:]
+    return [values for values, _ in read], problems, any(problems)
+
+
 @app.route("/fixtures/new", methods=["GET", "POST"])
 @login_required
 def fixture_new():
+    """One campus-wide meetup or many, each up now or at a time of its own.
+
+    All or nothing: if any row has a problem, none of them is saved, and the
+    page comes back with every row as it was typed and each problem on its
+    row -- pins included, so nobody places twenty of them twice.
+    """
     away = not_poster()
     if away:
         return away
-
     if request.method == "GET":
-        return render_template("fixture_new.html", bounds=MAP_FLAG_BOUNDS,
-                               title_max=FIXTURE_TITLE_MAX,
-                               places=APPROVED_MAP_LOCATIONS,
-                               hours=WHEN_HOURS, minutes=WHEN_MINUTES,
-                               meridiem=WHEN_MERIDIEM)
+        return fixture_form([{f: "" for f in FIXTURE_FIELDS}])
 
-    title = request.form.get("title", "").strip()
-    sport = request.form.get("sport", "").strip()
-    opponent = request.form.get("opponent", "").strip()
-    venue = request.form.get("venue", "").strip()
-    note = request.form.get("note", "").strip()
-    on_text = request.form.get("when_on", "").strip()
-    hour = request.form.get("when_hour", "").strip()
-    minute = request.form.get("when_minute", "").strip() or WHEN_MINUTES[0]
-    ampm = request.form.get("when_ampm", "").strip()
+    now = datetime.utcnow()
+    rows = fixture_rows_from(request.form)
+    values, problems, bad = read_fixture_rows(rows, now)
+    if bad:
+        many = len(rows) > 1
+        flash("Nothing was saved yet. " + (
+            "Fix the rows marked below." if many else problems[0]))
+        return fixture_form(rows or [{f: "" for f in FIXTURE_FIELDS}], problems)
 
-    on = None
-    if on_text:
-        try:
-            on = datetime.strptime(on_text, "%Y-%m-%d").date()
-        except ValueError:
-            on = None
-
-    # Read before the checks, so a refused post can hand the point back to
-    # the form rather than making somebody place the pin twice.
-    try:
-        latitude = float(request.form.get("latitude", ""))
-        longitude = float(request.form.get("longitude", ""))
-    except (TypeError, ValueError):
-        latitude = longitude = None
-
-    if not title:
-        flash("Give it a title, so people know what it is.")
-    elif len(title) > FIXTURE_TITLE_MAX:
-        flash(f"Keep the title under {FIXTURE_TITLE_MAX} characters.")
-    elif len(sport) > FIXTURE_SPORT_MAX:
-        flash(f"Keep the sport under {FIXTURE_SPORT_MAX} characters.")
-    elif len(opponent) > FIXTURE_OPPONENT_MAX:
-        flash(f"Keep the opponent under {FIXTURE_OPPONENT_MAX} characters.")
-    elif on is None:
-        flash("Pick the date of the game.")
-    elif hour not in WHEN_HOURS or ampm not in WHEN_MERIDIEM \
-            or minute not in WHEN_MINUTES:
-        flash("Pick what time it starts.")
-    elif not venue:
-        flash("Name the venue.")
-    elif len(venue) > FIXTURE_VENUE_MAX:
-        flash(f"Keep the venue under {FIXTURE_VENUE_MAX} characters.")
-    elif len(note) > FIXTURE_NOTE_MAX:
-        flash(f"Keep the note under {FIXTURE_NOTE_MAX} characters.")
-    elif latitude is None or longitude is None:
-        flash("Put the pin on the map so people can find it.")
-    # The same rule a student's flag obeys, checked with the same function.
-    elif not map_flag_point_is_allowed(latitude, longitude):
-        flash("Put the pin inside the campus boundary.")
-    else:
-        starts_at = boston_to_utc(on, hour, minute, ampm)
+    told, now_up = 0, 0
+    for v in values:
         fixture = Fixture(
-            title=title, sport=sport or None, opponent=opponent or None,
-            starts_at=starts_at,
-            when_text=when_label(on, hour, minute, ampm) or "",
-            venue=venue, latitude=latitude, longitude=longitude,
-            note=note or None, posted_by=current_user.id,
+            title=v["title"], sport=v["sport"], opponent=v["opponent"],
+            starts_at=v["starts_at"], when_text=v["when_text"], venue=v["venue"],
+            latitude=v["latitude"], longitude=v["longitude"], note=v["note"],
+            posted_by=current_user.id, publish_at=v["publish_at"],
         )
         db.session.add(fixture)
         db.session.flush()
-        flag = make_fixture_flag(fixture)
+        if v["publish_at"] is None:
+            told = max(told, publish_fixture(fixture))
+            now_up += 1
+    db.session.commit()
 
-        # The campus room carries it, with the flag's own link in the
-        # sentence: chat.html already unfurls a /find?flag=... link into a
-        # card, so this needs no markup of its own and cannot drift from what
-        # the map says.
-        said = " ".join(p for p in (f"{fixture.title}:", fixture.billing(),
-                                    f"{fixture.when_text}.") if p)
-        if flag is not None:
-            said += " " + url_for("find_game", flag=flag.public_id,
-                                  _external=False)
-        announcement = Message(user_id=current_user.id, body=said)
-        attach_parent(announcement, COMMUNITY, None)
-        db.session.add(announcement)
+    later = len(values) - now_up
+    if len(values) == 1:
+        flash(f"Posted. {told} student{'' if told == 1 else 's'} told." if now_up
+              else f"Saved. It appears {boston_label(values[0]['publish_at'])}.")
+    else:
+        parts = [f"{len(values)} meetups saved."]
+        if now_up:
+            parts.append(f"{now_up} {'is' if now_up == 1 else 'are'} up now.")
+        if later:
+            parts.append(f"{later} appear{'s' if later == 1 else ''} at "
+                         f"{'its' if later == 1 else 'their'} time.")
+        flash(" ".join(parts))
+    return redirect(url_for("fixtures"))
 
-        told = notices.fixture_posted(fixture.title, fixture.billing(),
-                                      fixture.when_text)
+
+def waiting_fixture(fixture_id):
+    """A fixture that has not appeared yet, or None."""
+    fixture = db.session.get(Fixture, fixture_id)
+    if fixture is None or fixture.status != "scheduled" or fixture.published_at:
+        return None
+    return fixture
+
+
+@app.route("/fixtures/<int:fixture_id>/edit", methods=["GET", "POST"])
+@login_required
+def fixture_edit(fixture_id):
+    """Change one that has not appeared yet. The entry page, with one row."""
+    away = not_poster()
+    if away:
+        return away
+    fixture = waiting_fixture(fixture_id)
+    if fixture is None:
+        flash("That one is already up, or no longer on the list.")
+        return redirect(url_for("fixtures"))
+    if request.method == "GET":
+        return fixture_form([fixture_row_of(fixture)], editing=fixture.id)
+
+    rows = fixture_rows_from(request.form)[:1]
+    values, problems, bad = read_fixture_rows(rows, datetime.utcnow())
+    if bad:
+        flash("Nothing was saved yet. " + problems[0])
+        return fixture_form(rows, problems, editing=fixture.id)
+    v = values[0]
+    for key in ("title", "sport", "opponent", "starts_at", "when_text", "venue",
+                "latitude", "longitude", "note", "publish_at"):
+        setattr(fixture, key, v[key])
+    if v["publish_at"] is None and claim_fixture(fixture.id, datetime.utcnow()):
+        db.session.refresh(fixture)
+        told = publish_fixture(fixture)
         db.session.commit()
         flash(f"Posted. {told} student{'' if told == 1 else 's'} told.")
-        return redirect(url_for("fixtures"))
+    else:
+        db.session.commit()
+        flash(f"Saved. It appears {boston_label(fixture.publish_at)}.")
+    return redirect(url_for("fixtures"))
 
-    return redirect(url_for("fixture_new"))
+
+@app.route("/fixtures/<int:fixture_id>/publish", methods=["POST"])
+@login_required
+def fixture_publish(fixture_id):
+    """Put a waiting one up now, rather than at its time."""
+    away = not_poster()
+    if away:
+        return away
+    fixture = waiting_fixture(fixture_id)
+    if fixture is None or not claim_fixture(fixture.id, datetime.utcnow()):
+        db.session.rollback()
+        flash("That one is already up, or no longer on the list.")
+        return redirect(url_for("fixtures"))
+    db.session.refresh(fixture)
+    told = publish_fixture(fixture)
+    db.session.commit()
+    flash(f"{fixture.title} is up. {told} student{'' if told == 1 else 's'} told.")
+    return redirect(url_for("fixtures"))
 
 
 @app.route("/fixtures/<int:fixture_id>/cancel", methods=["POST"])
@@ -5046,7 +5543,8 @@ def fixture_cancel(fixture_id):
         return redirect(url_for("fixtures"))
 
     fixture.status = "cancelled"
-    # Its pin comes down with it, the way post_close takes a meetup's.
+    # Its pin comes down with it, the way post_close takes a meetup's. One
+    # that never appeared has none, and is simply never announced.
     db.session.execute(db.delete(MapFlag).where(MapFlag.fixture_id == fixture.id))
     db.session.commit()
     flash(f"{fixture.title} called off.")
@@ -5133,12 +5631,10 @@ def admin_set_poster(user_id):
 # optional. db_ops is imported lazily: it reads .env and opens psycopg2
 # connections of its own, and nothing else in the app needs it.
 #
-# Two commands cannot run from here against the database the app is using,
-# and no amount of confirmation changes that. `wipe` and `clone` both take a
-# backup with CREATE DATABASE ... TEMPLATE, which Postgres refuses while
-# anything is connected to the source -- and this request IS a connection. A
-# handler cannot close the pool it is running inside. For those two, against
-# the current database, the panel shows the command to paste and says why.
+# Every tool here acts on the database the site is running on. `wipe` and
+# `clone` are not offered at all: both take a backup with CREATE DATABASE
+# ... TEMPLATE, which Postgres refuses while anything is connected to the
+# source, and this request IS a connection. They stay in dbtool.py.
 
 # One job at a time, in a thread, polled by the page. The live channel has
 # the same shape. A second job is refused rather than queued: these are
@@ -5149,73 +5645,86 @@ DB_JOB_LOCK = threading.Lock()
 
 
 def db_commands():
-    """What the panel offers, and what each one needs before it runs.
+    """The Site tools the admin page offers, in the order it shows them.
 
-    `writes` means it needs the typed confirmation; a read-only command runs
-    on one click. `local_only` marks the two that cannot act on the database
-    this process is connected to.
+    Every one acts on the database this site is running on -- dev on a
+    laptop, production on the server -- and runs on one click. `danger`
+    marks the three that remove things, which ask for a second tap first.
+    `dev_only` marks the demo students, which are not offered on a real
+    site. `needs` names the field a tool reads. The comparison with live,
+    refreshing the dev copy and clearing for real students stay in
+    dbtool.py: the first two are about two databases, and the last cannot
+    run while the site is connected to the one it backs up.
     """
     return [
-        {"id": "status", "label": "Compare dev and live",
-         "note": "Structure only, read-only in both directions.",
-         "writes": False, "live": False, "local_only": False},
-        {"id": "migrate-list", "label": "List migrations",
-         "note": "Every migration, applied or pending.",
-         "writes": False, "live": True, "local_only": False},
-        {"id": "migrate-all", "label": "Run every pending migration",
-         "note": "In order, each in its own transaction.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "admin-list", "label": "List admins",
-         "note": "Who reviews hub requests.",
-         "writes": False, "live": True, "local_only": False},
-        {"id": "seed-questions", "label": "Seed the questionnaire",
-         "note": "Adds or updates; removes nothing.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "seed-clubs", "label": "Seed the hubs",
-         "note": "Adds or updates; removes nothing.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "seed-activities", "label": "Seed the activities",
-         "note": "Adds or updates; removes nothing.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "seed-demo", "label": "Seed the demo students",
-         "note": "32 accounts that cluster, for the matcher. Slow: it "
-                 "hashes a password each.",
-         "writes": True, "live": True, "local_only": False},
+        {"id": "migrate-list", "label": "Check for database updates",
+         "note": "Lists every structural update the app knows about and "
+                 "whether this database has it yet. Changes nothing.",
+         "danger": False, "dev_only": False},
+        {"id": "migrate-all", "label": "Install database updates",
+         "note": "Applies any updates this database is missing, one at a "
+                 "time and in order. Each one either completes fully or not "
+                 "at all, so a failure leaves the database as it was. Run "
+                 "this after deploying new code.",
+         "danger": False, "dev_only": False},
+        {"id": "admin-list", "label": "List the admins",
+         "note": "Shows who can review hub requests and use this page. "
+                 "Changes nothing.",
+         "danger": False, "dev_only": False},
+        {"id": "seed-questions", "label": "Load the questionnaire",
+         "note": "Adds the onboarding questions and their answer choices, "
+                 "and updates any whose wording changed. It never removes "
+                 "anything, so it is safe to run again.",
+         "danger": False, "dev_only": False},
+        {"id": "seed-clubs", "label": "Load the hubs",
+         "note": "The same, for the list of hubs (clubs) and the interests "
+                 "each is tagged with.",
+         "danger": False, "dev_only": False},
+        {"id": "seed-activities", "label": "Load the activities",
+         "note": "The same, for the games and activities people can meet "
+                 "up for, and where each can be played.",
+         "danger": False, "dev_only": False},
+        {"id": "seed-demo", "label": "Add the demo students",
+         "note": "Creates 32 made-up students whose answers fall into clear "
+                 "groups, so matching can be tried out. Takes about a "
+                 "minute. Only offered on a development database.",
+         "danger": False, "dev_only": True},
         {"id": "clear-demo", "label": "Remove the demo students",
-         "note": "Deletes them and everything they made.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "clear-dead-invites", "label": "Clear unanswerable invites",
-         "note": "Game invites with no message and no notice.",
-         "writes": True, "live": True, "local_only": False},
-        {"id": "reset-catalogue", "label": "Replace questions and hubs",
-         "note": "Clears every answer, so everybody is asked again.",
-         "writes": True, "live": True, "local_only": False},
+         "note": "Deletes the demo students and everything they made.",
+         "danger": True, "dev_only": True},
+        {"id": "clear-dead-invites", "label": "Clear unanswerable game invites",
+         "note": "Removes game invites that have lost both their chat "
+                 "message and their notification, so nobody could accept or "
+                 "decline them anyway.",
+         "danger": False, "dev_only": False},
+        {"id": "reset-catalogue", "label": "Replace the questionnaire and hubs",
+         "note": "Swaps in the current questions and hubs and clears "
+                 "everyone's answers, so every student is asked again the "
+                 "next time they sign in.",
+         "danger": True, "dev_only": False},
         {"id": "delete-account", "label": "Delete one account",
-         "note": "By email. Takes everything attached with it.",
-         "writes": True, "live": True, "local_only": False,
-         "needs": "email"},
-        {"id": "wipe", "label": "Clear it for real students",
-         "note": "Keeps the catalogue and whichever accounts you name. "
-                 "Backs up first.",
-         "writes": True, "live": True, "local_only": True},
-        {"id": "clone", "label": "Refresh the dev copy of live",
-         "note": "CREATE DATABASE ... TEMPLATE. Replaces dev entirely.",
-         "writes": True, "live": False, "local_only": True},
+         "note": "Permanently deletes the account with the address you "
+                 "enter, and everything attached to it: messages, games, "
+                 "friendships.",
+         "danger": True, "dev_only": False, "needs": "email"},
     ]
+
+
+def site_tools():
+    """The tools this site may run: the demo ones only on a dev database."""
+    return [c for c in db_commands() if DEV_DB or not c["dev_only"]]
 
 
 def run_db_command(command, live, apply_, email=None):
     """Call into db_ops. Returns a Result. Runs on the job thread."""
     import db_ops
 
-    if command == "status":
-        return db_ops.status(echo=False)
     if command == "migrate-list":
         rows, text = db_ops.migration_status(live, echo=False)
         waiting = [n for n, _, done in rows if not done]
         return db_ops.Result(True, 0, False,
-                             f"{len(waiting)} pending" if waiting
-                             else "all applied", text)
+                             f"{len(waiting)} update(s) waiting" if waiting
+                             else "This database has every update.", text)
     if command == "migrate-all":
         return db_ops.run_pending(live, apply_, echo=False)
     if command == "admin-list":
@@ -5241,10 +5750,6 @@ def run_db_command(command, live, apply_, email=None):
     if command == "delete-account":
         return db_ops.run_op("delete account", db_ops.delete_account_work,
                              live, apply_, echo=False, email=email)
-    if command == "wipe":
-        return db_ops.wipe(live=live, apply_=apply_, echo=False)
-    if command == "clone":
-        return db_ops.clone(apply_=apply_, echo=False)
     raise ValueError(f"no such command {command!r}")
 
 
@@ -5268,55 +5773,29 @@ def db_job_thread(command, live, apply_, email):
 @app.route("/admin/db/run", methods=["POST"])
 @login_required
 def admin_db_run():
-    """Start one database command, after the confirmation is typed right."""
+    """Start one Site tool, against the database this site is running on.
+
+    One click, no dry run. The three that remove things carry `sure=yes`,
+    which the page sends only after the button's second tap; a request
+    without it is refused, so the confirmation is a rule and not just a
+    script. The demo tools are refused off a development database.
+    """
     away = not_admin()
     if away:
         return away
-    import db_ops
 
     command = request.form.get("command", "")
-    known = {c["id"]: c for c in db_commands()}
-    spec = known.get(command)
+    spec = {c["id"]: c for c in db_commands()}.get(command)
     if spec is None:
-        return jsonify({"error": "no such command"}), 400
-
-    live = spec["live"] and request.form.get("live") == "yes"
-    apply_ = request.form.get("apply") == "yes"
-    typed = request.form.get("confirm", "").strip()
+        return jsonify({"error": "That isn't one of the tools."}), 400
+    if spec["dev_only"] and not DEV_DB:
+        return jsonify({"error": "That one only runs on a development "
+                                 "database, not the real site."}), 403
+    if spec["danger"] and request.form.get("sure") != "yes":
+        return jsonify({"error": "Press it again to confirm."}), 400
     email = request.form.get("email", "").strip() or None
-
-    # The typed confirmation guards anything that would write. A dry run
-    # changes nothing, so it does not need one -- which is what makes "look
-    # first, then apply" the easy path rather than a discipline.
-    if apply_ and spec["writes"]:
-        name, _ = db_ops.where(live)
-        if typed != name:
-            return jsonify({
-                "error": f"type {name} exactly to confirm",
-            }), 400
-        if live and request.form.get("live_sure") != "yes":
-            return jsonify({"error": "tick the live box as well"}), 400
-
-    # The two that cannot act on the database this process is holding open.
-    if spec["local_only"] and apply_:
-        target, _ = db_ops.where(live)
-        here, _ = db_ops.where(False)
-        if command == "clone" or target == here:
-            flags = []
-            if command == "wipe" and live:
-                flags.append("--live")
-            flags.append("--apply")
-            return jsonify({
-                "blocked": True,
-                "command": f"python dbtool.py {command} "
-                           + " ".join(flags),
-                "why": "This takes a backup with CREATE DATABASE ... "
-                       "TEMPLATE, which Postgres refuses while anything is "
-                       "connected to the source. This page is itself a "
-                       "connection, so it cannot be run from here. Paste "
-                       "the command above into a terminal with the app "
-                       "stopped.",
-            }), 409
+    if spec.get("needs") == "email" and not email:
+        return jsonify({"error": "Enter the account's email address."}), 400
 
     with DB_JOB_LOCK:
         if DB_JOB["running"]:
@@ -5327,10 +5806,97 @@ def admin_db_run():
                       who=current_user.email)
 
     worker = threading.Thread(
-        target=db_job_thread, args=(command, live, apply_, email),
+        target=db_job_thread, args=(command, False, True, email),
         name=f"db-{command}", daemon=True)
     worker.start()
-    return jsonify({"started": command, "apply": apply_, "live": live})
+    return jsonify({"started": command})
+
+
+# ---- finishing a sign-up for somebody stuck at /verify
+
+def finish_verification(user):
+    """What a right code does at /verify, done by an admin instead."""
+    user.email_verified = True
+    user.verification_code_hash = None
+    user.verification_expires_at = None
+    user.verification_attempts = 0
+
+
+def send_verified_email(user):
+    """Tell somebody their account was verified for them. Returns None, or
+    the mail server's reason it was not sent."""
+    subject, text, html = emails.verified(user.name, site_url("/login"))
+    try:
+        mail.send(MailMessage(subject=subject, recipients=[user.email],
+                              body=text, html=html))
+    except Exception as error:  # noqa: BLE001 -- reported to the admin as it is
+        app.logger.exception("verified email to %s failed", user.email)
+        return f"{type(error).__name__}: {error}"
+    return None
+
+
+def waiting_signups():
+    """Every account still waiting at /verify, newest first."""
+    return db.session.scalars(
+        db.select(User).where(User.email_verified.is_(False))
+        .order_by(User.id.desc())).all()
+
+
+def verify_answer(results):
+    """The page's JSON, or a flash and the admin page without JavaScript."""
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"results": results})
+    for r in results:
+        flash(r["said"])
+    return redirect(url_for("admin") + "#tools")
+
+
+def verify_one(user):
+    finish_verification(user)
+    db.session.commit()
+    app.logger.info("%s verified %s by hand", current_user.email, user.email)
+    failed = send_verified_email(user)
+    # `verified` either way -- that is the point -- and `ok` says whether the
+    # email to tell them went too.
+    return {"id": user.id, "email": user.email, "verified": True,
+            "ok": failed is None,
+            "said": (f"{user.email} verified, and emailed." if failed is None
+                     else f"{user.email} verified, but the email couldn't be "
+                          f"sent: {failed}")}
+
+
+@app.route("/admin/accounts/<int:user_id>/verify", methods=["POST"])
+@login_required
+def admin_verify(user_id):
+    """Finish one stuck sign-up, and tell them."""
+    away = not_admin()
+    if away:
+        return away
+    user = db.session.get(User, user_id)
+    if user is None:
+        return verify_answer([{"id": user_id, "ok": False,
+                               "said": "That account no longer exists."}])
+    if user.email_verified:
+        return verify_answer([{"id": user_id, "ok": True,
+                               "said": f"{user.email} is already verified."}])
+    return verify_answer([verify_one(user)])
+
+
+@app.route("/admin/accounts/verify-all", methods=["POST"])
+@login_required
+def admin_verify_all():
+    """Finish every stuck sign-up at once. Asked twice on the page."""
+    away = not_admin()
+    if away:
+        return away
+    if request.form.get("sure") != "yes":
+        return verify_answer([{"id": None, "ok": False,
+                               "said": "Press it again to confirm."}])
+    waiting = waiting_signups()
+    if not waiting:
+        return verify_answer([{"id": None, "ok": True,
+                               "said": "Nobody is waiting."}])
+    return verify_answer([verify_one(user) for user in waiting])
 
 
 @app.route("/admin/db/output")
@@ -5910,6 +6476,8 @@ def match_respond(other_id, action):
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
+        # A signup that expired frees its address now, not at the next sweep.
+        sweep_unverified()
         # Two fields rather than one box. The surname is now required, and a
         # form that asks for it by name is a form you can fill in correctly
         # the first time -- one "Your name" box that rejects "Ada" afterwards
@@ -5963,7 +6531,8 @@ def register():
             )
             db.session.add(user)
             db.session.commit()
-            issue_verification_code(user)
+            if not issue_verification_code(user):
+                flash(CODE_NOT_SENT)
             session["pending_user_id"] = user.id
             return redirect(url_for("verify"))
 
@@ -5973,9 +6542,27 @@ def register():
                            pronoun_options=PRONOUNS)
 
 
+def pending_signup():
+    """The account waiting on /verify, or None.
+
+    One whose code ran out unverified is removed here rather than at the
+    next sweep, and the student is told to register again -- which is also
+    what they are told when the sweep got there first.
+    """
+    pending = session.get("pending_user_id")
+    user = db.session.get(User, pending or 0)
+    if pending and (user is None or signup_expired(user)):
+        if user is not None:
+            sweep_unverified()
+        session.pop("pending_user_id", None)
+        flash(SIGNUP_EXPIRED)
+        return None
+    return user
+
+
 @app.route("/verify", methods=["GET", "POST"])
 def verify():
-    user = db.session.get(User, session.get("pending_user_id", 0))
+    user = pending_signup()
 
     if user is None:
         return redirect(url_for("register"))
@@ -6007,19 +6594,20 @@ def verify():
             db.session.commit()
             flash("Incorrect code.")
 
-    return render_template("verify.html", email=user.email)
+    return render_template("verify.html", email=user.email,
+                           minutes=int(CODE_TTL.total_seconds() // 60))
 
 
 @app.route("/verify/resend", methods=["POST"])
 def resend_code():
-    user = db.session.get(User, session.get("pending_user_id", 0))
+    user = pending_signup()
 
     if user is None:
         return redirect(url_for("register"))
 
     if not user.email_verified:
-        issue_verification_code(user)
-        flash("A new code is on its way.")
+        flash("A new code is on its way." if issue_verification_code(user)
+              else CODE_NOT_SENT)
 
     return redirect(url_for("verify"))
 
@@ -6031,10 +6619,16 @@ def login():
         user = db.session.scalar(db.select(User).filter_by(email=email))
 
         if user and check_password_hash(user.password_hash, request.form["password"]):
+            if not user.email_verified and signup_expired(user):
+                # Past its code: gone, and they start again.
+                sweep_unverified()
+                flash(SIGNUP_EXPIRED)
+                return redirect(url_for("register"))
             if not user.email_verified:
-                issue_verification_code(user)
+                went = issue_verification_code(user)
                 session["pending_user_id"] = user.id
-                flash("Please verify your email first. We sent you a new code.")
+                flash("Please verify your email first. "
+                      + ("We sent you a new code." if went else CODE_NOT_SENT))
                 return redirect(url_for("verify"))
 
             login_user(user)
@@ -6528,13 +7122,44 @@ def map_flag_point_is_allowed(latitude, longitude):
 
 # ---------- event flags: one per in-person meetup ----------
 
-def place_for_location(text):
-    """The approved landmark a meetup's location names, if it names one.
+# Where each preset meetup place is: the landmark it is at or beside. The
+# catalogue's places ("Indoor Court", "Gaming Lounge") almost never contain a
+# landmark's name, so without this nearly every meetup's pin landed on the
+# Campus Center. Close enough to find, not surveyed -- the pin can be moved.
+# Places with no landmark near them (the Harborwalk, a dorm) are left out.
+PLACE_LANDMARKS = {
+    "Indoor Court": "clark-athletic-center",
+    "Outdoor Court": "clark-athletic-center",
+    "Gym": "clark-athletic-center",
+    "Soccer Field": "clark-athletic-center",
+    "Softball Field": "clark-athletic-center",
+    "Tennis Courts": "clark-athletic-center",
+    "Beach Court": "clark-athletic-center",
+    "Game Room": "campus-center",
+    "Gaming Lounge": "campus-center",
+    "Campus Center": "campus-center",
+}
 
-    The activity catalogue's locations read like "Campus Center, 2nd floor"
-    or "Clark Athletic Center", so a landmark's name inside the text is
-    enough. Returns (key, place) or (None, None).
+
+def place_points():
+    """Each mapped preset place as {name: {lat, lng, near}}, for the form on
+    /find to put its pin on before anybody touches the map."""
+    return {name: {"lat": APPROVED_MAP_LOCATIONS[key]["latitude"],
+                   "lng": APPROVED_MAP_LOCATIONS[key]["longitude"],
+                   "near": "Near " + APPROVED_MAP_LOCATIONS[key]["name"]}
+            for name, key in PLACE_LANDMARKS.items()}
+
+
+def place_for_location(text):
+    """The approved landmark a meetup's location is at, if it is at one.
+
+    A preset place is looked up in PLACE_LANDMARKS. Anything else -- the
+    catalogue reads like "Campus Center, 2nd floor" -- is matched by a
+    landmark's name inside the text. Returns (key, place) or (None, None).
     """
+    key = PLACE_LANDMARKS.get((text or "").strip())
+    if key:
+        return key, APPROVED_MAP_LOCATIONS[key]
     folded = (text or "").lower()
     for key, place in APPROVED_MAP_LOCATIONS.items():
         if place["name"].lower() in folded:
@@ -6550,33 +7175,46 @@ def event_flag_deadline(post):
     return (post.created_at or datetime.utcnow()) + MEETUP_CHAT_DEFAULT
 
 
-def make_event_flag(post):
+def make_event_flag(post, point=None):
     """Drop the map flag for an in-person meetup. Called inside the
     transaction that creates the meetup; the caller commits.
 
-    It starts on the landmark the meetup's location names (or the Campus
-    Center), seen only by the people who are in. Returns None for a meetup
-    whose day has already passed.
+    `point` is (latitude, longitude) where its author put the pin on /find,
+    already checked by the caller. Without one it goes on the landmark its
+    place is at (or the Campus Center).
+
+    A meetup posted to the whole campus is on everybody's map from the
+    start: that is what the map is for. One posted inside a chat, a club or
+    a one-on-one is seen only by the people who are in, until its author
+    makes it public. Returns None for a meetup whose day has already passed.
     """
     now = datetime.utcnow()
     expires = event_flag_deadline(post)
     if expires <= now:
         return None
-    key, place = place_for_location(post.location)
-    if place is None:
-        place = APPROVED_MAP_LOCATIONS[EVENT_FLAG_DEFAULT_PLACE]
+    if point is not None:
+        latitude, longitude = point
+        # A pin left exactly on a landmark is still that landmark.
+        key = next((k for k, p in APPROVED_MAP_LOCATIONS.items()
+                    if round(p["latitude"], 6) == round(latitude, 6)
+                    and round(p["longitude"], 6) == round(longitude, 6)), None)
+    else:
+        key, place = place_for_location(post.location)
+        if place is None:
+            place = APPROVED_MAP_LOCATIONS[EVENT_FLAG_DEFAULT_PLACE]
+        latitude, longitude = place["latitude"], place["longitude"]
     flag = MapFlag(
         public_id=str(uuid4()),
         owner_id=post.author_id,
         title=post.game[:100],
         description=(post.note or "")[:300] or None,
         category="event",
-        visibility="going",
+        visibility="public" if post.audience == "campus" else "going",
         post_id=post.id,
         location_key=key or "custom",
         location_name=(post.location or "Campus meetup point")[:120],
-        latitude=place["latitude"],
-        longitude=place["longitude"],
+        latitude=latitude,
+        longitude=longitude,
         created_at=now,
         expires_at=expires,
     )

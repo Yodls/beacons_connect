@@ -30,8 +30,9 @@ BUMP = db.func.nextval(db.literal_column("'notices_bump_seq'"))
 # counted; the panel just does not draw it.
 PANEL_LIMIT = 30
 
-# At most this many toasts from one reply, so a long absence does not bury the
-# screen in them.
+# At most this many toasts from one reply. This only bounds what is sent: the
+# page shows more than two at once as a single line with the bell's count
+# (templates/_channel.html), so a long absence does not bury the screen.
 TOAST_LIMIT = 5
 
 
@@ -411,6 +412,20 @@ def unread_count(user_id, skip_url=None):
     return state(user_id, skip_url)[1]
 
 
+def unread_by_url(user_id):
+    """How many unread things wait in each conversation: {url: total}.
+
+    Summed over `count`, so a conversation's coalesced "5 new messages" is
+    five, and a game invite or a meetup request in the same chat adds its
+    own. Only conversations (a url under /chats/), which is what the chat
+    list draws badges for; one grouped query.
+    """
+    return {url: int(total) for url, total in db.session.execute(
+        db.select(Notice.url, db.func.sum(Notice.count))
+        .where(*_unread(user_id), Notice.url.like("/chats/%"))
+        .group_by(Notice.url))}
+
+
 def recent(user_id, limit=PANEL_LIMIT):
     """What the bell draws: unread first, then newest first.
 
@@ -440,8 +455,8 @@ def since(user_id, after, skip_url=None):
     when the page rendered sends 0, and the first notice to arrive after that
     is genuinely new to it -- treating 0 as "do not know, say nothing" meant
     anybody starting from an empty bell got no toast at all until they
-    reloaded. TOAST_LIMIT is what actually keeps a long absence from burying
-    the screen.
+    reloaded. What keeps a long absence from burying the screen is the page,
+    which says more than two of these at once as one line.
     """
     return db.session.scalars(
         db.select(Notice)

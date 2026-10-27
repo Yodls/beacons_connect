@@ -2669,6 +2669,75 @@ def _applied_email_alerts(cur):
             and "meetup" in current)
 
 
+def _work_signup_expiry(cur, dbname, say):
+    """When each account was made, so an unverified one can expire.
+
+    One column on "user", and nothing backfilled. The app only ever removes
+    an unverified account that has a sign-up time -- one made under the
+    rule -- so every account already here, the students stuck behind a
+    failed email among them, is left for an admin to verify by hand rather
+    than deleted the minute the new code starts.
+    """
+    if not table_exists(cur, "user"):
+        raise Refuse(f"{dbname} has no 'user' table.")
+    users_before = count(cur, "user")
+    say(f"  {dbname}: {users_before} account(s)")
+
+    changed = 0
+    if column_exists(cur, "user", "created_at"):
+        say('  = "user".created_at already exists')
+    else:
+        cur.execute('ALTER TABLE "user" ADD COLUMN created_at TIMESTAMP')
+        say('  + added "user".created_at')
+        changed += 1
+
+    if count(cur, "user") != users_before:
+        raise Refuse(f"accounts changed {users_before} -> {count(cur, 'user')}")
+    return changed
+
+
+def _applied_signup_expiry(cur):
+    return column_exists(cur, "user", "created_at")
+
+
+def _work_fixture_schedule(cur, dbname, say):
+    """Campus-wide meetups that appear at a time their poster chooses.
+
+    Two columns on fixtures: publish_at (when it should appear) and
+    published_at (when it did). Every fixture already there went up the
+    moment it was posted, so each is stamped published at its created_at --
+    otherwise they would all vanish from the list until the app published
+    them a second time.
+    """
+    if not table_exists(cur, "fixtures"):
+        raise Refuse(f"{dbname} has no 'fixtures' table.")
+    before = count(cur, "fixtures")
+    say(f"  {dbname}: {before} fixture(s)")
+
+    changed = 0
+    for column in ("publish_at", "published_at"):
+        if column_exists(cur, "fixtures", column):
+            say(f"  = fixtures.{column} already exists")
+        else:
+            cur.execute(f"ALTER TABLE fixtures ADD COLUMN {column} TIMESTAMP")
+            say(f"  + added fixtures.{column}")
+            changed += 1
+
+    cur.execute("UPDATE fixtures SET published_at = created_at "
+                "WHERE published_at IS NULL AND publish_at IS NULL")
+    say(f"  . marked {cur.rowcount} existing fixture(s) as already published")
+    changed += cur.rowcount
+
+    if count(cur, "fixtures") != before:
+        raise Refuse(f"fixtures changed {before} -> {count(cur, 'fixtures')}")
+    return changed
+
+
+def _applied_fixture_schedule(cur):
+    return (column_exists(cur, "fixtures", "publish_at")
+            and column_exists(cur, "fixtures", "published_at"))
+
+
 # ---------------------------------------------------------- the registry
 #
 # In the order they were written, which is the order they have to run in:
@@ -2743,6 +2812,10 @@ MIGRATIONS = [
      _work_reactions, _applied_reactions),
     ("add_email_alerts", "email alerts, the summary, and a meetup notice kind",
      _work_email_alerts, _applied_email_alerts),
+    ("add_signup_expiry", "\"user\".created_at, so unverified accounts expire",
+     _work_signup_expiry, _applied_signup_expiry),
+    ("add_fixture_schedule", "fixtures.publish_at and published_at",
+     _work_fixture_schedule, _applied_fixture_schedule),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]
