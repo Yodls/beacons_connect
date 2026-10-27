@@ -62,6 +62,10 @@
       }
       .who-row:first-child { border-top: 0; }
       .acctnote { margin: 0; padding: 10px 14px 0; color: var(--muted); font-size: .88rem; }
+      .testmail { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 14px 14px 0; }
+      .testmail label { flex: 1 1 14rem; margin: 0; }
+      .testmail button { margin: 0; }
+      #email .acctnote { padding-bottom: 14px; }
       /* Long addresses wrap rather than push the chips off a phone. */
       .acct-row small { display: block; overflow-wrap: anywhere; }
       .who-row .grow { flex: 1 1 auto; min-width: 0; }
@@ -346,6 +350,31 @@
         </div>
       {% endfor %}
     </div>
+  </section>
+
+  {# A sample of any email the site sends, to any address, sent there and
+     then: the way to check the mail server works, and to see what people
+     get. The samples are made up -- nobody's real notifications go out. #}
+  <section class="win sec-chat" id="email">
+    <div class="bar">{{ ui.icon("talk") }}<span class="bar-title">Email</span><span class="grip"></span></div>
+    <form class="testmail" method="post" action="{{ url_for('admin_test_email') }}">
+      <label>Send to
+        <input type="email" name="email" required maxlength="255"
+               value="{{ current_user.email }}" autocomplete="email" />
+      </label>
+      <label>Which email
+        <select name="which">
+          {% for key, label in test_emails.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Send a test email</button>
+    </form>
+    <p class="acctnote">Sent straight away, with "[Test]" in the subject. If
+      the mail server refuses it, its own error is shown here.
+      {% if not site_url_set %}<b>SITE_URL is not set</b>, so links in
+      emails use the address this page was opened at.{% endif %}</p>
   </section>
 
   <section class="win sec-place">

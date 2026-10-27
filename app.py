@@ -2,6 +2,7 @@ import hashlib
 import mimetypes
 import os
 import secrets
+import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone, tzinfo
@@ -15,6 +16,8 @@ from dotenv import load_dotenv
 from flask import (
     Flask,
     flash,
+    g,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -22,6 +25,7 @@ from flask import (
     session,
     url_for,
 )
+from itsdangerous import BadSignature, URLSafeSerializer
 from flask_login import (
     LoginManager,
     current_user,
@@ -67,6 +71,7 @@ from models import (
     MESSAGE_PARENTS,
     Message,
     MessageReaction,
+    Notice,
     PRONOUNS,
     REACTION_NAMES,
     REACTIONS,
@@ -136,6 +141,19 @@ app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "").lower() == "true
 app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
 app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
+# Set by tests/_env.py, so no suite can send a real email.
+app.config["MAIL_SUPPRESS_SEND"] = os.environ.get("MAIL_SUPPRESS_SEND") == "1"
+
+# Email alerts and the summary (see "email alerts" further down).
+# SITE_URL is the address links in an email point at -- the site as people
+# reach it, https and all, e.g. https://beaconsconnect.example. Without it,
+# an email sent during a request uses that request's address, and the
+# summary (sent from a background thread) falls back to the last one seen.
+app.config["SITE_URL"] = os.environ.get("SITE_URL", "").strip().rstrip("/")
+# The summary runs in the app unless this says "off" (the tests do).
+app.config["EMAIL_DIGESTS"] = os.environ.get("EMAIL_DIGESTS", "on").lower() != "off"
+# Instant emails go out on a thread after the response, unless "off".
+app.config["EMAIL_ASYNC"] = os.environ.get("EMAIL_ASYNC", "on").lower() != "off"
 
 # Cross-site request forgery, in three lines, for every form in the app.
 #
@@ -264,12 +282,357 @@ def send_verification_email(user, code):
     )
 
 
+# ------------------------------------------------------------ email alerts
+#
+# Somebody who is not on the site is emailed when a friend messages them in
+# a private chat, asks to meet up there, or challenges them to a game -- and
+# every other day, if they have unread notifications nobody has emailed them
+# about. Both can be turned off, on Profile Settings or from a link in any of
+# these emails.
+#
+# One email per conversation until it is read. That rule is the bell's own:
+# a conversation's notice is bumped, not repeated, while it stays unread
+# (notices.message), and a notice is emailed about at most once
+# (Notice.emailed_at). So ten messages from Ann are one email; opening the
+# chat reads the notice, and the next message makes a new one.
+
+# "On the site": a visible tab spoke to /live this recently. A held /live
+# request is at most LIVE_WAIT (25s) old, so ninety seconds is a tab that is
+# really there, with room for a slow round trip.
+ON_SITE = timedelta(seconds=90)
+# /live is asked several times a minute per tab; the stamp is written at most
+# this often per person, so open tabs are not a stream of writes.
+SEEN_EVERY = timedelta(seconds=30)
+# The summary, at most every other day.
+DIGEST_EVERY = timedelta(hours=48)
+DIGEST_TICK = 3600          # seconds between passes of the summary thread
+DIGEST_FIRST = 300          # and before the first, so a restart is not a burst
+EMAIL_TYPES = ("alerts", "digest")
+# Where the two switches live: Profile Settings, Account and safety.
+EMAIL_SETTINGS = "/profile#safety"
+_EMAIL_SALT = "email-off"
+# The last address the site was reached at, for an email sent with no
+# request in hand (the summary) when SITE_URL is not set.
+_last_root = {"url": ""}
+
+
+def stamp_seen(user_id, now=None):
+    """Record that this person has the site open, at most every SEEN_EVERY."""
+    now = now or datetime.utcnow()
+    db.session.execute(
+        db.update(User)
+        .where(User.id == user_id,
+               db.or_(User.last_seen_at.is_(None),
+                      User.last_seen_at < now - SEEN_EVERY))
+        .values(last_seen_at=now))
+
+
+def on_site(user, now=None):
+    seen = user.last_seen_at
+    return seen is not None and (now or datetime.utcnow()) - seen < ON_SITE
+
+
+def site_url(path=""):
+    """An absolute address on the site, for a link in an email."""
+    base = app.config.get("SITE_URL") or ""
+    if not base and has_request_context():
+        base = request.url_root.rstrip("/")
+        _last_root["url"] = base
+    base = base or _last_root["url"] or "http://127.0.0.1:5000"
+    return base + path
+
+
+def _email_signer():
+    return URLSafeSerializer(app.config["SECRET_KEY"], salt=_EMAIL_SALT)
+
+
+def email_off_url(user_id, which):
+    """The link that turns one kind of email off, with no sign-in needed."""
+    return site_url("/email/off/" + _email_signer().dumps([user_id, which]))
+
+
+def _email_message(user, subject, text, html, which):
+    off = email_off_url(user.id, which)
+    return MailMessage(
+        subject=subject, recipients=[user.email], body=text, html=html,
+        # So a mail client's own Unsubscribe works, in one tap (RFC 8058).
+        extra_headers={"List-Unsubscribe": f"<{off}>",
+                       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+
+
+def maybe_email(notice, kind, what=None):
+    """Email the recipient about this notice, if that is wanted.
+
+    Not if it has already been emailed about, not to somebody who turned
+    alerts off or has no verified address, and not to somebody on the site
+    -- the bell is already showing it to them. The stamp is written here, in
+    the route's own transaction, so two messages landing at once cannot both
+    send; the email itself goes after the response (send_queued_emails).
+    """
+    if notice is None or notice.emailed_at is not None:
+        return False
+    user = db.session.get(User, notice.user_id)
+    if user is None or not user.email_alerts or not user.email_verified:
+        return False
+    if on_site(user):
+        return False
+    actor = db.session.get(User, notice.actor_id) if notice.actor_id else None
+    subject, text, html = emails.alert(
+        kind, user.name, actor.name if actor else "Somebody",
+        site_url(notice.url), email_off_url(user.id, "alerts"),
+        site_url(EMAIL_SETTINGS), what=what)
+    notice.emailed_at = datetime.utcnow()
+    db.session.flush()
+    g.setdefault("queued_emails", []).append(
+        (_email_message(user, subject, text, html, "alerts"), notice.id))
+    return True
+
+
+def _send_batch(batch):
+    """Send each email; a failed one has its notice un-stamped for the summary."""
+    with app.app_context():
+        for message, notice_id in batch:
+            try:
+                mail.send(message)
+            except Exception:  # noqa: BLE001 -- any SMTP failure is the same here
+                app.logger.exception("email alert to %s was not sent",
+                                     ",".join(message.recipients))
+                if notice_id is not None:
+                    db.session.execute(db.update(Notice)
+                                       .where(Notice.id == notice_id)
+                                       .values(emailed_at=None))
+                    db.session.commit()
+        db.session.remove()
+
+
+@app.after_request
+def send_queued_emails(response):
+    """Send what this request queued, now that it has committed.
+
+    On a thread, so a slow mail server never slows a message going out, and a
+    broken one never fails it. Not at all if the request failed: whatever it
+    queued an email about did not happen.
+    """
+    batch = g.pop("queued_emails", None)
+    if batch and response.status_code < 400:
+        if app.config["EMAIL_ASYNC"]:
+            threading.Thread(target=_send_batch, args=(batch,),
+                             name="email-alerts", daemon=True).start()
+        else:
+            _send_batch(batch)
+    return response
+
+
+# ---- the every-other-day summary
+
+def claim_digest(user_id, now):
+    """Take this person's summary for this pass, or learn somebody else has.
+
+    One UPDATE that only succeeds if no summary went out in the last 48
+    hours. Every gunicorn worker runs the summary thread; this is what makes
+    sure each person gets one email and not one per worker.
+    """
+    claimed = db.session.execute(
+        db.update(User)
+        .where(User.id == user_id,
+               db.or_(User.digest_sent_at.is_(None),
+                      User.digest_sent_at < now - DIGEST_EVERY))
+        .values(digest_sent_at=now)
+        .returning(User.id)).first()
+    db.session.commit()
+    return claimed is not None
+
+
+def digest_for(user):
+    """The summary email for one person, and the notices it newly covers."""
+    unread = db.session.scalars(
+        db.select(Notice).where(Notice.user_id == user.id, Notice.read_at.is_(None))
+        .order_by(Notice.id.desc())).all()
+    fresh = [n for n in unread if n.emailed_at is None]
+    items = [{"body": n.body, "url": site_url(n.url)}
+             for n in unread[:emails.DIGEST_SHOWN]]
+    subject, text, html = emails.digest(
+        user.name, items, len(unread), site_url("/"),
+        email_off_url(user.id, "digest"), site_url(EMAIL_SETTINGS))
+    return _email_message(user, subject, text, html, "digest"), fresh
+
+
+def run_digests(now=None, user_ids=None):
+    """One pass of the summary. Returns how many were sent.
+
+    `user_ids` limits the pass to those people -- for the tests, which must
+    not touch anybody else's summary on a shared database.
+
+    Due: somebody with the summary on, a verified address, not on the site,
+    no summary in the last 48 hours, and at least one unread notice nobody
+    has emailed them about -- so old unread notices do not bring the same
+    email every other day for ever.
+    """
+    now = now or datetime.utcnow()
+    due = db.session.scalars(
+        db.select(User.id).where(
+            User.email_digest, User.email_verified,
+            db.or_(User.digest_sent_at.is_(None),
+                   User.digest_sent_at < now - DIGEST_EVERY),
+            db.or_(User.last_seen_at.is_(None), User.last_seen_at < now - ON_SITE),
+            db.exists().where(Notice.user_id == User.id, Notice.read_at.is_(None),
+                              Notice.emailed_at.is_(None)),
+            *([User.id.in_(user_ids)] if user_ids is not None else []))).all()
+    sent = 0
+    for user_id in due:
+        if not claim_digest(user_id, now):
+            continue
+        user = db.session.get(User, user_id)
+        message, fresh = digest_for(user)
+        try:
+            mail.send(message)
+        except Exception:  # noqa: BLE001
+            app.logger.exception("summary to %s was not sent", user.email)
+            # Give the pass back, so the next one tries again.
+            db.session.execute(db.update(User).where(User.id == user_id)
+                               .values(digest_sent_at=None))
+            db.session.commit()
+            continue
+        for notice in fresh:
+            notice.emailed_at = now
+        db.session.commit()
+        sent += 1
+    return sent
+
+
+_digest_thread = {"started": False}
+_digest_lock = threading.Lock()
+
+
+def _digest_loop():
+    time.sleep(DIGEST_FIRST)
+    while True:
+        with app.app_context():
+            try:
+                run_digests()
+            except Exception:  # noqa: BLE001 -- the thread must outlive a bad pass
+                app.logger.exception("the summary pass failed")
+                db.session.rollback()
+            finally:
+                db.session.remove()
+        time.sleep(DIGEST_TICK)
+
+
+@app.before_request
+def start_digests():
+    """Start the summary thread, once per process, on its first request."""
+    if _digest_thread["started"] or not app.config["EMAIL_DIGESTS"]:
+        return None
+    with _digest_lock:
+        if not _digest_thread["started"]:
+            _digest_thread["started"] = True
+            threading.Thread(target=_digest_loop, name="email-digest",
+                             daemon=True).start()
+    return None
+
+
+# ---- turning email off, and the admin's test email
+
+EMAIL_WHAT = {"alerts": "emails when someone messages you, asks to meet up "
+                        "or challenges you while you're away",
+              "digest": "the every-other-day summary of unread notifications"}
+
+
+@app.route("/email/off/<token>", methods=["GET", "POST"])
+def email_off(token):
+    """The link at the bottom of every email. Signed, so no sign-in is needed.
+
+    GET only shows the question; POST answers it. A link scanner that opens
+    every link in an email must not unsubscribe anybody.
+    """
+    try:
+        user_id, which = _email_signer().loads(token)
+    except (BadSignature, ValueError, TypeError):
+        return render_template("email_off.html", state="bad"), 400
+    user = db.session.get(User, user_id) if isinstance(user_id, int) else None
+    if user is None or which not in EMAIL_TYPES:
+        return render_template("email_off.html", state="bad"), 400
+    if request.method == "POST":
+        if which == "alerts":
+            user.email_alerts = False
+        else:
+            user.email_digest = False
+        db.session.commit()
+        return render_template("email_off.html", state="done", which=which,
+                               what=EMAIL_WHAT[which])
+    return render_template("email_off.html", state="ask", which=which,
+                           what=EMAIL_WHAT[which], email=user.email)
+
+
+# What the admin can send themselves to see what people get.
+TEST_EMAILS = {
+    "verification": "Verification code",
+    "message": "A message while away",
+    "meetup": "A meetup request",
+    "game": "A game challenge",
+    "digest": "The every-other-day summary",
+}
+_EMAIL_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@app.route("/admin/email/test", methods=["POST"])
+@login_required
+def admin_test_email():
+    """Send one sample email to any address, now, and say what happened.
+
+    Sent in the request rather than after it, so the admin sees the mail
+    server's own answer -- which is the whole point when checking that
+    email works at all. The samples are made up: no real person's
+    notifications go to the address typed here.
+    """
+    away = not_admin()
+    if away:
+        return away
+    to = request.form.get("email", "").strip()
+    which = request.form.get("which", "message")
+    if not _EMAIL_SHAPE.match(to) or len(to) > 255:
+        flash("That doesn't look like an email address.")
+        return redirect(url_for("admin") + "#email")
+    if which not in TEST_EMAILS:
+        flash("Pick which email to send.")
+        return redirect(url_for("admin") + "#email")
+    name = current_user.name
+    off = site_url("/email/off/sample")
+    settings = site_url(EMAIL_SETTINGS)
+    if which == "verification":
+        subject, text, html = emails.verification(name, "482913", 10)
+    elif which == "digest":
+        subject, text, html = emails.digest(
+            name, [{"body": "Sample Friend sent you a message.", "url": site_url("/chats")},
+                   {"body": "Sample Friend challenged you to Chess.", "url": site_url("/games")},
+                   {"body": "Another Friend asked to meet up: Basketball · Fri · Indoor Court.",
+                    "url": site_url("/chats")}],
+            3, site_url("/"), off, settings)
+    else:
+        what = {"meetup": "Basketball · Fri, Nov 7 · 3:00 PM · Indoor Court",
+                "game": "Chess"}.get(which)
+        subject, text, html = emails.alert(which, name, "Sample Friend",
+                                           site_url("/chats"), off, settings,
+                                           what=what)
+    try:
+        mail.send(MailMessage(subject="[Test] " + subject, recipients=[to],
+                              body=text, html=html))
+    except Exception as error:  # noqa: BLE001 -- shown to the admin as it is
+        app.logger.exception("test email to %s failed", to)
+        flash(f"Not sent: {type(error).__name__}: {error}")
+        return redirect(url_for("admin") + "#email")
+    flash(f"Sent \"{TEST_EMAILS[which]}\" to {to}.")
+    return redirect(url_for("admin") + "#email")
+
+
 # What User.name holds. The two registration fields are joined with a space,
 # so together they have to fit inside it.
 NAME_MAX = 120
 
 ONBOARDING_EXEMPT = {
     "static",
+    # The link at the bottom of an email works for anybody, onboarded or not.
+    "email_off",
     "club_icon_sprite",
     "onboarding",
     "login",
@@ -1393,12 +1756,16 @@ def notify_message(kind, parent, target_id, title=None):
     """
     where = None if kind == "match" else title
     for user_id in chat_audience(kind, parent, target_id):
-        notices.message(
+        notice = notices.message(
             user_id, current_user, kind,
             current_user.id if kind == "match" else target_id,
             chat_id=parent.id if kind == "group" else None,
             where=where,
         )
+        # Email for the private chats only. A group, a club or the campus
+        # room is a room of people; one post there would mail all of them.
+        if kind in PRIVATE_MEETUP_CHATS:
+            maybe_email(notice, "message")
 
 
 REPLY_QUOTE_MAX = 140
@@ -1929,6 +2296,13 @@ def live_reply(kind, target_id):
     # Whether the page asking is actually on screen. Only presence cares: a
     # backgrounded tab should still collect notices.
     hidden = request.args.get("hidden") == "1"
+
+    # A visible tab is somebody on the site, who is not emailed about what
+    # the bell is already showing them. A hidden one is not: a tab left open
+    # behind other windows is not somebody reading.
+    if not hidden:
+        stamp_seen(me)
+        db.session.commit()
 
     watching = kind is not None
     parent = None
@@ -2968,7 +3342,9 @@ def game_new():
         flash("That invite could not be sent. Nothing was started.")
         return redirect(url_for("chat", kind="match", target_id=opponent_id))
 
-    notices.game_invite(opponent_id, current_user, game, rules.LABELS[kind])
+    maybe_email(notices.game_invite(opponent_id, current_user, game,
+                                    rules.LABELS[kind]),
+                "game", what=rules.LABELS[kind])
     db.session.commit()
 
     # No flash: the chat now carries this, and a flash would sit on screen
@@ -3551,6 +3927,16 @@ def post_new():
         # people who are in until its author makes it public.
         if post.mode == "inperson":
             make_event_flag(post)
+        # The other person in a private chat is told: in the bell, which a
+        # meetup posted there never reached before, and by email if they are
+        # away. A club's or the campus room's is for a room of people.
+        if here in PRIVATE_MEETUP_CHATS:
+            other = chat_other_id(here, here_parent)
+            plan = " · ".join(p for p in (post.game, post.when_text, post.location) if p)
+            maybe_email(notices.meetup(other, current_user, here,
+                                       current_user.id if here == "match" else from_id,
+                                       plan),
+                        "meetup", what=plan)
         db.session.commit()
         if here == "club":
             flash(f"Posted to {here_parent.name}.")
@@ -3865,6 +4251,9 @@ def admin():
         # is reset on every resend and nulled once the code is entered.
         accounts=db.session.scalars(
             db.select(User).order_by(User.id.desc())).all(),
+        # The test-email form's choices, and whether links will be right.
+        test_emails=TEST_EMAILS,
+        site_url_set=bool(app.config.get("SITE_URL")),
         # What a new hub may be tagged with. The question a hub is placed by
         # is the one whose answers people are shown -- so the admin is
         # choosing from the same words a student saw.
@@ -7218,9 +7607,17 @@ def _bc_profile_account():
     code = _bc_text("code")
     new, again = form.get("new_password", ""), form.get("confirm_password", "")
     unblock = {_bc_id(v) for v in form.getlist("unblock")} - {None}
-    if not (code or new or again or unblock):
+    # The two email switches. Present only when the form carried them, so a
+    # save from somewhere that did not draw them cannot turn both off.
+    prefs = form.get("email_prefs") == "1"
+    alerts_on, digest_on = form.get("email_alerts") == "1", form.get("email_digest") == "1"
+    prefs_changed = prefs and (alerts_on != me.email_alerts or digest_on != me.email_digest)
+    if not (code or new or again or unblock or prefs_changed):
         return _bc_back("safety", ["Nothing to save yet."])
     done = []
+    if prefs_changed:
+        me.email_alerts, me.email_digest = alerts_on, digest_on
+        done.append("Your email settings are saved.")
     if code or new or again:
         sent = db.session.get(BeaconPasswordCode, me.id)
         if not sent or sent.expires_at < _bc_now():

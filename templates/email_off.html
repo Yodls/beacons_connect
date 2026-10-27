@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Email settings{% endblock %}
+{#
+  Turning one kind of email off, from the link at the bottom of it. No
+  sign-in: the link itself is signed, and names the person and the email.
+
+  Opening the link changes nothing -- the button does. Mail providers and
+  security scanners open links in emails before anybody reads them, and a
+  link that unsubscribed on sight would unsubscribe people who never asked.
+  (A mail client's own one-tap Unsubscribe POSTs, which is the button.)
+#}
+{% block content %}
+  <div class="auth">
+    <div class="auth-stack">
+      {% set tagline = "Your inbox, your call." %}
+      {% include "_brandpanel.html" %}
+      <div class="auth-card">
+        <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Email settings</h1><span class="grip"></span></div>
+        <div class="auth-body">
+          {% if state == "bad" %}
+            <p class="lede">This link isn't valid. It may have been copied
+              only in part.</p>
+            <p><a href="{{ url_for('login') }}">Sign in</a> and change your
+              email settings under Profile Settings instead.</p>
+          {% elif state == "done" %}
+            <p class="lede">Done. You won't get {{ what }} any more.</p>
+            <p>You can turn {{ "them" if which == "alerts" else "it" }} back on any
+              time under Profile Settings, Account and safety.</p>
+          {% else %}
+            <p class="lede">Stop {{ what }} to <b>{{ email }}</b>?</p>
+            <form method="post">
+              <button type="submit">Turn {{ "these" if which == "alerts" else "this" }} off</button>
+            </form>
+            <p class="hint">You can turn {{ "them" if which == "alerts" else "it" }} back on
+              any time under Profile Settings.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

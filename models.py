@@ -85,6 +85,22 @@ class User(UserMixin, db.Model):
     can_post_fixtures = db.Column(db.Boolean, nullable=False, default=False,
                                   server_default="false")
 
+    # ---- email -----------------------------------------------------------
+    # When a visible tab of theirs last spoke to /live: "on the site right
+    # now" is a recent value here, and somebody on the site is not emailed
+    # about what the bell is already showing them. Null for anyone who has
+    # not opened the site since this was added.
+    last_seen_at = db.Column(db.DateTime)
+    # The two kinds of email they can turn off: the instant one (a message,
+    # a meetup or a game invite while they are away) and the every-other-day
+    # summary of unread notifications.
+    email_alerts = db.Column(db.Boolean, nullable=False, default=True,
+                             server_default="true")
+    email_digest = db.Column(db.Boolean, nullable=False, default=True,
+                             server_default="true")
+    # When the last summary went out, so it goes at most every other day.
+    digest_sent_at = db.Column(db.DateTime)
+
     __table_args__ = (
         db.CheckConstraint(
             "gender IN ('man', 'woman', 'nonbinary', 'undisclosed')",
@@ -1022,6 +1038,7 @@ NOTICE_KINDS = (
     "report_filed",      # something was reported; for whoever reviews them
     "report_closed",     # the thing you reported has been looked at
     "account_gone",      # somebody you were friends with has deleted theirs
+    "meetup",            # somebody asked you to meet up, in your chat with them
 )
 
 
@@ -1072,6 +1089,11 @@ class Notice(db.Model):
                      server_default=db.text("nextval('notices_bump_seq')"))
     read_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # When the recipient was emailed about this row, instantly or in a
+    # summary. This is what keeps a chatty conversation to one email: the
+    # row is bumped, not repeated, while it stays unread, and a row already
+    # emailed about is not emailed about again.
+    emailed_at = db.Column(db.DateTime)
 
     __table_args__ = (
         db.CheckConstraint(

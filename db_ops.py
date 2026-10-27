@@ -2595,6 +2595,80 @@ def _applied_reactions(cur):
             and index_exists(cur, "ix_reactions_message"))
 
 
+_EMAIL_NOTICE_KINDS = _REPORT_NOTICE_KINDS + ("meetup",)
+_EMAIL_USER_COLUMNS = (
+    # When a visible tab last spoke to /live. Null until they next visit.
+    ("last_seen_at", "TIMESTAMP"),
+    # Both kinds of email start on; anybody can turn either off.
+    ("email_alerts", "BOOLEAN NOT NULL DEFAULT true"),
+    ("email_digest", "BOOLEAN NOT NULL DEFAULT true"),
+    ("digest_sent_at", "TIMESTAMP"),
+)
+
+
+def _work_email_alerts(cur, dbname, say):
+    """Email alerts and the every-other-day summary.
+
+    Four columns on "user", one on notices, and a new notice kind for a
+    meetup posted in somebody's chat with you. Nothing is backfilled: every
+    account starts with both emails on and nothing yet emailed about, which
+    is what they are.
+    """
+    for needed in ("user", "notices"):
+        if not table_exists(cur, needed):
+            raise Refuse(f"{dbname} has no {needed!r} table.")
+
+    users_before = count(cur, "user")
+    notices_before = count(cur, "notices")
+    say(f"  {dbname}: {users_before} account(s), {notices_before} notice(s)")
+
+    changed = 0
+    for column, decl in _EMAIL_USER_COLUMNS:
+        if column_exists(cur, "user", column):
+            say(f'  = "user".{column} already exists')
+        else:
+            cur.execute(f'ALTER TABLE "user" ADD COLUMN {column} {decl}')
+            say(f'  + added "user".{column}')
+            changed += 1
+
+    if column_exists(cur, "notices", "emailed_at"):
+        say("  = notices.emailed_at already exists")
+    else:
+        cur.execute("ALTER TABLE notices ADD COLUMN emailed_at TIMESTAMP")
+        say("  + added notices.emailed_at")
+        changed += 1
+
+    changed += widen(cur, "notices", "ck_notice_kind",
+                     f"kind IN ({quoted(_EMAIL_NOTICE_KINDS)})",
+                     "meetup", say)
+
+    # The widened rule still refuses what it should.
+    cur.execute('SELECT id FROM "user" ORDER BY id LIMIT 1')
+    row = cur.fetchone()
+    if row is None:
+        say("  . no accounts, so the probe below is skipped")
+    else:
+        if not rejects(cur,
+                       "INSERT INTO notices (user_id, kind, body, url, "
+                       "created_at) VALUES (%s, 'nonsense', 'x', '/', now())",
+                       (row[0],), "an unknown notice kind"):
+            raise Refuse("ck_notice_kind accepted an unknown kind.")
+        say("  . ck_notice_kind still refuses an unknown kind")
+
+    if count(cur, "user") != users_before:
+        raise Refuse(f"accounts changed {users_before} -> {count(cur, 'user')}")
+    if count(cur, "notices") != notices_before:
+        raise Refuse(f"notices changed {notices_before} -> {count(cur, 'notices')}")
+    return changed
+
+
+def _applied_email_alerts(cur):
+    current = constraint_def(cur, "ck_notice_kind") or ""
+    return (all(column_exists(cur, "user", c) for c, _ in _EMAIL_USER_COLUMNS)
+            and column_exists(cur, "notices", "emailed_at")
+            and "meetup" in current)
+
+
 # ---------------------------------------------------------- the registry
 #
 # In the order they were written, which is the order they have to run in:
@@ -2667,6 +2741,8 @@ MIGRATIONS = [
      _work_reports, _applied_reports),
     ("add_reactions", "message replies and emoji reactions",
      _work_reactions, _applied_reactions),
+    ("add_email_alerts", "email alerts, the summary, and a meetup notice kind",
+     _work_email_alerts, _applied_email_alerts),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]

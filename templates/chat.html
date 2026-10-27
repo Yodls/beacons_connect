@@ -514,19 +514,35 @@
       .gamewrap { display: block; }
       .gamewrap.playing { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 14px; }
       @media (min-width: 900px) {
-        .gamewrap.playing { grid-template-columns: minmax(0, 1fr) 21rem; }
+        /* The conversation used to be a fixed 21rem rail with a 20rem log,
+           which left a message field too narrow to read what you typed and a
+           chat a few lines tall beside a board twice its height. It now
+           takes about three quarters of the board's width, never under 22rem,
+           and stands as tall as the screen allows. */
+        .gamewrap.playing { grid-template-columns: minmax(0, 1fr) minmax(22rem, .75fr); }
+        /* Pinned under the top bar while the board scrolls, and sized to the
+           screen between the top bar and the floating tab bar, so the
+           composer is always in reach. */
+        .gamewrap.playing .talkcol {
+          position: sticky; top: 86px;
+          display: flex; flex-direction: column;
+          height: calc(100vh - 86px - var(--tabbar-h) - 36px);
+          height: calc(100dvh - 86px - var(--tabbar-h) - 36px);
+          min-height: 26rem;
+        }
+        .gamewrap.playing .talkcol #log { flex: 1 1 auto; height: auto; min-height: 12rem; }
+        .gamewrap.playing .talkcol .sendrow { flex: none; }
         /* The composer is in the 21rem right rail here, so a left-anchored
            menu would run past the right edge instead. */
         .gamewrap.playing .newmeet-menu { left: auto; right: 0; }
       }
       .talkcol { min-width: 0; }
       .gamewrap.playing #log { margin-top: 0; }
-      /* Shorter beside a board, and shorter again on a phone, so the composer
-         stays on screen under the board. */
-      .gamewrap.playing #log { height: 20rem; }
-      @media (max-width: 899px) {
-        .gamewrap.playing #log { height: 14rem; }
-      }
+      /* Under the board on a phone or a narrow window: tall enough to read a
+         conversation, never more than about half the screen, so the board
+         and the composer are a short scroll apart. (Beside the board, the
+         rules above size it to the screen instead.) */
+      .gamewrap.playing #log { height: min(22rem, 52vh); height: min(22rem, 52dvh); }
 
       /* The game is one window: orange title bar, then who is at the
          board, then the board (or the invite, or the result). */
@@ -1115,7 +1131,10 @@
        copies the quote from the stored row; a send swaps the page, which
        clears it. #}
     <input type="hidden" name="reply_to" id="reply-to" value="" />
-    <input name="body" maxlength="2000" autocomplete="off" autofocus
+    {# Focused on arrival -- except beside a game, where the board is what
+       you came for, and focusing a field at the foot of a screen-tall chat
+       scrolled the game's own title bar off the top. #}
+    <input name="body" maxlength="2000" autocomplete="off" {% if not game %}autofocus{% endif %}
            placeholder="Write a message&hellip;" required />
     <button type="submit">Send</button>
   </form>
@@ -1196,6 +1215,38 @@
       if (mode) { mode.addEventListener("change", sync); }
       sync();
     });
+  })();
+
+  // Beside a game, the conversation is pinned under the top bar and as tall
+  // as the screen allows (see .gamewrap.playing .talkcol). Before the page
+  // is scrolled it sits lower, under the chat's own header, so a fixed
+  // height put the message field below the fold. Sized here from where it
+  // actually is: fully on screen at rest, growing to full height as it pins.
+  // One listener for the page, however many times this script is re-run by
+  // a swap; it looks the column up afresh each time.
+  (function () {
+    if (window.beaconTalkSizer) { window.beaconTalkSizer(); return; }
+    var wide = window.matchMedia("(min-width: 900px)");
+    var queued = false;
+    function size() {
+      queued = false;
+      var col = document.querySelector(".gamewrap.playing .talkcol");
+      var any = document.querySelector(".talkcol");
+      if (any && any !== col) { any.style.height = ""; }
+      if (!col) { return; }
+      if (!wide.matches) { col.style.height = ""; return; }
+      var tab = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--tabbar-h")) || 68;
+      var top = Math.max(86, col.getBoundingClientRect().top);
+      col.style.height = Math.round(window.innerHeight - top - tab - 36) + "px";
+    }
+    function later() {
+      if (!queued) { queued = true; window.requestAnimationFrame(size); }
+    }
+    window.beaconTalkSizer = size;
+    window.addEventListener("scroll", later, { passive: true });
+    window.addEventListener("resize", later);
+    size();
   })();
 
   // Below 900px the Meet up form is pinned to the screen (see .newmeet-menu),

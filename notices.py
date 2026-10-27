@@ -240,6 +240,20 @@ def game_invite(recipient_id, actor, game, label):
     )
 
 
+def meetup(recipient_id, actor, kind, target_id, plan):
+    """Somebody asked you to meet up, in your one-on-one with them.
+
+    `target_id` addresses the chat from the recipient's side: the other
+    person for a friend chat, the pairing for a pair chat.
+    """
+    return notify(
+        recipient_id, "meetup",
+        f"{actor.name} asked to meet up: {plan}.",
+        chat_url(kind, target_id),
+        actor_id=actor.id,
+    )
+
+
 def game_answer(recipient_id, actor, game, label, action):
     said = "accepted" if action == "accept" else "declined"
     return notify(
