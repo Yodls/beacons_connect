@@ -148,17 +148,48 @@ def fixture_posted(title, billing, when_text):
     )
 
 
-def hub_requested(admin_id, name):
-    """Somebody asked for a hub. Addressed to whoever reviews them.
+# The admin queues, each told as one line while it stays unread. Opening the
+# admin page reads them (clear_queue), the way opening a chat reads its
+# messages.
+QUEUE_KINDS = ("report_filed", "hub_request")
+
+
+def _queue(admin_id, kind, first, more):
+    """Tell an admin their queue has something new in it: one line, bumped.
+
+    The same shape as message(), for the same reason. One row per report
+    meant a burst of them was a burst of toasts and a bell full of identical
+    lines, all pointing at the same page. `first` is what a single one says;
+    `more(n)` is what the line becomes once there are n.
 
     No actor on purpose. The app is telling an admin that a queue has
     something in it, not that a particular student did something -- and a
-    null actor also means an admin who asks for a hub themselves still gets
+    null actor also means an admin who files something themselves still gets
     told, instead of being silently skipped by the no-self-notice rule.
     """
-    return notify(admin_id, "hub_request",
+    open_one = db.session.scalar(
+        db.select(Notice).where(
+            Notice.user_id == admin_id,
+            Notice.kind == kind,
+            Notice.read_at.is_(None),
+        ).order_by(Notice.bump.desc()).limit(1)
+    )
+    if open_one is not None:
+        open_one.count += 1
+        open_one.body = more(open_one.count)
+        open_one.created_at = datetime.utcnow()
+        # Moved, so the channel answers and the toast already showing for
+        # this line says the new count rather than staying silent.
+        open_one.bump = BUMP
+        return open_one
+    return notify(admin_id, kind, first, "/admin")
+
+
+def hub_requested(admin_id, name):
+    """Somebody asked for a hub. Addressed to whoever reviews them."""
+    return _queue(admin_id, "hub_request",
                   f"{name} was requested. It is waiting for review.",
-                  "/admin")
+                  lambda n: f"{n} new hub requests are waiting for review.")
 
 
 def hub_decided(requester_id, name, approved, note=""):
@@ -177,16 +208,10 @@ def hub_decided(requester_id, name, approved, note=""):
 
 
 def report_filed(admin_id, what):
-    """Something was reported. Addressed to whoever reviews them.
-
-    No actor, for the reason hub_requested gives: the app is telling an
-    admin that a queue has something in it, and a null actor also means an
-    admin who reports something themselves still gets told rather than being
-    skipped by the no-self-notice rule.
-    """
-    return notify(admin_id, "report_filed",
+    """Something was reported. Addressed to whoever reviews them."""
+    return _queue(admin_id, "report_filed",
                   f"{what} was reported. It is waiting for review.",
-                  "/admin")
+                  lambda n: f"{n} new reports are waiting for review.")
 
 
 def report_closed(filer_id, said):
@@ -492,6 +517,17 @@ def close_invite(user_id, game_id):
         db.update(Notice)
         .where(Notice.user_id == user_id, Notice.game_id == game_id,
                Notice.kind == "game_invite", Notice.read_at.is_(None))
+        .values(read_at=datetime.utcnow())
+    ).rowcount
+
+
+def clear_queue(user_id):
+    """Opening the admin page retires the notices that pointed at it."""
+    return db.session.execute(
+        db.update(Notice)
+        .where(Notice.user_id == user_id,
+               Notice.kind.in_(QUEUE_KINDS),
+               Notice.read_at.is_(None))
         .values(read_at=datetime.utcnow())
     ).rowcount
 

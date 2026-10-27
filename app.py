@@ -2327,6 +2327,15 @@ def live_reply(kind, target_id):
     session open would starve every other request on the site.
     """
     me = current_user.id
+    # The page says whose it is. A tab goes on polling with whatever cookie
+    # the browser holds now, so once somebody signs in as another account in
+    # another tab, a page drawn for the first would be answered for the
+    # second: their bell, their backlog toasted into it, their chat marked
+    # read. Refused before anything is stamped or read. A page served before
+    # this existed sends no id and is answered as it always was.
+    drawn_for = request.args.get("me", type=int)
+    if drawn_for is not None and drawn_for != me:
+        return jsonify({"error": "account"}), 409
     seen = request.args.get("seen", type=int, default=0)
     bell = request.args.get("notices", "")
     # The lobby's waiting state asks for this. It doubles as the heartbeat that
@@ -2453,6 +2462,16 @@ def live_reply(kind, target_id):
         if (newest > after or fresh != token or bell_now != bell
                 or crowd != group_token or deck != card_token
                 or reacts != react_token):
+            # Looked up again before anything reads it. The session this
+            # request started in has been handed back between probes, and
+            # current_user went with it -- expired by the commits above as
+            # well as detached -- so the first thing to touch it (chat_target,
+            # or the context processors behind the bell's render_template)
+            # raised DetachedInstanceError. Every update that arrived while a
+            # page was waiting was a 500, and reached the page a second late,
+            # on the retry. Dropping Flask-Login's cached copy makes the next
+            # read go through load_user, in the session that is open now.
+            g.pop("_login_user", None)
             rows = []
             if watching:
                 # Resolved again, because this wait has been held for up to
@@ -4301,6 +4320,12 @@ def admin():
     away = not_admin()
     if away:
         return away
+
+    # Looking at the queues is what their notices were asking for, the way
+    # opening a conversation retires its message notice. It is also what
+    # keeps "3 new reports" meaning new since this admin last looked.
+    if notices.clear_queue(current_user.id):
+        db.session.commit()
 
     term = request.args.get("q", "").strip()
     who = db.select(User).order_by(User.name)

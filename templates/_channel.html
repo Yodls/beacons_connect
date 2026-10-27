@@ -17,30 +17,79 @@
     var awayUrl = {{ url_for('live_away') | tojson }};
     var token = {{ (notice_token or "") | tojson }};
     var seen = {{ (notice_seen or 0) | int }};
+    // Whose page this is. The browser's cookie can change under an open tab
+    // -- signing out, or in as somebody else, in another one -- and the server
+    // refuses a channel that names anybody but whoever is signed in now.
+    var me = {{ current_user.id | int }};
     var at = location.pathname + location.search;
 
     var stopped = false;
     var inflight = null;
     var failures = 0;
     var first = null;
+    // What arrived while the tab was hidden, said once it is looked at, and
+    // the bell's count as of the latest answer, which is what a summary says.
+    var missed = [];
+    var unread = 0;
+
+    // At most this many toasts on screen. Each is a sentence, and on a phone
+    // three of them already cover the bottom of the page.
+    var MOST = 3;
+    // More than this from one answer is said as one toast, not one each.
+    var EACH = 2;
 
     function toastHost() { return document.getElementById("toasts"); }
 
-    function toast(text) {
+    function toast(text, key) {
       var host = toastHost();
       if (!host) { return; }
-      var box = document.createElement("div");
-      box.className = "toast";
+      // A notice that changes while it is showing -- a conversation's "2 new
+      // messages" becoming "3" -- is the same toast saying more, not another.
+      var box = null;
+      for (var i = 0; key && i < host.children.length; i++) {
+        if (host.children[i].getAttribute("data-key") === key) {
+          box = host.children[i];
+          break;
+        }
+      }
+      if (box) {
+        clearTimeout(box.beaconFade);
+        clearTimeout(box.beaconGone);
+        box.classList.remove("going");
+      } else {
+        // The oldest makes room, at once: a stack that only grows is how the
+        // screen used to get buried.
+        var shown = host.querySelectorAll(".toast");
+        for (var j = 0; j <= shown.length - MOST; j++) {
+          shown[j].parentNode.removeChild(shown[j]);
+        }
+        box = document.createElement("div");
+        box.className = "toast";
+        if (key) { box.setAttribute("data-key", key); }
+      }
       // textContent, never innerHTML: a notice body carries somebody's name,
       // which is somebody's input.
       box.textContent = text;
+      // Last either way, so the one that just changed is the last to go.
       host.appendChild(box);
       // Long enough to read, short enough not to sit in the way. The bell has
       // it either way, so losing a toast costs nothing.
-      setTimeout(function () { box.classList.add("going"); }, 5000);
-      setTimeout(function () {
+      box.beaconFade = setTimeout(function () { box.classList.add("going"); }, 5000);
+      box.beaconGone = setTimeout(function () {
         if (box.parentNode) { box.parentNode.removeChild(box); }
       }, 5600);
+    }
+
+    // What one answer brought. One or two are shown as themselves; more than
+    // that is one line with the bell's count, because five sentences at once
+    // is a wall -- and the bell is where they are read anyway.
+    function announce(arrived, count) {
+      if (arrived.length > EACH) {
+        toast("You have " + Math.max(count, arrived.length) +
+              " unread notifications.", "summary");
+        return;
+      }
+      arrived.forEach(function (t) { toast(t.body, "n" + t.id); });
     }
 
     // The same toast the bell uses, for the enhancer: what a route flashed
@@ -51,6 +100,7 @@
       if (!data) { return; }
       token = data.token;
       seen = data.seen;
+      unread = data.count;
 
       var count = document.getElementById("bell-count");
       if (count) {
@@ -66,12 +116,41 @@
         if (fresh) { list.replaceWith(fresh); }
       }
 
-      (data.toasts || []).forEach(function (t) { toast(t.body); });
+      var arrived = data.toasts || [];
+      if (!arrived.length) { return; }
+      if (document.hidden) {
+        // Nobody is looking, and a hidden tab's timers are slowed, so toasts
+        // made now would still be stacked up when somebody came back. Kept
+        // instead, once each, and said when the tab is next on screen.
+        arrived.forEach(function (t) {
+          missed = missed.filter(function (m) { return m.id !== t.id; });
+          missed.push(t);
+        });
+        return;
+      }
+      announce(arrived, data.count);
+    }
+
+    // The browser has signed out, or in as somebody else, since this page
+    // was drawn. Catching it up would show that account's backlog in a page
+    // that is not theirs, so the channel stops, and the page is drawn again
+    // the next time it is on screen: as the login page, or as whoever is
+    // signed in now.
+    var LOST = {};
+    function lost() {
+      stopped = true;
+      if (!document.hidden) { location.reload(); return; }
+      document.addEventListener("visibilitychange", function back() {
+        if (document.hidden) { return; }
+        document.removeEventListener("visibilitychange", back);
+        location.reload();
+      });
     }
 
     function query() {
       var q = "?notices=" + encodeURIComponent(token) +
               "&seen=" + seen +
+              "&me=" + me +
               "&at=" + encodeURIComponent(at);
       // Read every round rather than captured once: the page script that
       // registers this runs after the channel is armed.
@@ -112,6 +191,8 @@
       fetch(url + query(),
             {headers: {"Accept": "application/json"}, signal: ctl.signal})
         .then(function (r) {
+          // Sent to the login page, or refused as somebody else's page.
+          if (r.redirected || r.status === 401 || r.status === 409) { throw LOST; }
           if (!r.ok) { throw new Error(r.status); }
           return r.json();
         })
@@ -125,6 +206,7 @@
         .catch(function (err) {
           // An abort is us leaving or restarting, not a failure.
           if (stopped || (err && err.name === "AbortError")) { return; }
+          if (err === LOST) { lost(); return; }
           failures += 1;
           if (failures >= 5) { return; }
           setTimeout(round, 1000 * failures);
@@ -158,6 +240,10 @@
         sayGone();
         return;
       }
+      // What came in while the tab was hidden, said the same way a live
+      // answer is -- so coming back to a tab is one toast, not a pile.
+      if (missed.length && unread) { announce(missed, unread); }
+      missed = [];
       // If the browser dropped the held request while the tab was away, start
       // a fresh one rather than waiting the old one out. It also re-stamps
       // presence, which is what puts them back at the board.
