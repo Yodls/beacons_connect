@@ -220,9 +220,15 @@
   // scroll past 350px of tiles moves the tiles instead and the page never
   // moves. The map starts locked and a tap unlocks it; a tap anywhere else
   // locks it again. Mouse users never see this.
+  //
+  // "Elsewhere" means outside the map's whole stage, not just the tiles: the
+  // Locate me button and the status line sit beside the tiles in the stage,
+  // and tapping Locate me used to count as leaving the map and lock it again.
+  var unlockMap = function () {};
   function lockUntilTap(container) {
     var touch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
     if (!touch) { return; }
+    var stage = container.closest(".campus-map-stage") || container;
     var button = node("button", "map-unlock", "Tap to move the map");
     button.type = "button";
     function lock() {
@@ -233,12 +239,24 @@
       map.dragging.enable(); map.touchZoom.enable();
       button.remove();
     }
+    unlockMap = unlock;
     button.addEventListener("click", function (ev) { ev.stopPropagation(); unlock(); });
     document.addEventListener("touchstart", function (ev) {
-      if (!container.contains(ev.target)) { lock(); }
+      if (!stage.contains(ev.target)) { lock(); }
     }, { passive: true });
     lock();
   }
+
+  // Leaflet's locationerror carries the browser's own words ("Origin does
+  // not have permission to use Geolocation service", "User denied
+  // Geolocation"), which tell nobody what to do. The code is the same in
+  // every browser, so the advice is keyed on that.
+  var LOCATE_ADVICE = {
+    1: "Location is blocked for this site. Allow it in your browser's site settings, "
+       + "and check that Location Services is on for your browser.",
+    2: "Your location couldn't be found right now. Try again outdoors or with Wi-Fi on.",
+    3: "Finding you took too long. Try again."
+  };
 
   function initMap() {
     map = L.map("beaconCampusMap", {
@@ -282,7 +300,8 @@
     map.on("locationfound", locationFound);
     map.on("locationerror", function (event) {
       el.locate.disabled = false;
-      announce(event.message || "Your location couldn't be found. Check the browser's location setting.", "error");
+      announce(LOCATE_ADVICE[event.code]
+        || "Your location couldn't be found. Check the browser's location setting.", "error");
     });
   }
 
@@ -879,6 +898,9 @@
 
   function locationFound(event) {
     el.locate.disabled = false;
+    // You just asked to see yourself on the map, so you can move around
+    // there straight away rather than tapping to unlock it first.
+    unlockMap();
     userLayer.clearLayers();
     L.circle(event.latlng, {
       radius: Math.min(event.accuracy, 180), color: "#ff791f", weight: 2,
@@ -917,6 +939,13 @@
     if (!map) { return; }
     if (!navigator.geolocation) {
       announce("This browser can't share a location.", "error");
+      return;
+    }
+    // Browsers only share a location with a secure page. Over plain http --
+    // the site opened by its LAN address on a phone, say -- the request is
+    // refused before anybody is asked, so do not make it.
+    if (!window.isSecureContext) {
+      announce("Showing your location needs the site's secure (https) address.", "error");
       return;
     }
     el.locate.disabled = true;

@@ -21,6 +21,13 @@
       /* ---------- the map ---------- */
       .campus-map-stage {
         position: relative;
+        /* Its own stacking context. The locate button, the status line and
+           "Tap to move the map" are z-index 1000 so they sit above the
+           tiles -- and without this, that 1000 was weighed against the
+           whole page, so they floated over the top bar, the account menu
+           and the tab bar. Inside, nothing changes; the stage as a whole
+           now sits under the app's own bars. */
+        isolation: isolate;
         background: var(--paper);
         border-bottom: 2px solid var(--navy);
       }

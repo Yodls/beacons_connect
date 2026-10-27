@@ -35,6 +35,11 @@
          of them into three stacked rows instead of a clock. */
       .clock select { flex: 1 1 4rem; width: auto; min-width: 0; }
       .pickmap {
+        /* Its own stacking context, for the same reason as the campus
+           map's stage: Leaflet layers its tiles at z-index 200-400 and its
+           zoom buttons at 1000, and with nothing to contain them the whole
+           map painted over the top bar, the account menu and the tab bar. */
+        isolation: isolate;
         height: 300px; margin-top: 6px;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         background: var(--paper);
