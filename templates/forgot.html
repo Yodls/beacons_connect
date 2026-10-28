@@ -3,15 +3,14 @@
 {% block title %}Forgot password{% endblock %}
 
 {#
-  Forgot password: a placeholder. Password reset does not exist yet, so
-  rather than leave the sign-in page's "Click here" pointing nowhere, it lands
-  here. When reset is built (an emailed code, the way /verify already works),
-  replace the body of this window with the form; the route name and URL can
-  stay as they are.
+  Forgot password, step one of two: the address. The code goes to it and the
+  new password is chosen on reset.html, the way /verify takes the sign-up
+  code. Same window as the other sign-in pages (see login.html).
 #}
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
+      {% set tagline = "One quick check that it's really you." %}
       {% include "_brandpanel.html" %}
 
       <div class="auth-card">
@@ -20,11 +19,17 @@
         <div class="auth-body">
           {{ ui.flashes() }}
 
-          <p class="lede">Resetting a password by email isn't ready yet. It's on the way.</p>
-          <a class="btn" href="{{ url_for('login') }}">Back to sign in</a>
+          <p class="lede">Type the email you signed up with and we'll send you a
+            6-digit code to set a new password.</p>
+
+          <form method="post">
+            <label>Email <input type="email" name="email" required autofocus
+                                autocomplete="email" placeholder="you@umb.edu" /></label>
+            <button type="submit">Send me a code</button>
+          </form>
         </div>
 
-        <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+        <p class="auth-foot">Remembered it? <a href="{{ url_for('login') }}">Sign in</a>.</p>
       </div>
     </div>
   </div>

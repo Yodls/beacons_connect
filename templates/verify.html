@@ -2,38 +2,10 @@
 {% import "_ui.html" as ui %}
 {% block title %}Verify your email{% endblock %}
 
-{% block style %}
-      /* the six-digit code, in the pixel face so each digit reads clearly */
-      .code {
-        padding: .5rem;
-        text-align: center; text-indent: .45em;
-        font: 400 clamp(28px, 11vw, 40px)/1 var(--px); letter-spacing: .45em;
-        font-variant-numeric: tabular-nums;
-      }
-      /* the address the code went to */
-      .sent {
-        display: inline-block; padding: 1px 8px;
-        background: var(--paper); color: var(--navy);
-        border: 2px solid var(--line); border-radius: var(--r-sm);
-        font-size: .92rem; font-weight: 700;
-      }
-      .resend {
-        margin-top: 18px; padding-top: 16px;
-        border-top: 2px dashed var(--line); text-align: center;
-      }
-      .resend button { margin: 0; }
-      /* where to look when the code isn't in the inbox */
-      .spamnote {
-        margin: -4px 0 16px; padding: 8px 10px;
-        background: var(--paper); color: var(--navy);
-        border-left: 4px solid var(--orange); border-radius: var(--r-sm);
-        font-size: .92rem; font-weight: 700;
-      }
-{% endblock %}
-
 {#
   Verify: the brand panel, then the code form in a window (see login.html).
-  Field names and the resend form are unchanged.
+  Field names and the resend form are unchanged. The code, sent-to and
+  resend styles are base.html's (section 9), shared with reset.html.
 #}
 
 {% block content %}

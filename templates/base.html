@@ -1044,6 +1044,28 @@
         display: flex; flex-direction: column; gap: 18px;
       }
       .auth-stack.wide { max-width: 46rem; }
+      /* On a wide screen the stack is a scroll on any laptop, and nothing
+         can be trimmed enough to fit without cramping the plaques: so it
+         becomes two columns instead -- the brand panel on the left, the
+         gold band over the form window on the right -- centred on the
+         Harborwalk. The band and the window keep together in the middle of
+         their column (the band hugs the window's top edge) whichever side
+         is the taller. Not for .wide (onboarding), whose compact panel sits
+         over a long questionnaire. */
+      @media (min-width: 60rem) {
+        .auth-stack:not(.wide) {
+          max-width: 54rem;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-template-rows: auto auto;
+          column-gap: 24px; row-gap: 18px;
+          align-items: center;
+        }
+        .auth-stack:not(.wide) > .brandpanel { grid-column: 1; grid-row: 1 / 3; }
+        .auth-stack:not(.wide) > .cta-band,
+        .auth-stack:not(.wide) > .goldline { grid-column: 2; grid-row: 1; align-self: end; }
+        .auth-stack:not(.wide) > .auth-card { grid-column: 2; grid-row: 2; align-self: start; }
+      }
       /* The brand panel: plain white like the form window, with the same
          navy border. */
       .brandpanel {
@@ -1244,8 +1266,6 @@
         transition: transform .15s ease;
       }
       .cta-band:hover .cta-go, .cta-band:focus-visible .cta-go { transform: translateX(4px); }
-      /* the sign-in reminder, in black bold against the grey lede */
-      .auth-card .lede strong { color: #000; font-weight: 700; }
       /* words for screen readers only, e.g. what a "Click here" link does */
       .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       /* the form window; its .bar carries the page title */
@@ -1269,6 +1289,33 @@
         background: var(--paper);
         border-top: 2px solid var(--navy); border-radius: 0 0 6px 6px;
         color: var(--navy); font-size: .95rem; text-align: center;
+      }
+      /* The code pages (verify.html, reset.html). The six-digit code, in
+         the pixel face so each digit reads clearly. */
+      .code {
+        padding: .5rem;
+        text-align: center; text-indent: .45em;
+        font: 400 clamp(28px, 11vw, 40px)/1 var(--px); letter-spacing: .45em;
+        font-variant-numeric: tabular-nums;
+      }
+      /* the address the code went to */
+      .sent {
+        display: inline-block; padding: 1px 8px;
+        background: var(--paper); color: var(--navy);
+        border: 2px solid var(--line); border-radius: var(--r-sm);
+        font-size: .92rem; font-weight: 700;
+      }
+      .resend {
+        margin-top: 18px; padding-top: 16px;
+        border-top: 2px dashed var(--line); text-align: center;
+      }
+      .resend button { margin: 0; }
+      /* where to look when the code isn't in the inbox */
+      .spamnote {
+        margin: -4px 0 16px; padding: 8px 10px;
+        background: var(--paper); color: var(--navy);
+        border-left: 4px solid var(--orange); border-radius: var(--r-sm);
+        font-size: .92rem; font-weight: 700;
       }
 
       /* ---------- the questionnaire ---------- */
@@ -1460,7 +1507,7 @@
          style rather than a <style> tag, and inside #live, so it does not
          disturb the head-CSS invariant tests/test_enhance.py asserts. #}
       {% if db_banner %}
-        <p style="margin:0;padding:.3rem .8rem;background:#8a5a14;color:#fff;
+        <p class="dbbanner" style="margin:0;padding:.3rem .8rem;background:#8a5a14;color:#fff;
                   font:600 12px/1.6 system-ui,sans-serif;letter-spacing:.04em">
           development database &middot; {{ db_banner }}
         </p>

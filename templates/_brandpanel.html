@@ -20,6 +20,11 @@
   The wordmark is a <p>, never a heading: each page's own <h1> sits in the
   form window's title bar, and the test suites read the first <h1> on a page.
   The birds are decoration only (aria-hidden).
+
+  On a wide screen the page's .auth-stack becomes a grid (base.html,
+  section 9): the panel on the left, the band and the form window stacked
+  on the right, so the page fits a desktop window without a scroll. The
+  panel and the band stay direct children of the stack for that to work.
 #}
 <div class="brandpanel{% if brand_compact %} compact{% endif %}">
   <div class="plaque plaque-main">

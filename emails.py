@@ -314,7 +314,21 @@ def verification(name, code, minutes):
         "Beacons Connect - Connect on Campus @ UMass Boston\n"
     )
 
-    rows = _hello(name, "Here is the code that finishes your sign-up.") + f"""
+    rows = (_hello(name, "Here is the code that finishes your sign-up.")
+            + _code_rows(code, minutes) + _divider()
+            + _note("Didn't sign up? You can ignore this message &mdash; "
+                    "nothing happens until the code is used."))
+
+    html = _frame(subject, f"Your code is {code}. It expires in {minutes} minutes.",
+                  rows)
+    return subject, text, html
+
+
+def _code_rows(code, minutes):
+    """The code itself, big, and how long it lasts: the one thing a code
+    email exists to carry. Shared by the sign-up and password codes so the
+    two cannot drift."""
+    return f"""
 
           <!-- the code itself: the one thing this message exists to carry -->
           <tr>
@@ -340,13 +354,34 @@ def verification(name, code, minutes):
               It expires in <b style="color:{NAVY};">{minutes} minutes</b>.
               Type it into the page you left open.
             </td>
-          </tr>""" + _divider() + _note(
-        "Didn't sign up? You can ignore this message &mdash; nothing "
-        "happens until the code is used.")
+          </tr>"""
 
-    html = _frame(subject, f"Your code is {code}. It expires in {minutes} minutes.",
-                  rows)
-    return subject, text, html
+
+def password_code(name, code, minutes):
+    """Subject, text and HTML for a password code: Forgot password on the
+    sign-in page, and Change password on the profile, which send the same
+    one. Like the sign-up code: no unsubscribe footer, since it is about
+    their own account and arrives only when asked for.
+    """
+    first = _first(name)
+    subject = f"{code} is your Beacons Connect password code"
+
+    text = (
+        f"Hi {first},\n\n"
+        f"Your code to set a new Beacons Connect password is {code}\n\n"
+        f"It expires in {minutes} minutes. Type it into the page you left "
+        "open.\n\n"
+        "Didn't ask to change your password? You can ignore this message -- "
+        "nothing changes until the code is used.\n\n"
+        "Beacons Connect - Connect on Campus @ UMass Boston\n"
+    )
+
+    rows = (_hello(name, "Here is the code to set a new password.")
+            + _code_rows(code, minutes) + _divider()
+            + _note("Didn't ask to change your password? You can ignore this "
+                    "message &mdash; nothing changes until the code is used."))
+    return subject, text, _frame(
+        subject, f"Your code is {code}. It expires in {minutes} minutes.", rows)
 
 
 def verified(name, login_url):

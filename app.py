@@ -570,6 +570,11 @@ def _send_batch(batch):
         for message, notice_id in batch:
             try:
                 mail.send(message)
+            except MailHeldBack:
+                # A development database declining to mail a non-admin: not a
+                # failure, and nothing to retry. send_guarded has already
+                # logged it in one line; the notice stays stamped, as if sent.
+                continue
             except Exception:  # noqa: BLE001 -- any SMTP failure is the same here
                 app.logger.exception("email alert to %s was not sent",
                                      ",".join(message.recipients))
@@ -717,6 +722,13 @@ def run_digests(now=None, user_ids=None):
         message, fresh = digest_for(user)
         try:
             mail.send(message)
+        except MailHeldBack:
+            # A development database declining to mail a non-admin. Not a
+            # failure: giving the pass back would only retry, and be held
+            # back again, every tick. Kept as if sent, so dev keeps the same
+            # books as production -- one summary per person per 48 hours.
+            # send_guarded has already said so in one line.
+            pass
         except Exception:  # noqa: BLE001
             app.logger.exception("summary to %s was not sent", user.email)
             # Give the pass back, so the next one tries again.
@@ -798,6 +810,7 @@ def email_off(token):
 # What the admin can send themselves to see what people get.
 TEST_EMAILS = {
     "verification": "Verification code",
+    "reset": "Password reset code",
     "verified": "Verified by an admin",
     "message": "A message while away",
     "meetup": "A meetup request",
@@ -841,6 +854,9 @@ def admin_test_email():
     if which == "verification":
         subject, text, html = emails.verification(
             name, "482913", int(CODE_TTL.total_seconds() // 60))
+    elif which == "reset":
+        subject, text, html = emails.password_code(name, "482913",
+                                                   BEACON_CODE_MINUTES)
     elif which == "verified":
         subject, text, html = emails.verified(name, site_url("/login"))
     elif which == "digest":
@@ -880,6 +896,8 @@ ONBOARDING_EXEMPT = {
     "login",
     "logout",
     "forgot_password",
+    "reset_password",
+    "reset_resend",
     "register",
     "verify",
     "resend_code",
@@ -890,7 +908,8 @@ ONBOARDING_EXEMPT = {
 # rather than the page body covers POST as well as GET, which is the part that
 # matters: login() accepts POST, and login_user() would otherwise let someone
 # already signed in submit the form and land on whichever account it named.
-GUEST_ONLY = {"login", "register", "verify", "resend_code", "forgot_password"}
+GUEST_ONLY = {"login", "register", "verify", "resend_code", "forgot_password",
+              "reset_password", "reset_resend"}
 
 
 # There was a `same_origin` before_request here, comparing the Origin header
@@ -6763,16 +6782,152 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/forgot-password")
-def forgot_password():
-    """Where the sign-in page's "Forgot password? Click here" goes.
+# ------------------------------------------------------------ password reset
+#
+# Forgot your password: prove you own the address with a 6-digit code, then
+# choose a new one. The code is the same one the profile's Change password
+# emails -- BeaconPasswordCode, one current code per account, stored hashed,
+# BEACON_CODE_MINUTES long, at most one a minute, BEACON_CODE_MAX_TRIES wrong
+# guesses -- so there is one store and one email for every password code,
+# and two front doors to it. All three pages are signed-out only (GUEST_ONLY)
+# and exempt from onboarding, like the rest of the sign-in pages.
 
-    A placeholder: there is no password reset yet, and a link that leads
-    somewhere honest beats one that leads nowhere. Signed-out only, like the
-    other sign-in pages (GUEST_ONLY), and exempt from onboarding. When reset
-    is built, an emailed code as /verify already does it, it can live here.
+RESET_NO_ACCOUNT = ("We don't have an account for that address. Check the "
+                    "spelling, or create one.")
+RESET_UNVERIFIED = ("That address hasn't finished signing up. Register again "
+                    "and we'll send you a new sign-up code.")
+RESET_CODE_EXPIRED = "That code has expired. Send a new one."
+RESET_TOO_MANY = "Too many wrong codes. Send a new one."
+RESET_DONE = "Your password is changed."
+
+
+def issue_password_code(user):
+    """Store a new password code for this account and email it.
+
+    Returns ("sent" | "wait" | "failed", code). The code comes back only
+    when it was sent, and only so the profile's testing preview
+    (BEACON_SHOW_CODES) can show it. The same rules as the sign-up code:
+    "wait" inside BEACON_CODE_RESEND_SECONDS of the last one, and a send the
+    mail server refuses is logged and reported, never raised -- with the row
+    stamped as already past, so the next try is not made to wait it out.
     """
+    now = datetime.utcnow()
+    row = db.session.get(BeaconPasswordCode, user.id)
+    if row and (now - row.sent_at).total_seconds() < BEACON_CODE_RESEND_SECONDS:
+        return "wait", None
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    if row is None:
+        row = BeaconPasswordCode(user_id=user.id)
+        db.session.add(row)
+    row.code_hash = generate_password_hash(code)
+    row.sent_at = now
+    row.expires_at = now + timedelta(minutes=BEACON_CODE_MINUTES)
+    row.tries = 0
+    db.session.commit()
+    try:
+        subject, text, html = emails.password_code(user.name, code,
+                                                   BEACON_CODE_MINUTES)
+        mail.send(MailMessage(subject=subject, recipients=[user.email],
+                              body=text, html=html))
+    except Exception:  # noqa: BLE001 -- whatever the mail server says, the page goes on
+        app.logger.exception("password code email to %s failed", user.email)
+        past = now - timedelta(seconds=BEACON_CODE_RESEND_SECONDS)
+        row.sent_at = past
+        row.expires_at = past
+        db.session.commit()
+        return "failed", None
+    return "sent", code
+
+
+def pending_reset():
+    """The account that asked for a password code in this browser, or None."""
+    user = db.session.get(User, session.get("reset_user_id") or 0)
+    if user is None:
+        session.pop("reset_user_id", None)
+    return user
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Where the sign-in page's "Forgot password? Click here" goes: the
+    address, then a code to it, then the new password (reset_password).
+
+    Says plainly when there is no account for the address: register already
+    says whether an address is taken, so a vaguer answer here would hide
+    nothing. A sign-up that never finished is sent back to register, which
+    starts it again with a fresh sign-up code.
+    """
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = (db.session.scalar(db.select(User).filter_by(email=email))
+                if email else None)
+        if user is None:
+            flash(RESET_NO_ACCOUNT)
+        elif not user.email_verified:
+            flash(RESET_UNVERIFIED)
+            return redirect(url_for("register"))
+        else:
+            went, _ = issue_password_code(user)
+            if went == "wait":
+                flash(CODE_WAIT)
+            elif went == "failed":
+                flash(CODE_NOT_SENT)
+            session["reset_user_id"] = user.id
+            return redirect(url_for("reset_password"))
+
     return render_template("forgot.html")
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    """The code and the new password, on one page. The code is checked
+    last: a password that breaks a rule is said so without using up a
+    guess, and the same code goes again with the corrected one."""
+    user = pending_reset()
+    if user is None:
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        sent = db.session.get(BeaconPasswordCode, user.id)
+        password = request.form.get("password", "")
+        if sent is None or sent.expires_at < datetime.utcnow():
+            flash(RESET_CODE_EXPIRED)
+        elif sent.tries >= BEACON_CODE_MAX_TRIES:
+            flash(RESET_TOO_MANY)
+        elif len(password) < BEACON_PASSWORD_MIN:
+            flash(f"Password must be at least {BEACON_PASSWORD_MIN} characters.")
+        elif password != request.form.get("confirm_password", ""):
+            flash("Passwords do not match.")
+        elif not check_password_hash(sent.code_hash,
+                                     request.form.get("code", "").strip()):
+            sent.tries += 1
+            db.session.commit()
+            flash("Incorrect code.")
+        else:
+            beacon_set_password(user, password)
+            db.session.delete(sent)
+            db.session.commit()
+            session.pop("reset_user_id", None)
+            # Signed in straight away, as /verify does once the code is
+            # right: the code proved the address, and the password was
+            # typed twice a moment ago.
+            login_user(user)
+            flash(RESET_DONE)
+            return redirect(url_for("index"))
+
+    return render_template("reset.html", email=user.email,
+                           minutes=BEACON_CODE_MINUTES)
+
+
+@app.route("/reset-password/resend", methods=["POST"])
+def reset_resend():
+    user = pending_reset()
+    if user is None:
+        return redirect(url_for("forgot_password"))
+    went, _ = issue_password_code(user)
+    flash("A new code is on its way." if went == "sent"
+          else CODE_WAIT if went == "wait" else CODE_NOT_SENT)
+    return redirect(url_for("reset_password"))
 
 
 def read_answers(questions):
@@ -8528,29 +8683,16 @@ def _bc_profile_account():
 
 @_bc_login.login_required
 def _bc_password_code():
-    """Emails a 6-digit code, like your sign-up code. Stored hashed; one a minute."""
+    """Emails a 6-digit code, like your sign-up code. Stored hashed; one a minute.
+    The code and its email are issue_password_code's, shared with Forgot
+    password on the sign-in page."""
     me = _bc_login.current_user
-    now = _bc_now()
-    row = db.session.get(BeaconPasswordCode, me.id)
-    if row and (now - row.sent_at).total_seconds() < BEACON_CODE_RESEND_SECONDS:
+    went, code = issue_password_code(me)
+    if went == "wait":
         return _bc_back("safety", ["A code was sent less than a minute ago. Check your email, "
                                    "or ask for a new one in a minute."])
-    code = "%06d" % _bc_secrets.randbelow(1000000)
-    if row is None:
-        row = BeaconPasswordCode(user_id=me.id)
-        db.session.add(row)
-    row.code_hash = _bc_security.generate_password_hash(code)
-    row.sent_at, row.expires_at, row.tries = now, now + _bc_dt.timedelta(minutes=BEACON_CODE_MINUTES), 0
-    db.session.flush()
-    try:
-        beacon_send_email(me.email, "Your BeaconsConnect password code",
-                          "Your code for changing your BeaconsConnect password is %s.\n"
-                          "It expires in %d minutes. If you did not ask for it, you can ignore this email."
-                          % (code, BEACON_CODE_MINUTES))
-    except Exception:
-        app.logger.exception("Beacon profile: the password code email was not sent")
+    if went == "failed":
         return _bc_back("safety", ["We couldn't send the email just now. Try again in a few minutes."])
-    db.session.commit()
     if app.config.get("BEACON_SHOW_CODES"):          # local testing only: shows the code on the page
         _bc_flask.session["beacon_preview_code"] = code
     return _bc_back("safety", ["Code sent to %s. It expires in %d minutes." % (me.email, BEACON_CODE_MINUTES)],

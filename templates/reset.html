@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Set a new password{% endblock %}
+
+{#
+  Forgot password, step two: the code that went to the address, and the new
+  password twice. Laid out like verify.html; the code, sent-to and resend
+  styles are base.html's (section 9), shared with that page.
+#}
+{% block content %}
+  <div class="auth">
+    <div class="auth-stack">
+      {% set tagline = "One quick check that it's really you." %}
+      {% include "_brandpanel.html" %}
+
+      <div class="auth-card">
+        <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Set a new password</h1><span class="grip"></span></div>
+
+        <div class="auth-body">
+          {{ ui.flashes() }}
+
+          <p class="lede">
+            We sent a 6-digit code to <span class="sent">{{ email }}</span><br />
+            It expires in {{ minutes }} minutes.
+          </p>
+          <p class="spamnote">Can't find it? Check your spam or junk folder.</p>
+
+          <form method="post">
+            <label>Code from the email
+              <input class="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
+                     maxlength="6" required autofocus autocomplete="one-time-code"
+                     placeholder="000000" />
+            </label>
+            <label>New password
+              <input type="password" name="password" required
+                     autocomplete="new-password" placeholder="At least 8 characters" />
+            </label>
+            <label>Confirm new password
+              <input type="password" name="confirm_password" required
+                     autocomplete="new-password" placeholder="Repeat it" />
+            </label>
+            <button type="submit">Change password</button>
+          </form>
+
+          <div class="resend">
+            <form method="post" action="{{ url_for('reset_resend') }}">
+              <button type="submit" class="ghost">Send a new code</button>
+            </form>
+          </div>
+        </div>
+
+        <p class="auth-foot"><a href="{{ url_for('login') }}">Back to sign in</a></p>
+      </div>
+    </div>
+  </div>
+{% endblock %}
