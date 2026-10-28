@@ -83,9 +83,7 @@
       }
       button.confirm-no:hover { background: var(--paper); }
 
-      /* ---------- Post a meetup ---------- */
-      /* the form already sits in a window, so its card wrapper goes quiet */
-      .sec-place > .card:has(.newpost) { padding: 0; border: 0; }
+      /* ---------- Post a meetup (in the map window, _meetup_form.html) ---------- */
       .newpost { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
       .newpost input { width: auto; margin: 0; flex: 1 1 8rem; }
       .newpost select { margin: 0; flex: 1 1 7rem; width: auto; min-width: 0; max-width: 100%; }
@@ -94,13 +92,14 @@
          row wraps instead. .newpost .ondate rather than .ondate, because
          `.newpost input` (element plus class) would outrank a bare class. */
       .newpost .ondate { width: auto; flex: 0 0 10rem; margin: 0; }
-      /* Where the meetup's pin is on the campus map: a line of its own, a
-         navy pixel pin (a meetup's colour on the map), the spot in words,
-         and the button that hands the pin to the map. */
+      /* Where the meetup's pin is on the campus map, in the head of the
+         form's box: a navy pixel pin (a meetup's colour on the map) and the
+         spot in words. It rewrites itself as the pin is dragged. */
+      .meetbox .draft-head { flex-wrap: wrap; }
       .onmap {
-        flex: 1 1 100%; display: flex; align-items: center; gap: 10px; min-width: 0;
-        padding: 5px 5px 5px 10px;
-        background: var(--paper);
+        flex: 0 1 auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+        padding: 5px 10px;
+        background: #fff;
         border: 2px dashed var(--line-2); border-radius: var(--r);
         color: var(--navy); font-size: .92rem;
       }
@@ -110,8 +109,6 @@
         background: var(--navy); box-shadow: 2px 2px 0 var(--orange);
       }
       .onmap-where { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
-      .onmap-where.unset { color: var(--muted); font-weight: 400; }
-      .newpost .onmap button { flex: none; min-height: 36px; padding: 0 12px; }
       /* What stands where the composer was once a meetup is over. */
       .chat-ended {
         margin: 0; padding: 10px 12px;
@@ -184,8 +181,10 @@
 {#
   Three positions on this page are asserted rather than chosen:
 
-  - the queue form must be the first <form> after <h2>Matchmaking</h2>;
-  - the post form must sit between "Post a meetup" and "Open meetups";
+  - the queue form must be the first <form> after <h2>Matchmaking</h2>, and
+    the matchmaking band runs from there to <h2>Your pairings</h2>;
+  - the post form (class "newpost", in the map window: _meetup_form.html)
+    is cut out of the page by that class;
   - "{count} of {max} going" must keep single spaces with no markup between the
     two numbers, so the attendance line stays one text node.
 
@@ -194,15 +193,17 @@
 {% block main %}
   <div class="pagehead">
     <h1>Meet up in person!</h1>
-    <p class="lede">Meet up in person. Join the queue to be paired, or answer a post.</p>
+    <p class="lede">Post a meetup on the map, join the queue to be paired, or answer a post.</p>
   </div>
 
   {# Two columns on wide screens, as in the Beacon OS mockup: the campus map
-     on the left, matchmaking and meetups on the right. One column on phones,
-     map first. The map comes before the Matchmaking heading, so the queue
-     form is still the first <form> after <h2>Matchmaking</h2>. #}
+     on the left, with Post a meetup inside its window, and matchmaking and
+     the open meetups on the right. One column on phones, map first. The map
+     comes before the Matchmaking heading, so the queue form is still the
+     first <form> after <h2>Matchmaking</h2>. #}
   <div class="meetgrid">
   <div class="meetcol">
+    {% set map_meetup = true %}
     {% include "_community_map.html" %}
   </div>
   <div class="meetcol">
@@ -298,96 +299,15 @@
     </div>
   </section>
 
-  <section class="sec-place">
-    {{ ui.section("Post a meetup", "place", "plus") }}
-    <div class="card">
-      <form class="newpost" method="post" action="{{ url_for('post_new') }}">
-        <input type="hidden" name="mode" value="inperson" />
-        <input type="hidden" name="back" value="find" />
-        <select name="game" class="act" required>
-          {% for a in catalogue %}
-            {% if a.in_person %}
-              <option value="{{ a.name }}"
-                      data-online="{{ 1 if a.online else 0 }}"
-                      data-inperson="1">{{ a.name }}</option>
-            {% endif %}
-          {% endfor %}
-          {# The write-in. See the chat form for why it carries no
-             location of its own until it is chosen. #}
-          <option value="other" data-online="0"
-                  data-inperson="1">Other&hellip;</option>
-        </select>
-        <select name="location" class="loc" required>
-          <option value="">Where</option>
-          {% for a in catalogue %}
-            {% if a.locations %}
-              <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
-                {% for loc in a.locations %}
-                  <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
-                {% endfor %}
-              </optgroup>
-            {% endif %}
-          {% endfor %}
-        </select>
-        {# Shown only for a write-in, and rendered plainly so the form still
-           works with no JavaScript. #}
-        <input name="custom_game" class="custom" maxlength="60"
-               placeholder="What are you playing?" aria-label="Activity" />
-        <input name="custom_location" class="custom" maxlength="120"
-               placeholder="Where?" aria-label="Meetup location" />
-        {# Where its pin goes on the campus map above, in words, with the
-           button that hands the pin to the map to drag. Hidden until the
-           script below shows it: without JavaScript the point stays empty
-           and the server puts the pin on the place's landmark. #}
-        <input type="hidden" name="latitude" />
-        <input type="hidden" name="longitude" />
-        <span class="onmap" hidden>
-          <span class="onmap-pin" aria-hidden="true"></span>
-          <span class="onmap-where" aria-live="polite">Not on the map yet</span>
-          <button type="button" class="ghost onmap-move">Put it on the map</button>
-        </span>
-        <input name="max_players" type="number" min="2" max="50" value="4"
-             aria-label="How many players" title="How many players" />
-        {# The day in words, and the time as three choices. AM/PM starts blank
-           on purpose -- a preselected one is exactly the guess that makes a
-           meetup's time ambiguous -- and the server refuses an hour without it.
-           The day stays free text so "Tonight" and "Now" are still sayable. #}
-          {# Required: the meetup's chat ends after this date, and a meetup
-             whose "when" is a sentence has no day to end after.
-             The time beside it stays optional. #}
-          <input name="when_on" type="date" class="ondate" required
-                 aria-label="Date" title="Date" />
-        <span class="whenrow">
-          {# One group, not three boxes: a single border with hairlines between,
-             so the hour, the minutes and the half of the day read as one time
-             and cannot be split across two lines by wrapping. #}
-          <span class="timeset">
-            <select name="when_hour" aria-label="Hour">
-              <option value="">Hour</option>
-              {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-            </select>
-            <select name="when_minute" aria-label="Minutes">
-              {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
-            </select>
-            <select name="when_ampm" aria-label="AM or PM">
-              <option value="">AM/PM</option>
-              {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-            </select>
-          </span>
-        </span>
-        <input name="note" maxlength="300" placeholder="Note (optional)" />
-        <button type="submit">Post it</button>
-      </form>
-    </div>
-  </section>
-
+  {# Post a meetup is in the map window (left column, _meetup_form.html):
+     the form and its pin are one thing there. #}
   <section class="sec-place">
     {{ ui.section("Open meetups", "place", "star", posts | length) }}
     <div class="grid two" id="meetups" data-cards="{{ card_token }}">
       {% for post in posts %}
         {% include "_findcard.html" %}
       {% else %}
-        <div class="empty">No in-person meetups posted yet. Add one above.</div>
+        <div class="empty">No in-person meetups posted yet. Post one from the map.</div>
       {% endfor %}
     </div>
   </section>
@@ -485,7 +405,7 @@
       if (!cards.length) {
         var empty = document.createElement("div");
         empty.className = "empty";
-        empty.textContent = "No in-person meetups posted yet. Add one above.";
+        empty.textContent = "No in-person meetups posted yet. Post one from the map.";
         grid.appendChild(empty);
       }
       var head = grid.previousElementSibling;
@@ -507,53 +427,64 @@
   })();
 </script>
 <script>
-  // The meetup form's pin. Choosing a place puts it on that place's
-  // landmark; "Move pin" hands it to the campus map above to drag
-  // (BeaconMap.pick, static/community-map.js). The form only holds the
-  // point -- the meetup's flag is made by the server when it is posted.
+  // The meetup form lives in the map window. The map's "Post a meetup" key
+  // opens it with a draggable pin already on the map (BeaconMap.pick,
+  // static/community-map.js): choosing a place moves the pin to that
+  // place's landmark, and dragging the pin or tapping the map rewrites the
+  // "Near ..." line in the form's head. Cancel, Escape or posting puts it
+  // away. The form only holds the point -- the meetup's flag is made by the
+  // server when it is posted.
   (function () {
     var POINTS = {{ place_points | tojson }};
-    var form = document.querySelector("form.newpost");
-    if (!form) { return; }
-    var line = form.querySelector(".onmap");
-    var where = form.querySelector(".onmap-where");
-    var move = form.querySelector(".onmap-move");
+    var box = document.getElementById("mapMeetForm");
+    var key = document.getElementById("mapMeet");
+    var form = box ? box.querySelector("form.newpost") : null;
+    if (!box || !key || !form) { return; }
+    var line = box.querySelector(".onmap");
+    var where = box.querySelector(".onmap-where");
+    var note = document.getElementById("mapMeetNote");
+    var cancel = form.querySelector(".meet-cancel");
     var lat = form.querySelector("input[name=latitude]");
     var lng = form.querySelector("input[name=longitude]");
     var act = form.querySelector(".act");
     var loc = form.querySelector(".loc");
     var writeIn = form.querySelector("input[name=custom_location]");
-    var point = null;    // {lat, lng, near}, or null: not on the map yet
-    var moved = false;   // put there by hand
+    var point = null;    // {lat, lng, near}
+    var moved = false;   // put somewhere by hand
     var typed = false;   // the write-in place was typed, so the pin leaves it alone
-    var picking = false;
+    var open = false;    // the form is out, with its pin on the map
 
     function show() {
       lat.value = point ? point.lat.toFixed(6) : "";
       lng.value = point ? point.lng.toFixed(6) : "";
       where.textContent = point ? point.near : "Not on the map yet";
-      where.classList.toggle("unset", !point);
-      move.textContent = point ? "Move pin" : "Put it on the map";
+    }
+
+    function campusCentre() {
+      var c = POINTS["Campus Center"];
+      return { lat: c.lat, lng: c.lng, near: c.near };
     }
 
     // A place with a landmark puts the pin there. One without (the
-    // Harborwalk, a write-in) keeps a pin that was put somewhere by hand.
+    // Harborwalk, a write-in) keeps a pin that was put somewhere by hand,
+    // and otherwise starts from the Campus Center while the form is out.
     function fromPlace() {
       var spot = act.value === "other" ? null : POINTS[loc.value];
       if (spot) {
         point = { lat: spot.lat, lng: spot.lng, near: spot.near };
         moved = false;
       } else if (!moved) {
-        point = null;
+        point = open ? campusCentre() : null;
       }
       show();
-      if (picking && point && window.BeaconMap) { window.BeaconMap.pickAt(point.lat, point.lng); }
+      if (open && point && window.BeaconMap) { window.BeaconMap.pickAt(point.lat, point.lng); }
     }
 
-    move.addEventListener("click", function () {
-      var start = point || POINTS["Campus Center"];
+    function openForm() {
+      if (open) { return; }
+      if (!point) { point = campusCentre(); }
       var started = window.BeaconMap && window.BeaconMap.pick({
-        lat: start.lat, lng: start.lng,
+        lat: point.lat, lng: point.lng,
         onMove: function (p) {
           point = { lat: p.lat, lng: p.lng, near: p.near };
           moved = true;
@@ -562,33 +493,34 @@
           }
           show();
         },
-        onDone: function () {
-          picking = false;
-          form.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        onDone: function () { open = false; }
       });
-      if (!started) {
-        where.textContent = "The map is still loading. Try again in a moment.";
-        return;
-      }
-      picking = true;
-      if (!point) { point = { lat: start.lat, lng: start.lng, near: start.near }; moved = true; show(); }
-      // The stage, centred, rather than the card's top: on a phone that left
-      // the bottom of the map -- where its bar and Done are -- behind the tab bar.
-      document.getElementById("mapStage").scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+      if (!started) { return; }
+      open = true;
+      show();
+      // Map and form on one screen: the map window to the top of the page,
+      // just under the top bar.
+      var bar = document.querySelector(".topbar");
+      var card = document.getElementById("campusMapCard");
+      var top = card.getBoundingClientRect().top + window.pageYOffset
+                - (bar ? bar.offsetHeight : 0) - 8;
+      window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+    }
 
+    key.addEventListener("click", openForm);
+    cancel.addEventListener("click", function () {
+      if (window.BeaconMap) { window.BeaconMap.unpick(); }
+    });
     if (writeIn) { writeIn.addEventListener("input", function () { typed = writeIn.value !== ""; }); }
     act.addEventListener("change", fromPlace);
     loc.addEventListener("change", fromPlace);
-    form.addEventListener("submit", function () {
-      if (picking && window.BeaconMap) { window.BeaconMap.unpick(); }
-    });
-    // Posted: show where it landed, then start the form's pin again from
-    // its reset place. After the enhancer's reset, hence the timeout.
+    // Posted: put the form away, show where the meetup landed, and start
+    // the pin again from its reset place. After the enhancer's reset,
+    // hence the timeout. A refused post keeps the form out, as typed.
     form.addEventListener("beacon:done", function (event) {
       if (event.detail && event.detail.refused) { return; }
       var posted = point;
+      if (window.BeaconMap) { window.BeaconMap.unpick(); }
       setTimeout(function () {
         moved = false; typed = false;
         fromPlace();
@@ -597,6 +529,8 @@
     });
 
     line.hidden = false;
+    note.hidden = false;
+    cancel.hidden = false;
     fromPlace();
   })();
 </script>

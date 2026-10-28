@@ -12,6 +12,11 @@
     - Meetups posted in Community Chat, on this page or in a friend chat drop
       their own event flag. Only the people who said they're in can see it,
       until its author makes it public from the card.
+    - On /find (map_meetup set by the page) a "Post a meetup" key sits
+      beside "Drop a flag": it opens the meetup form (_meetup_form.html)
+      right under the map with a draggable pin already on it, so the map
+      and the form share one screen. The key is revealed by the script once
+      the map is up; without JavaScript the form is simply there.
 
   data- attributes give the script what only the server knows: the API, the
   landmark logos (UMass Boston, the Healey Library sign, UMass Boston
@@ -44,21 +49,21 @@
     <button class="iconbtn map-locate" id="mapLocate" type="button"
             aria-label="Show where I am" title="Show where I am">{{ ui.icon("locate") }}</button>
     <p class="map-status" id="mapStatus" aria-live="polite">Loading the campus map&hellip;</p>
-    {# Shown while the meetup form below is placing its pin (Move pin on
-       /find). Inside the stage, under its isolation, so it can never sit
-       over the top bar or the tab bar. #}
-    <div class="map-pickbar" id="mapPickBar" hidden>
-      <span>Drag the pin to where you'll meet</span>
-      <button type="button" id="mapPickDone">Done</button>
-    </div>
   </div>
 
   <div class="campus-map-pane">
-    {# Key to the pin colours; filled in from the flag types the API sends. #}
-    <ul class="map-legend" id="mapLegend" aria-label="Map key"></ul>
+    {# What you can do here, first, right under the map: post a meetup (the
+       form opens below with its pin on the map) or drop a flag. Both keys
+       go away while either form is open. #}
+    <div class="map-drop-row">
+      {% if map_meetup %}
+        <button class="map-drop" id="mapMeet" type="button" hidden>{{ ui.icon("plus") }}<span>Post a meetup</span></button>
+      {% endif %}
+      <button class="map-drop" id="mapDrop" type="button">{{ ui.icon("club") }}<span>Drop a flag</span></button>
+      <p class="flag-count" id="mapFlagCount">Loading flags&hellip;</p>
+    </div>
 
-    {# The flag you tapped: what, where, who, and what you can do with it. #}
-    <div id="mapFlagDetail" aria-live="polite"></div>
+    {% if map_meetup %}{% include "_meetup_form.html" %}{% endif %}
 
     {# The draft flag's editor. Hidden until you drop a flag or edit one. #}
     {# data-full: the page-swapping script (_enhance.html) leaves this form
@@ -82,18 +87,13 @@
                placeholder="Pickup frisbee after class" />
       </label>
 
-      {# Filled in by the script as the draft flag moves. #}
-      <div class="map-point-picker">
-        <span class="map-field-label">Flag position</span>
-        <strong id="mapFlagPoint">Choose a point on the map</strong>
-        <input name="latitude" id="mapFlagLatitude" type="hidden" />
-        <input name="longitude" id="mapFlagLongitude" type="hidden" />
-      </div>
-
-      <label>Location label
-        <input name="location_name" id="mapFlagLocationName" maxlength="120" required
-               autocomplete="off" placeholder="Campus Center lawn" />
-      </label>
+      {# Where the flag is: the point, and its label in words (the nearest
+         landmark, "Near Campus Center"). All three are filled in by the
+         script as the draft flag is placed or moved; nobody types a
+         "where" for a flag, the map is the where. #}
+      <input name="latitude" id="mapFlagLatitude" type="hidden" />
+      <input name="longitude" id="mapFlagLongitude" type="hidden" />
+      <input name="location_name" id="mapFlagLocationName" type="hidden" />
 
       <div class="flag-form-row">
         {# Hand-dropped flags only; a meetup's flag ends with the meetup. #}
@@ -133,11 +133,11 @@
       </div>
     </form>
 
-    {# Starts placing a new flag (and cancels it). #}
-    <div class="map-drop-row">
-      <button class="map-drop" id="mapDrop" type="button">{{ ui.icon("club") }}<span>Drop a flag</span></button>
-      <p class="flag-count" id="mapFlagCount">Loading flags&hellip;</p>
-    </div>
+    {# The flag you tapped: what, where, who, and what you can do with it. #}
+    <div id="mapFlagDetail" aria-live="polite"></div>
+
+    {# Key to the pin colours; filled in from the flag types the API sends. #}
+    <ul class="map-legend" id="mapLegend" aria-label="Map key"></ul>
 
     <p class="map-privacy">
       Your GPS position stays in this browser. Only the flag position you choose is saved.

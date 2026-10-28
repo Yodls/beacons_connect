@@ -56,7 +56,9 @@
     "public": "Everyone",
     friends: "My friend(s)",
     club: "One of my clubs",
-    going: "Only people who are in"
+    // A meetup's flag, kept to the people who are in. "Locked" is the state
+    // on the card; the button that does it says "Lock meetup".
+    going: "Locked"
   };
 
   // ---------- 2. page elements ----------
@@ -67,14 +69,15 @@
     locate: $("mapLocate"), form: $("mapFlagForm"), formTitle: $("flagFormTitle"),
     draftTag: $("mapDraftTag"), draftNote: $("mapDraftNote"), kinds: $("mapKinds"),
     kindChips: $("mapKindChips"), titleLabel: $("mapTitleLabel"),
-    point: $("mapFlagPoint"), lat: $("mapFlagLatitude"), lng: $("mapFlagLongitude"),
+    lat: $("mapFlagLatitude"), lng: $("mapFlagLongitude"),
     locName: $("mapFlagLocationName"), durationWrap: $("mapDurationWrap"),
     visibility: $("mapFlagVisibility"), friendPick: $("mapFriendPick"),
     friendChips: $("mapFriendChips"), friendSearch: $("mapFriendSearch"),
     friendList: $("mapFriendList"), friendMore: $("mapFriendMore"),
     clubWrap: $("mapFlagClubWrap"), club: $("mapFlagClub"),
     error: $("mapFormError"), submit: $("mapFlagSubmit"), cancel: $("mapFlagCancel"),
-    pickBar: $("mapPickBar"), pickDone: $("mapPickDone")
+    // /find only: the "Post a meetup" key and the form it opens (see 6b).
+    meet: $("mapMeet"), meetForm: $("mapMeetForm")
   };
   var urls = {
     flags: root.dataset.flagsUrl,
@@ -90,6 +93,7 @@
   var info = { flags: [], categories: {}, order: [], durations: [], places: [],
                clubs: [], friends: [], mine: 0, limit: 3 };
   var mode = "idle";      // idle | placing | draft | pick
+  var ready = false;      // the map is up: the keys under it can be pressed
   var draft = null;       // the flag being drafted or edited (see startDraft)
   var pick = null;        // the meetup pin the form on /find is placing (see 6b)
   var selected = null;    // id of the flag shown in the card
@@ -541,7 +545,7 @@
       if (ev) {
         var nextAudience = flag.visibility === "public" ? "going" : "public";
         actions.appendChild(button(
-          flag.visibility === "public" ? "Only people who are in" : "Make public",
+          flag.visibility === "public" ? "Lock meetup" : "Make public",
           "map-button", function () { saveAudience(flag, nextAudience); }));
       }
       actions.appendChild(button(confirmDown === flag.id ? "Tap again to take down" : "Take down",
@@ -613,10 +617,12 @@
   function setMode(next) {
     mode = next;
     root.classList.toggle("placing", mode !== "idle");
-    root.classList.toggle("picking", mode === "pick");
     el.form.hidden = mode !== "draft";
+    // The meetup form opens under the map while its pin is being placed,
+    // and the keys under the map step aside for whichever form is open.
+    if (el.meetForm) { el.meetForm.hidden = mode !== "pick"; }
     el.drop.parentNode.hidden = mode === "draft" || mode === "pick";
-    if (el.pickBar) { el.pickBar.hidden = mode !== "pick"; }
+    if (el.meet) { el.meet.hidden = !ready || mode !== "idle"; }
     el.drop.classList.toggle("cancel", mode === "placing");
     el.drop.querySelector("span").textContent = mode === "placing" ? "Cancel" : "Drop a flag";
     renderCount();
@@ -628,7 +634,7 @@
   function startDraft(latlng) {
     draft = {
       editing: null, event: false, category: "social",
-      lat: latlng.lat, lng: latlng.lng, labelTouched: false,
+      lat: latlng.lat, lng: latlng.lng,
       visibility: "public", picked: [], club: info.clubs.length ? String(info.clubs[0].id) : ""
     };
     fillForm({ title: "", description: "", location_name: nearestPlaceName(latlng) });
@@ -641,7 +647,7 @@
   function startEdit(flag) {
     draft = {
       editing: flag.id, event: !!flag.event, category: flag.category,
-      lat: flag.latitude, lng: flag.longitude, labelTouched: true,
+      lat: flag.latitude, lng: flag.longitude,
       visibility: flag.visibility,
       picked: (flag.friends || []).map(function (f) { return f.id; }),
       club: flag.club_id ? String(flag.club_id) : (info.clubs.length ? String(info.clubs[0].id) : "")
@@ -653,9 +659,11 @@
     setTimeout(function () { el.form.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 60);
   }
 
+  // The flag's label is where it is, in words, and follows the pin: nobody
+  // types a "where" for a flag, the map is the where.
   function moveDraft(latlng) {
     draft.lat = latlng.lat; draft.lng = latlng.lng;
-    if (!draft.labelTouched) { el.locName.value = nearestPlaceName(latlng); }
+    el.locName.value = nearestPlaceName(latlng);
     showPoint();
     renderMarkers();
   }
@@ -663,7 +671,6 @@
   function showPoint() {
     el.lat.value = draft.lat.toFixed(6);
     el.lng.value = draft.lng.toFixed(6);
-    el.point.textContent = (draft.editing ? "At " : "Selected: ") + el.lat.value + ", " + el.lng.value;
   }
 
   function cancelDraft() {
@@ -677,7 +684,9 @@
   // ---------- 6b. a meetup's pin, for the form on /find ----------
   // Not a flag of its own: the meetup form owns the point, and the server
   // makes the meetup's flag when it is posted. This only lets the person
-  // put the pin somewhere and tells the form where, in words as well.
+  // put the pin somewhere and tells the form where, in words as well. The
+  // form itself (#mapMeetForm) is shown under the map for as long as the
+  // pin is out (setMode), and the page's own script fills it in.
   function startPick(options) {
     if (mode === "placing" || mode === "draft") { draft = null; el.error.hidden = true; }
     selected = null;
@@ -685,7 +694,7 @@
     setMode("pick");
     unlockMap();
     map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), 17));
-    announce("");   // the bar along the bottom says what to do
+    announce("Tap the map or drag the pin to where you'll meet.");
   }
 
   function movePick(latlng) {
@@ -763,6 +772,7 @@
     el.visibility.replaceChildren();
     (draft.event ? ["going", "public"] : ["public", "friends", "club"]).forEach(function (key) {
       var o = option(key, AUDIENCE[key]);
+      if (key === "going") { o.textContent = "Locked (only people who are in)"; }
       if (key === "club" && !info.clubs.length) { o.disabled = true; o.textContent += " (join a club first)"; }
       if (key === "friends" && !info.friends.length) { o.disabled = true; o.textContent += " (add friends first)"; }
       el.visibility.appendChild(o);
@@ -918,7 +928,7 @@
     sendJSON(flagUrl(flag.id), "PATCH", { visibility: visibility })
       .then(function () {
         announce(visibility === "public" ? "Everyone can see this meetup's flag now."
-          : "Only people who are in can see this flag now.", "success");
+          : "Meetup locked. Only people who are in can see its flag now.", "success");
         return loadFlags(true);
       })
       .catch(function (error) { announce(error.message, "error"); });
@@ -1008,7 +1018,9 @@
     setMode("placing");
     announce("Tap the map where you want people to find you.");
   });
-  if (el.pickDone) { el.pickDone.addEventListener("click", endPick); }
+  // The meetup form waits behind its key until the map is up; without this
+  // script running at all it is simply there under the map.
+  if (el.meetForm) { el.meetForm.hidden = true; }
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && mode === "pick") { endPick(); }
   });
@@ -1016,7 +1028,6 @@
   el.cancel.addEventListener("click", cancelDraft);
   el.visibility.addEventListener("change", audienceChanged);
   el.club.addEventListener("change", function () { if (draft) { draft.club = el.club.value; } });
-  el.locName.addEventListener("input", function () { if (draft) { draft.labelTouched = true; } });
   el.friendSearch.addEventListener("input", renderFriendList);
   // Enter in the friend search would submit the whole form.
   el.friendSearch.addEventListener("keydown", function (event) {
@@ -1097,6 +1108,8 @@
 
   loadLeaflet().then(function () {
     initMap();
+    ready = true;
+    if (el.meet) { el.meet.hidden = false; }
     loadFlags();
     if (window.Beacon && typeof window.Beacon.every === "function") {
       window.Beacon.every(function () { if (!dragging) { loadFlags(true); } }, REFRESH_MS);
@@ -1109,5 +1122,8 @@
     announce("The map library couldn't load. Check your internet connection.", "error");
     el.count.textContent = "Map unavailable";
     el.drop.disabled = true;
+    // No map to put a pin on: the meetup form is shown as it would be
+    // without JavaScript, and the server pins the meetup on its place.
+    if (el.meetForm) { el.meetForm.hidden = false; }
   });
 })();
