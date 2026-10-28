@@ -34,13 +34,17 @@
 
     {# The friend action. Anybody may be sent a request, so this is not a
        permission question -- only a question of what is true already. #}
+    {# data-region: a friendship moves no live token, so the list this row
+       is in is refreshed on its own once the request is sent. Set before
+       the branches: inside the "Requested" one, it only ever ran for rows
+       that no longer had a form, and every Add friend and Accept here posted
+       with an empty region -- so the row went on saying "Add friend" until
+       the page was reloaded. #}
+    {% set region = "#club-slot" if home_kind == "club" else "#group-slot" %}
     {% if state == "matched" %}
       <span class="dock-quiet">Friend</span>
     {% elif state == "you_asked" %}
       <span class="dock-quiet">Requested</span>
-    {# data-region: a friendship moves no live token, so the list this row
-       is in is refreshed on its own once the request is sent. #}
-    {% set region = "#club-slot" if home_kind == "club" else "#group-slot" %}
     {% elif state == "they_asked" %}
       <form method="post" data-region="{{ region }}"
             action="{{ url_for('match_respond', other_id=person.id, action='accept') }}">

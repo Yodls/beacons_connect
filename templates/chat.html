@@ -1269,6 +1269,9 @@
   // a swap; it looks the column up afresh each time.
   (function () {
     if (window.beaconTalkSizer) { window.beaconTalkSizer(); return; }
+    // Every browser has matchMedia; a test DOM (jsdom) does not, and
+    // without one the column just keeps its stylesheet height.
+    if (!window.matchMedia) { return; }
     var wide = window.matchMedia("(min-width: 900px)");
     var queued = false;
     function size() {

@@ -239,6 +239,51 @@ if os.path.isdir(_local_ui):
 
 db.init_app(app)
 mail = Mail(app)
+
+
+# A development copy of the site only emails people who asked for it.
+#
+# Dev databases are full of made-up students -- the demo accounts, the test
+# suites' probes, the browser harness -- and every email to one of those
+# bounces, which counts against the sending address's reputation and gets
+# real mail filed as spam. So on a *_dev database, mail goes only to an
+# admin's own address or one listed in DEV_MAIL_TO (comma separated); the
+# rest is logged and dropped. Production is untouched, and the test suites
+# send nothing at all (they force MAIL_SUPPRESS_SEND).
+class MailHeldBack(Exception):
+    """Raised instead of sending to an address a dev database may not mail.
+    Every sender already catches a failed send, so this is reported the same
+    way a refusing mail server is."""
+
+
+def dev_may_mail(address):
+    address = (address or "").strip().lower()
+    listed = {a.strip().lower() for a in os.environ.get("DEV_MAIL_TO", "").split(",")
+              if a.strip()}
+    if address in listed:
+        return True
+    return db.session.scalar(
+        db.select(User.id).where(db.func.lower(User.email) == address,
+                                 User.is_admin.is_(True))) is not None
+
+
+_send_for_real = mail.send
+
+
+def send_guarded(message):
+    if DEV_DB and not app.config.get("MAIL_SUPPRESS_SEND"):
+        keep = [r for r in message.recipients if dev_may_mail(r)]
+        held = [r for r in message.recipients if r not in keep]
+        if held:
+            app.logger.info("development database: not emailing %s", ", ".join(held))
+        if not keep:
+            raise MailHeldBack("This is a development database, so it only "
+                               "emails admins and the addresses in DEV_MAIL_TO.")
+        message.recipients = keep
+    return _send_for_real(message)
+
+
+mail.send = send_guarded
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
@@ -2639,10 +2684,17 @@ def live_reply(kind, target_id):
         # that asked for it demonstrably still existed. A held request outlives
         # its tab, so a ghost refreshes this once and then ages out of the
         # queue rather than keeping a vanished player pairable for ever.
-        mine = seek_row(me)
-        if mine is not None:
-            mine.seen_at = datetime.utcnow()
+        #
+        # One UPDATE rather than load-then-save: the other player's request
+        # can pair them and delete this row in between, and saving a row that
+        # has just gone raised StaleDataError -- a 500 at exactly the moment
+        # the match was made. Gone is simply nothing to touch.
+        if db.session.execute(
+                db.update(GameSeek).where(GameSeek.user_id == me)
+                .values(seen_at=datetime.utcnow())).rowcount:
             db.session.commit()
+        else:
+            db.session.rollback()
 
     deadline = time.monotonic() + LIVE_WAIT
     while True:
@@ -5805,8 +5857,11 @@ def admin_db_run():
                       ok=None, started=datetime.utcnow(),
                       who=current_user.email)
 
+    # The database this site is running on: dev here, live on the server
+    # (where db_ops reads DATABASE_URL when LIVE_DATABASE_URL is not set, and
+    # still refuses --live against a dev database).
     worker = threading.Thread(
-        target=db_job_thread, args=(command, False, True, email),
+        target=db_job_thread, args=(command, not DEV_DB, True, email),
         name=f"db-{command}", daemon=True)
     worker.start()
     return jsonify({"started": command})

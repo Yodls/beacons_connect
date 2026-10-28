@@ -96,7 +96,14 @@ def url_for(live):
     Never returned to a caller that prints it. `where()` is the safe thing to
     show; this exists so psycopg2 can be handed it and nothing else.
     """
-    var = "LIVE_DATABASE_URL" if live else "DATABASE_URL"
+    # On the server the site's own database IS live, and its .env may only
+    # name it DATABASE_URL. So --live falls back to that -- and connect()
+    # still refuses it if it turns out to be a dev database, so the fallback
+    # can never point --live at dev.
+    if live and not os.environ.get("LIVE_DATABASE_URL"):
+        var = "DATABASE_URL"
+    else:
+        var = "LIVE_DATABASE_URL" if live else "DATABASE_URL"
     url = os.environ.get(var)
     if not url:
         raise Refuse(f"{var} is not set in .env.")
@@ -124,7 +131,8 @@ def connect(live=False, apply_=False, say=None, readonly=False):
     """
     url = url_for(live)
     parts = urlsplit(url)
-    var = "LIVE_DATABASE_URL" if live else "DATABASE_URL"
+    var = ("LIVE_DATABASE_URL" if live and os.environ.get("LIVE_DATABASE_URL")
+           else "DATABASE_URL")
     try:
         conn = psycopg2.connect(url, connect_timeout=8)
     except psycopg2.Error as exc:
@@ -145,9 +153,9 @@ def connect(live=False, apply_=False, say=None, readonly=False):
     # The flag and the reality have to agree in both directions.
     if live and name.endswith("_dev"):
         conn.close()
-        raise Refuse(f"--live was passed but LIVE_DATABASE_URL resolves to "
+        raise Refuse(f"--live was passed but {var} resolves to "
                      f"{name!r}, which is a dev database. "
-                     "Fix LIVE_DATABASE_URL in .env.")
+                     f"Fix {var} in .env.")
     if not live and not name.endswith("_dev"):
         conn.close()
         raise Refuse(f"DATABASE_URL resolves to {name!r}, which is not a dev "
@@ -2831,14 +2839,58 @@ def migration(name):
 
 # ------------------------------------------------------------- the runners
 
-def run_migration(name, live=False, apply_=False, echo=True):
-    """One migration, in one transaction, committed only if apply_."""
+def census(cur):
+    """Every table's row count and columns: {table: (rows, {columns})}."""
+    cur.execute("SELECT c.table_name, c.column_name FROM information_schema.columns c "
+                "JOIN information_schema.tables t USING (table_schema, table_name) "
+                "WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'")
+    columns = {}
+    for table, column in cur.fetchall():
+        columns.setdefault(table, set()).add(column)
+    out = {}
+    for table, cols in columns.items():
+        cur.execute(_sql.SQL("SELECT count(*) FROM {}").format(_sql.Identifier(table)))
+        out[table] = (cur.fetchone()[0], cols)
+    return out
+
+
+def removed(before, after):
+    """What went missing between two censuses, as sentences. Empty if nothing."""
+    lost = []
+    for table, (rows, cols) in sorted(before.items()):
+        if table not in after:
+            lost.append(f"table {table} ({rows} row(s)) would be dropped")
+            continue
+        now_rows, now_cols = after[table]
+        if now_rows < rows:
+            lost.append(f"{table} would go from {rows} to {now_rows} row(s)")
+        for column in sorted(cols - now_cols):
+            lost.append(f"column {table}.{column} would be dropped")
+    return lost
+
+
+def run_migration(name, live=False, apply_=False, echo=True, guard=None):
+    """One migration, in one transaction, committed only if apply_.
+
+    On live (or with guard=True) it may only add: a census of every table's
+    rows and columns is taken before and after the work, inside the same
+    transaction, and a migration that would remove a row, a column or a
+    table is rolled back and refused -- dry run or not.
+    """
     mname, summary, work, _ = migration(name)
     say = Say(echo)
     say(f"  {mname}: {summary}")
     conn, dbname = connect(live, apply_, say)
+    guard = live if guard is None else guard
     try:
+        before = census(conn.cursor()) if guard else None
         changed = work(conn.cursor(), dbname, say)
+        if guard:
+            lost = removed(before, census(conn.cursor()))
+            if lost:
+                raise Refuse("this migration would remove data, so nothing "
+                             "was kept: " + "; ".join(lost))
+            say("  . checked: no table lost a row, a column or itself")
     except Refuse as exc:
         conn.rollback()
         conn.close()
