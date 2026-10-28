@@ -6,9 +6,11 @@
   (choosing a place moves the pin to its landmark, dragging the pin rewrites
   the "Near ..." line). Cancel, Escape or posting puts it away again.
 
-  Without JavaScript the box is simply here, under the map, with the pin
-  line, the note and Cancel hidden: the form posts as it always did, and the
-  server puts the pin on the place's landmark.
+  There is no "where" to pick: the pin is the where. The server keeps the
+  pin's words (the nearest landmark, "Near Campus Center") as the meetup's
+  place. Without JavaScript the box is simply here, under the map, with the
+  pin line, the note and Cancel hidden: the form posts as it always did and
+  the meetup goes on the Campus Center, where the pin would have started.
 
   Two positions in here are asserted rather than chosen: <select name="game"
   is the first select in the form, with that attribute order, and the
@@ -47,24 +49,10 @@
       <option value="other" data-online="0"
               data-inperson="1">Other&hellip;</option>
     </select>
-    <select name="location" class="loc" required>
-      <option value="">Where</option>
-      {% for a in catalogue %}
-        {% if a.locations %}
-          <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
-            {% for loc in a.locations %}
-              <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
-            {% endfor %}
-          </optgroup>
-        {% endif %}
-      {% endfor %}
-    </select>
     {# Shown only for a write-in, and rendered plainly so the form still
        works with no JavaScript. #}
     <input name="custom_game" class="custom" maxlength="60"
            placeholder="What are you playing?" aria-label="Activity" />
-    <input name="custom_location" class="custom" maxlength="120"
-           placeholder="Where?" aria-label="Meetup location" />
     <input name="max_players" type="number" min="2" max="50" value="4"
            aria-label="How many players" title="How many players" />
     {# The day as a date, and the time as three choices. AM/PM starts blank

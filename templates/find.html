@@ -429,11 +429,11 @@
 <script>
   // The meetup form lives in the map window. The map's "Post a meetup" key
   // opens it with a draggable pin already on the map (BeaconMap.pick,
-  // static/community-map.js): choosing a place moves the pin to that
-  // place's landmark, and dragging the pin or tapping the map rewrites the
-  // "Near ..." line in the form's head. Cancel, Escape or posting puts it
-  // away. The form only holds the point -- the meetup's flag is made by the
-  // server when it is posted.
+  // static/community-map.js), starting on the Campus Center; dragging the
+  // pin or tapping the map rewrites the "Near ..." line in the form's head.
+  // There is no place to pick: the pin is the where, and the server keeps
+  // its words. Cancel, Escape or posting puts it away. The form only holds
+  // the point -- the meetup's flag is made by the server when it is posted.
   (function () {
     var POINTS = {{ place_points | tojson }};
     var box = document.getElementById("mapMeetForm");
@@ -446,12 +446,7 @@
     var cancel = form.querySelector(".meet-cancel");
     var lat = form.querySelector("input[name=latitude]");
     var lng = form.querySelector("input[name=longitude]");
-    var act = form.querySelector(".act");
-    var loc = form.querySelector(".loc");
-    var writeIn = form.querySelector("input[name=custom_location]");
-    var point = null;    // {lat, lng, near}
-    var moved = false;   // put somewhere by hand
-    var typed = false;   // the write-in place was typed, so the pin leaves it alone
+    var point = null;    // {lat, lng, near}: where the pin is while the form is out
     var open = false;    // the form is out, with its pin on the map
 
     function show() {
@@ -465,21 +460,6 @@
       return { lat: c.lat, lng: c.lng, near: c.near };
     }
 
-    // A place with a landmark puts the pin there. One without (the
-    // Harborwalk, a write-in) keeps a pin that was put somewhere by hand,
-    // and otherwise starts from the Campus Center while the form is out.
-    function fromPlace() {
-      var spot = act.value === "other" ? null : POINTS[loc.value];
-      if (spot) {
-        point = { lat: spot.lat, lng: spot.lng, near: spot.near };
-        moved = false;
-      } else if (!moved) {
-        point = open ? campusCentre() : null;
-      }
-      show();
-      if (open && point && window.BeaconMap) { window.BeaconMap.pickAt(point.lat, point.lng); }
-    }
-
     function openForm() {
       if (open) { return; }
       if (!point) { point = campusCentre(); }
@@ -487,10 +467,6 @@
         lat: point.lat, lng: point.lng,
         onMove: function (p) {
           point = { lat: p.lat, lng: p.lng, near: p.near };
-          moved = true;
-          if (act.value === "other" && writeIn && !typed && p.near.indexOf("Near ") === 0) {
-            writeIn.value = p.near;
-          }
           show();
         },
         onDone: function () { open = false; }
@@ -511,19 +487,16 @@
     cancel.addEventListener("click", function () {
       if (window.BeaconMap) { window.BeaconMap.unpick(); }
     });
-    if (writeIn) { writeIn.addEventListener("input", function () { typed = writeIn.value !== ""; }); }
-    act.addEventListener("change", fromPlace);
-    loc.addEventListener("change", fromPlace);
     // Posted: put the form away, show where the meetup landed, and start
-    // the pin again from its reset place. After the enhancer's reset,
-    // hence the timeout. A refused post keeps the form out, as typed.
+    // the next pin from the Campus Center again. After the enhancer's
+    // reset, hence the timeout. A refused post keeps the form out, as typed.
     form.addEventListener("beacon:done", function (event) {
       if (event.detail && event.detail.refused) { return; }
       var posted = point;
       if (window.BeaconMap) { window.BeaconMap.unpick(); }
       setTimeout(function () {
-        moved = false; typed = false;
-        fromPlace();
+        point = null;
+        show();
         if (posted && window.BeaconMap) { window.BeaconMap.focusAt(posted.lat, posted.lng); }
       }, 0);
     });
@@ -531,7 +504,7 @@
     line.hidden = false;
     note.hidden = false;
     cancel.hidden = false;
-    fromPlace();
+    show();
   })();
 </script>
 <script src="{{ url_for('static', filename='community-map.js') }}"></script>

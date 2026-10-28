@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal, InvalidOperation
-from math import isfinite
+from math import asin, cos, isfinite, radians, sin, sqrt
 from uuid import uuid4
 from urllib.parse import urlsplit
 
@@ -4298,6 +4298,20 @@ def post_new():
     activity = None if wrote_in else find_activity(game)
     allowed = [] if activity is None else [loc.name for loc in activity.locations]
 
+    # From the map on /find there is no place to pick: the pin says where,
+    # and its words are the nearest landmark's, as the form's head showed
+    # them. With no pin (no JavaScript, or the map could not load) it is
+    # the Campus Center, where the pin would have started. Not for the
+    # chat forms, which still ask.
+    pinned = False
+    if request.form.get("back") == "find" and mode == "inperson" and not location:
+        if point is not None and not point_bad:
+            location = nearest_place_name(*point)
+        else:
+            home_place = APPROVED_MAP_LOCATIONS[EVENT_FLAG_DEFAULT_PLACE]
+            location = nearest_place_name(home_place["latitude"], home_place["longitude"])
+        pinned = True
+
     if not game:
         refused("Say which activity you're looking for."
               if not wrote_in else "Type what you want to play.")
@@ -4317,7 +4331,7 @@ def post_new():
         refused(f"{activity.name} is online only.")
     elif not wrote_in and mode == "inperson" and not location:
         refused("Pick where you'll be playing.")
-    elif not wrote_in and mode == "inperson" and location not in allowed:
+    elif not wrote_in and mode == "inperson" and not pinned and location not in allowed:
         refused(f"You can't play {activity.name} at that spot.")
     # Only once an hour has been picked. Asking for AM or PM when nobody has
     # named a time would turn an optional field into a required one.
@@ -7440,6 +7454,32 @@ def place_points():
                    "lng": APPROVED_MAP_LOCATIONS[key]["longitude"],
                    "near": "Near " + APPROVED_MAP_LOCATIONS[key]["name"]}
             for name, key in PLACE_LANDMARKS.items()}
+
+
+def metres_between(lat1, lng1, lat2, lng2):
+    """Great-circle distance in metres: which landmark a pin is near."""
+    p1, p2 = radians(lat1), radians(lat2)
+    dp, dl = radians(lat2 - lat1), radians(lng2 - lng1)
+    a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
+    return 2 * 6371000 * asin(sqrt(a))
+
+
+# A pin this close to a landmark is "Near" it. The map script's rule
+# (nearestPlaceName in static/community-map.js), so the words the form's
+# head showed are the words that are kept.
+NEAR_PLACE_METRES = 200
+
+
+def nearest_place_name(latitude, longitude):
+    """Where a pin is, in words: "Near <landmark>" within NEAR_PLACE_METRES
+    of one, else "Campus meetup point"."""
+    best = min(APPROVED_MAP_LOCATIONS.values(),
+               key=lambda p: metres_between(latitude, longitude,
+                                            p["latitude"], p["longitude"]))
+    if metres_between(latitude, longitude, best["latitude"],
+                      best["longitude"]) <= NEAR_PLACE_METRES:
+        return f"Near {best['name']}"
+    return "Campus meetup point"
 
 
 def place_for_location(text):
