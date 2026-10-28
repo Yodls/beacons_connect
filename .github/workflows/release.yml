@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
 
-# Never let two promotions race each other
 concurrency:
   group: release-production
   cancel-in-progress: false
@@ -17,8 +16,6 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
-      # GITHUB_TOKEN can't bypass branch protection, so push as a GitHub App
-      # that is on production's bypass list.
       - name: Get app token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -29,7 +26,7 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so we can check the tag is on main
+          fetch-depth: 0 
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Make sure the tag is on main
