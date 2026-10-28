@@ -299,15 +299,37 @@ def has_onboarded(user_id):
     ) is not None
 
 
-def issue_verification_code(user):
-    """Store a new code and email it. Returns whether the email went.
+# At most one code a minute to an address. Registering again resumes a
+# waiting sign-up (register), so without this a form could make the site
+# email any address as fast as it could be posted.
+CODE_COOLDOWN = timedelta(seconds=60)
 
-    A failed send is logged and reported, never raised. The account is
-    already saved by then, and a raise here used to turn every registration
-    into a server error while the mail server was refusing the site's login
-    -- leaving an account the student could neither verify nor register
-    again. The callers say "try Resend code" instead.
+
+def code_sent_recently(user, now=None):
+    """Whether a code went to this account inside CODE_COOLDOWN.
+
+    Read back from when the current code expires: a code is stamped CODE_TTL
+    ahead when it is sent, and stamped as already expired when the send
+    failed -- so a failed send never makes anybody wait to try again.
     """
+    if user.verification_expires_at is None:
+        return False
+    issued = user.verification_expires_at - CODE_TTL
+    return (now or datetime.utcnow()) - issued < CODE_COOLDOWN
+
+
+def issue_verification_code(user):
+    """Store a new code and email it. Returns "sent", "failed" or "wait".
+
+    "wait" is the cooldown: a code went out less than a minute ago, and the
+    one in their inbox still works. "failed" is a send the mail server
+    refused -- logged and reported, never raised. The account is already
+    saved by then, and a raise here used to turn every registration into a
+    server error while the mail server was refusing the site's login,
+    leaving an account the student could neither verify nor register again.
+    """
+    if code_sent_recently(user):
+        return "wait"
     code = f"{secrets.randbelow(1_000_000):06d}"
     user.verification_code_hash = generate_password_hash(code)
     user.verification_expires_at = datetime.now(timezone.utc) + CODE_TTL
@@ -317,16 +339,27 @@ def issue_verification_code(user):
         send_verification_email(user, code)
     except Exception:  # noqa: BLE001 -- whatever the mail server says, the page goes on
         app.logger.exception("verification email to %s failed", user.email)
-        return False
-    return True
+        # No usable code exists, so the row says so: expired already, which
+        # also means the next try is not made to wait out the cooldown.
+        user.verification_expires_at = datetime.now(timezone.utc) - CODE_TTL
+        db.session.commit()
+        return "failed"
+    return "sent"
 
 
 # What a student is told when their code could not be sent. Names the
 # button on the code page as it reads there.
 CODE_NOT_SENT = "We couldn't send your code. Press Send a new code to try again."
-# And when they come back to a sign-up that has gone.
+# When a code went out less than a minute ago (CODE_COOLDOWN).
+CODE_WAIT = ("A code was sent less than a minute ago. Check your inbox and "
+             "spam folder, then try again.")
+# And when they come back to a sign-up that has gone: aged out, or started
+# again from another browser (register).
 SIGNUP_EXPIRED = ("Your sign-up expired before it was verified. "
                   "Please register again.")
+SIGNUP_GONE = "That sign-up is no longer waiting. Please register again."
+SIGNUP_RESUMED = ("That address had a sign-up waiting on a code. We've "
+                  "started it again and sent you a new one.")
 
 # An unverified account is kept for SIGNUP_TTL after it is made, then goes
 # and the student registers again. A code still runs out after CODE_TTL, but
@@ -6574,22 +6607,41 @@ def register():
             flash("Password must be at least 8 characters.")
         elif password != request.form["confirm_password"]:
             flash("Passwords do not match.")
-        elif db.session.scalar(db.select(User).filter_by(email=email)):
-            flash("That email is already registered.")
         else:
-            user = User(
-                name=name,
-                gender=gender,
-                pronouns=pronouns,
-                email=email,
-                password_hash=generate_password_hash(password),
-            )
-            db.session.add(user)
-            db.session.commit()
-            if not issue_verification_code(user):
-                flash(CODE_NOT_SENT)
-            session["pending_user_id"] = user.id
-            return redirect(url_for("verify"))
+            taken = db.session.scalar(db.select(User).filter_by(email=email))
+            if taken is not None and taken.email_verified:
+                flash("That email is already registered. Sign in instead.")
+            elif taken is not None and code_sent_recently(taken):
+                flash(CODE_WAIT)
+            else:
+                # An address with a sign-up still waiting on its code is not
+                # taken: the code never arrived, or the tab was closed, and
+                # "already registered" at every attempt after that was a
+                # dead end. Nobody has proven they own the address yet, so
+                # the newest sign-up wins -- as a NEW account, not the old
+                # row rewritten. The old browser's session then points at
+                # nothing and stops, which is what stops somebody else
+                # re-registering your address with their password and you
+                # verifying it for them with the code that reaches you.
+                if taken is not None:
+                    db.session.delete(taken)
+                    db.session.flush()
+                user = User(
+                    name=name,
+                    gender=gender,
+                    pronouns=pronouns,
+                    email=email,
+                    password_hash=generate_password_hash(password),
+                )
+                db.session.add(user)
+                db.session.commit()
+                went = issue_verification_code(user)
+                if taken is not None and went == "sent":
+                    flash(SIGNUP_RESUMED)
+                elif went == "failed":
+                    flash(CODE_NOT_SENT)
+                session["pending_user_id"] = user.id
+                return redirect(url_for("verify"))
 
     # Named pronoun_options, not pronouns: the local above holds the submitted
     # value, and shadowing it here would send the wrong thing to the form.
@@ -6606,9 +6658,16 @@ def pending_signup():
     """
     pending = session.get("pending_user_id")
     user = db.session.get(User, pending or 0)
-    if pending and (user is None or signup_expired(user)):
-        if user is not None:
-            sweep_unverified()
+    if pending and user is None:
+        # Swept already, or registered again from another browser, which
+        # starts a new account (register) and leaves this one pointing at
+        # nothing -- deliberately, so a code can only ever verify the
+        # account the browser that typed it started.
+        session.pop("pending_user_id", None)
+        flash(SIGNUP_GONE)
+        return None
+    if pending and signup_expired(user):
+        sweep_unverified()
         session.pop("pending_user_id", None)
         flash(SIGNUP_EXPIRED)
         return None
@@ -6661,8 +6720,9 @@ def resend_code():
         return redirect(url_for("register"))
 
     if not user.email_verified:
-        flash("A new code is on its way." if issue_verification_code(user)
-              else CODE_NOT_SENT)
+        went = issue_verification_code(user)
+        flash("A new code is on its way." if went == "sent"
+              else CODE_WAIT if went == "wait" else CODE_NOT_SENT)
 
     return redirect(url_for("verify"))
 
@@ -6683,7 +6743,8 @@ def login():
                 went = issue_verification_code(user)
                 session["pending_user_id"] = user.id
                 flash("Please verify your email first. "
-                      + ("We sent you a new code." if went else CODE_NOT_SENT))
+                      + ("We sent you a new code." if went == "sent"
+                         else CODE_WAIT if went == "wait" else CODE_NOT_SENT))
                 return redirect(url_for("verify"))
 
             login_user(user)

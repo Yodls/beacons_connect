@@ -1,0 +1,47 @@
+name: Promote tag to production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+# Never let two promotions race each other
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      # GITHUB_TOKEN can't bypass branch protection, so push as a GitHub App
+      # that is on production's bypass list.
+      - name: Get app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can check the tag is on main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Make sure the tag is on main
+        run: |
+          SHA=$(git rev-parse "$GITHUB_REF_NAME^{commit}")
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME ($SHA) is not on main; refusing to promote it."
+            exit 1
+          fi
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Move production to the tag
+        run: |
+          git push --force origin "$SHA:refs/heads/production"
+          echo "### production → $GITHUB_REF_NAME (\`${SHA:0:7}\`)" >> "$GITHUB_STEP_SUMMARY"
