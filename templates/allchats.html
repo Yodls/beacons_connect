@@ -16,11 +16,13 @@
   home uses, so the two lists cannot drift apart.
 #}
 {% block main %}
-  <h1>All chats</h1>
-  <p class="lede">
-    {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }},
-    most recently active first.
-  </p>
+  <div class="pagehead">
+    <h1>All chats</h1>
+    <p class="lede">
+      {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }},
+      most recently active first.
+    </p>
+  </div>
 
   <section class="sec-chat allchats">
     <div class="grid">

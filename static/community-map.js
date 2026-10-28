@@ -79,6 +79,8 @@
   var urls = {
     flags: root.dataset.flagsUrl,
     umb: root.dataset.umbLogo || "",
+    healey: root.dataset.healeyLogo || "",
+    rec: root.dataset.recLogo || "",
     chat: root.dataset.chatUrl || "",   // ends in /0: swap in the chat's id
     rsvp: root.dataset.rsvpUrl || ""    // contains /0/: swap in the meetup's id
   };
@@ -308,9 +310,37 @@
     });
   }
 
-  // Landmarks: a pixel lighthouse on a yellow tile; the Campus Center wears
-  // the UMass Boston logo.
+  // Landmarks. The Campus Center wears the UMass Boston logo, the Healey
+  // Library its own sign and the Clark Athletic Center the UMass Boston
+  // Recreation mark; every other landmark is a pixel lighthouse on a yellow
+  // tile with the building's short name under it.
+  var PLACE_LOGOS = {
+    "healey-library": { url: "healey", look: "healey", size: [48, 48] },
+    "clark-athletic-center": { url: "rec", look: "rec", size: [66, 51] }
+  };
+  var PLACE_TAGS = {
+    "wheatley-hall": "WHEAT", "mccormack-hall": "MCORM",
+    "university-hall": "UHALL", "integrated-sciences-complex": "ISC"
+  };
   function placeIcon(place) {
+    var logo = PLACE_LOGOS[place.key];
+    if (logo && urls[logo.url]) {
+      return L.divIcon({
+        className: "approved-place-icon",
+        html: '<span class="campus-logo-pin ' + logo.look + '" aria-hidden="true"><img src="' + urls[logo.url] +
+          '" alt="" /></span>',
+        iconSize: logo.size, iconAnchor: [logo.size[0] / 2, logo.size[1]]
+      });
+    }
+    var tag = PLACE_TAGS[place.key];
+    if (tag) {
+      return L.divIcon({
+        className: "approved-place-icon",
+        html: '<span class="campus-lighthouse-pin tagged" aria-hidden="true">' + spriteMarkup("lighthouse") +
+          '<b class="pin-tag">' + tag + "</b></span>",
+        iconSize: [44, 50], iconAnchor: [22, 50]
+      });
+    }
     if (place.key === CAMPUS_CENTER_KEY && urls.umb) {
       return L.divIcon({
         className: "approved-place-icon",
@@ -332,7 +362,8 @@
       var marker = L.marker([place.latitude, place.longitude], {
         icon: placeIcon(place), title: place.name, keyboard: false, zIndexOffset: -100
       }).addTo(placeLayer);
-      marker.bindTooltip(place.name, { direction: "top", offset: [0, -36] });
+      var tall = marker.options.icon.options.iconSize[1];
+      marker.bindTooltip(place.name, { direction: "top", offset: [0, 2 - tall] });
       // While placing, a landmark is a fine place to drop a flag.
       marker.on("click", function () {
         if (mode === "placing") { startDraft(marker.getLatLng()); }

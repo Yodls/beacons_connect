@@ -3,13 +3,15 @@
 {% block title %}Sign in{% endblock %}
 
 {#
-  Sign in. Layout (Beacon OS): the brand panel and yellow tagline from
-  _brandpanel.html, then the form in a window whose title bar carries the
-  page's <h1>. The form itself is unchanged: same fields, names and order.
+  Sign in. Layout (Beacon OS): the brand panel from _brandpanel.html, with
+  the yellow band turned into a key that sends new students to sign-up, then
+  the form in a window whose title bar carries the page's <h1>. The form
+  itself is unchanged: same fields, names and order.
 #}
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
+      {% set brand_cta = {"href": url_for("register"), "label": "You must register a new account to gain access! (use your umb.edu email to register)"} %}
       {% include "_brandpanel.html" %}
 
       <div class="auth-card">
@@ -18,7 +20,7 @@
         <div class="auth-body">
           {{ ui.flashes() }}
 
-          <p class="lede">Sign in to see your friends and chats.</p>
+          <p class="lede">Sign in here <strong>(Register a new account before signing in)</strong></p>
 
           <form method="post">
             <label>Email <input type="email" name="email" required autofocus
@@ -29,7 +31,7 @@
           </form>
         </div>
 
-        <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+        <p class="auth-foot">Forgot password? <a href="{{ url_for('forgot_password') }}">Click here<span class="vh"> to reset your password</span></a>.</p>
       </div>
     </div>
   </div>

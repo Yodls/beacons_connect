@@ -15,7 +15,8 @@
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
-      {% set tagline = "Open to UMass Boston students. It takes a minute." %}
+      {% set tagline = "Registration requires a umb.edu email for creation." %}
+      {% set tagline_note = "Emails take a minute, check your spam folder too!" %}
       {% include "_brandpanel.html" %}
 
       <div class="auth-card">
@@ -23,8 +24,6 @@
 
         <div class="auth-body">
           {{ ui.flashes() }}
-
-          <p class="lede">Open to UMass Boston students.</p>
 
           <form method="post">
             {# Two fields, in the row the form already uses for a pair, so the
