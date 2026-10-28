@@ -61,8 +61,10 @@
         box-shadow: 2px 2px 0 var(--navy);
       }
       #beaconCampusMap .leaflet-tooltip-top::before { border-top-color: var(--navy); }
-      /* "Show where I am", floating top right */
-      .map-locate { position: absolute; z-index: 1000; top: 10px; right: 10px; }
+      /* "Show where I am", floating top right: the familiar locate target,
+         Beacon Blue on white like the map's own zoom buttons */
+      .map-locate { position: absolute; z-index: 1000; top: 10px; right: 10px; color: var(--beacon); }
+      .map-locate .icon { width: 26px; height: 26px; }
       /* the status line floating bottom left */
       .map-status {
         position: absolute; z-index: 1000; left: 10px; bottom: 10px;
@@ -317,7 +319,8 @@
       /* the draft flag: dashed and bobbing until it is submitted */
       .beacon-flag-pin.draft .flag-head { border-style: dashed; animation: flag-bob 1.2s steps(2) infinite; }
       @keyframes flag-bob { 50% { transform: translateY(-3px); } }
-      /* landmarks: a pixel lighthouse on a yellow tile */
+      /* landmarks: a pixel lighthouse on a yellow tile, with the building's
+         short name under it (WHEAT, MCORM, UHALL, ISC) */
       .campus-lighthouse-pin {
         width: 28px; height: 38px;
         display: grid; place-items: center;
@@ -326,6 +329,21 @@
         box-shadow: 2px 2px 0 var(--navy);
       }
       .campus-lighthouse-pin .icon { width: 16px; height: 24px; }
+      .campus-lighthouse-pin.tagged {
+        width: 44px; height: 50px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      }
+      .pin-tag { display: block; color: var(--navy); font: 400 14px/1 var(--px); letter-spacing: .03em; }
+      /* the Healey Library's sign and the UMass Boston Recreation mark */
+      .campus-logo-pin {
+        display: block; overflow: hidden; background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 2px 2px 0 var(--navy);
+      }
+      .campus-logo-pin img { display: block; }
+      .campus-logo-pin.healey img { width: 44px; height: 44px; }
+      .campus-logo-pin.rec { padding: 2px 3px; }
+      .campus-logo-pin.rec img { width: 56px; height: 43px; }
       /* the Campus Center: the UMass Boston logo on a white tile */
       .campus-umb-pin {
         display: grid; place-items: center;

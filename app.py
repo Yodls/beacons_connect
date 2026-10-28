@@ -879,6 +879,7 @@ ONBOARDING_EXEMPT = {
     "onboarding",
     "login",
     "logout",
+    "forgot_password",
     "register",
     "verify",
     "resend_code",
@@ -889,7 +890,7 @@ ONBOARDING_EXEMPT = {
 # rather than the page body covers POST as well as GET, which is the part that
 # matters: login() accepts POST, and login_user() would otherwise let someone
 # already signed in submit the form and land on whichever account it named.
-GUEST_ONLY = {"login", "register", "verify", "resend_code"}
+GUEST_ONLY = {"login", "register", "verify", "resend_code", "forgot_password"}
 
 
 # There was a `same_origin` before_request here, comparing the Origin header
@@ -6762,6 +6763,18 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/forgot-password")
+def forgot_password():
+    """Where the sign-in page's "Forgot password? Click here" goes.
+
+    A placeholder: there is no password reset yet, and a link that leads
+    somewhere honest beats one that leads nowhere. Signed-out only, like the
+    other sign-in pages (GUEST_ONLY), and exempt from onboarding. When reset
+    is built, an emailed code as /verify already does it, it can live here.
+    """
+    return render_template("forgot.html")
+
+
 def read_answers(questions):
     """Read a questionnaire submission. Returns (picks, selected, complaint).
 
@@ -7188,6 +7201,14 @@ APPROVED_MAP_LOCATIONS = {
         "name": "Healey Library",
         "latitude": 42.313620,
         "longitude": -71.039720,
+    },
+    # Beside the Healey Library and the Quinn Administration Building, the
+    # first building inside the Morrissey Boulevard entrance. Placed from
+    # that description rather than surveyed, like the rest: nudge it here.
+    "integrated-sciences-complex": {
+        "name": "Integrated Sciences Complex",
+        "latitude": 42.313400,
+        "longitude": -71.040940,
     },
     "university-hall": {
         "name": "University Hall",

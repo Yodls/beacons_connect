@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Forgot password{% endblock %}
+
+{#
+  Forgot password: a placeholder. Password reset does not exist yet, so
+  rather than leave the sign-in page's "Click here" pointing nowhere, it lands
+  here. When reset is built (an emailed code, the way /verify already works),
+  replace the body of this window with the form; the route name and URL can
+  stay as they are.
+#}
+{% block content %}
+  <div class="auth">
+    <div class="auth-stack">
+      {% include "_brandpanel.html" %}
+
+      <div class="auth-card">
+        <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Forgot password?</h1><span class="grip"></span></div>
+
+        <div class="auth-body">
+          {{ ui.flashes() }}
+
+          <p class="lede">Resetting a password by email isn't ready yet. It's on the way.</p>
+          <a class="btn" href="{{ url_for('login') }}">Back to sign in</a>
+        </div>
+
+        <p class="auth-foot">No account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+      </div>
+    </div>
+  </div>
+{% endblock %}

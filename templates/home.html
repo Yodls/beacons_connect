@@ -21,9 +21,8 @@
       }
 
       /* ---------- the welcome window: a night harbour ----------
-         The greeting sits on a night sky with pixel stars, a lighthouse
-         whose beam sweeps the harbour, and a strip of water. All CSS: this
-         page arms no scripts (see the note above the markup). */
+         The greeting sits on the harbour scene below. All CSS: this page
+         arms no scripts (see the note above the markup). */
       .hello { overflow: hidden; }
       .scene {
         position: relative; height: 200px; overflow: hidden;
@@ -35,69 +34,299 @@
       }
       .scene-copy h1 { color: #fff; font-size: clamp(34px, 13vw, 54px); line-height: .9; }
       .scene-copy .lede { margin: 0; color: var(--on-navy); font-size: 1rem; }
-      /* stars: four-pixel squares, every third one gold */
-      .star {
-        position: absolute; width: 4px; height: 4px;
-        background: #fff; transform: translate(-50%, -50%);
+      /* ---------- the harbour scene ----------
+         Decoration only, drawn in pixels and animated by CSS alone, so this page
+         still arms no scripts. Back to front: pixel stars, a far-off jet, the
+         city across the harbour and its reflections, rolling water, the Columbia
+         Point ferry, then the island carrying the shared lighthouse icon with its
+         beam, glow and a buoy. Every moving part animates transform or opacity
+         only. The ferry's trip is tuned to the scene's width by container
+         queries; on phones the island keeps to the right-hand column that
+         .scene-copy leaves free, as the old lighthouse did. */
+      .harbor { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; container: harbor / inline-size; }
+      .harbor svg { display: block; }
+      .harbor i { position: absolute; display: block; }
+
+      /* stars: pixel sparkles, each with a soft ambient glow behind it */
+      .hb-stars { position: absolute; inset: 0; }
+      .hb-star { width: 2px; height: 2px; }
+      .hb-star::before, .hb-star::after { content: ""; position: absolute; left: 0; top: 0; }
+      .hb-star::before { border-radius: 50%; }
+      .hb-star::after { width: 2px; height: 2px; }
+      .hb-star.s::before { width: 8px; height: 8px; margin: -3px 0 0 -3px; }
+      .hb-star.p::before { width: 12px; height: 12px; margin: -5px 0 0 -5px; }
+      .hb-star.m::before { width: 16px; height: 16px; margin: -7px 0 0 -7px; }
+      .hb-star.l::before { width: 22px; height: 22px; margin: -10px 0 0 -10px; }
+      .hb-star.white::before { background: radial-gradient(closest-side, rgba(207, 224, 245, .4), rgba(207, 224, 245, .12) 60%, rgba(207, 224, 245, 0)); }
+      .hb-star.gold::before { background: radial-gradient(closest-side, rgba(254, 222, 66, .4), rgba(254, 222, 66, .12) 60%, rgba(254, 222, 66, 0)); }
+      .hb-star.blue::before { background: radial-gradient(closest-side, rgba(120, 175, 233, .4), rgba(120, 175, 233, .12) 60%, rgba(120, 175, 233, 0)); }
+      .hb-star.l.gold::after { background: #FFF6C8; box-shadow: 0px -4px #8C7A34, -2px -2px #8C7A34, 0px -2px #FEDE42, 2px -2px #8C7A34, -4px 0px #8C7A34, -2px 0px #FEDE42, 2px 0px #FEDE42, 4px 0px #8C7A34, -2px 2px #8C7A34, 0px 2px #FEDE42, 2px 2px #8C7A34, 0px 4px #8C7A34; }
+      .hb-star.l.white::after { background: #FFFFFF; box-shadow: 0px -4px #5D74A8, -2px -2px #5D74A8, 0px -2px #CFE0F5, 2px -2px #5D74A8, -4px 0px #5D74A8, -2px 0px #CFE0F5, 2px 0px #CFE0F5, 4px 0px #5D74A8, -2px 2px #5D74A8, 0px 2px #CFE0F5, 2px 2px #5D74A8, 0px 4px #5D74A8; }
+      .hb-star.m.blue::after { background: #E6F0FF; box-shadow: 0px -4px #3E5A92, 0px -2px #78AFE9, -4px 0px #3E5A92, -2px 0px #78AFE9, 2px 0px #78AFE9, 4px 0px #3E5A92, 0px 2px #78AFE9, 0px 4px #3E5A92; }
+      .hb-star.m.gold::after { background: #FFF6C8; box-shadow: 0px -4px #8C7A34, 0px -2px #FEDE42, -4px 0px #8C7A34, -2px 0px #FEDE42, 2px 0px #FEDE42, 4px 0px #8C7A34, 0px 2px #FEDE42, 0px 4px #8C7A34; }
+      .hb-star.m.white::after { background: #FFFFFF; box-shadow: 0px -4px #5D74A8, 0px -2px #CFE0F5, -4px 0px #5D74A8, -2px 0px #CFE0F5, 2px 0px #CFE0F5, 4px 0px #5D74A8, 0px 2px #CFE0F5, 0px 4px #5D74A8; }
+      .hb-star.p.blue::after { background: #E6F0FF; box-shadow: 0px -2px #78AFE9, -2px 0px #78AFE9, 2px 0px #78AFE9, 0px 2px #78AFE9; }
+      .hb-star.p.gold::after { background: #FFF6C8; box-shadow: 0px -2px #FEDE42, -2px 0px #FEDE42, 2px 0px #FEDE42, 0px 2px #FEDE42; }
+      .hb-star.p.white::after { background: #FFFFFF; box-shadow: 0px -2px #CFE0F5, -2px 0px #CFE0F5, 2px 0px #CFE0F5, 0px 2px #CFE0F5; }
+      .hb-star.s.blue::after { background: #E6F0FF; }
+      .hb-star.s.gold::after { background: #FFF6C8; }
+      .hb-star.s.white::after { background: #FFFFFF; }
+      .hb-stars i:nth-child(1) { left: 4%; top: 20px; }
+      .hb-stars i:nth-child(2) { left: 11%; top: 58px; }
+      .hb-stars i:nth-child(3) { left: 16%; top: 12px; }
+      .hb-stars i:nth-child(4) { left: 24%; top: 96px; }
+      .hb-stars i:nth-child(5) { left: 29%; top: 34px; }
+      .hb-stars i:nth-child(6) { left: 34%; top: 8px; }
+      .hb-stars i:nth-child(7) { left: 38%; top: 70px; }
+      .hb-stars i:nth-child(8) { left: 45%; top: 24px; }
+      .hb-stars i:nth-child(9) { left: 50%; top: 112px; }
+      .hb-stars i:nth-child(10) { left: 55%; top: 46px; }
+      .hb-stars i:nth-child(11) { left: 61%; top: 14px; }
+      .hb-stars i:nth-child(12) { left: 66%; top: 86px; }
+      .hb-stars i:nth-child(13) { left: 71%; top: 34px; }
+      .hb-stars i:nth-child(14) { left: 77%; top: 10px; }
+      .hb-stars i:nth-child(15) { left: 82%; top: 62px; }
+      .hb-stars i:nth-child(16) { left: 87%; top: 24px; }
+      .hb-stars i:nth-child(17) { left: 92%; top: 50px; }
+      .hb-stars i:nth-child(18) { left: 96%; top: 14px; }
+      .hb-stars i:nth-child(19) { left: 20%; top: 126px; }
+      .hb-stars i:nth-child(20) { left: 60%; top: 124px; }
+      .hb-stars i:nth-child(21) { left: 8%; top: 104px; }
+      .hb-star.tw1::after, .hb-star.tw1::before { animation: hb-twinkle 2.6s ease-in-out infinite; }
+      .hb-star.tw2::after, .hb-star.tw2::before { animation: hb-twinkle 3.4s ease-in-out -1.2s infinite; }
+      .hb-star.tw3::after, .hb-star.tw3::before { animation: hb-twinkle 4.3s ease-in-out -2.6s infinite; }
+
+      /* sky: one tiny airliner, very far away */
+      .hb-jetlane { position: absolute; left: 0; top: 0; width: 100%; height: 0; animation: hb-fly 46s linear -40s infinite; }
+      .hb-jet { position: absolute; left: 0; top: 0; }
+      .hb-jet svg { width: 11px; height: 5px; }
+      .hb-trail { left: 11px; top: 2px; width: 84px; height: 1px; background: linear-gradient(to right, rgba(207, 224, 245, .5), rgba(207, 224, 245, 0)); }
+      .hb-beacon { left: 5px; top: 0; width: 2px; height: 2px; background: #FF5A5F; box-shadow: 0 0 4px 1px rgba(255, 90, 95, .7); animation: hb-beacon 1.1s linear infinite; }
+      .hb-strobe { left: 4px; top: 4px; width: 2px; height: 2px; background: #FFFFFF; box-shadow: 0 0 4px 1px rgba(255, 255, 255, .85); animation: hb-strobe 1.7s linear infinite; }
+
+      /* the city across the harbor: towers with lit windows, a crane, red warning lights */
+      .hb-city { position: absolute; left: 50%; bottom: 52px; width: 800px; height: 44px; margin-left: -400px; }
+      .hb-red { width: 2px; height: 2px; background: #FF5A5F; box-shadow: 0 0 4px 1px rgba(255, 90, 95, .75); animation: hb-aviation 2.8s linear infinite; }
+      .hb-win { width: 2px; height: 2px; background: #22345F; opacity: 0; animation: hb-lightswitch 17s linear infinite; }
+      .hb-red.r1 { left: 316px; top: 4px; animation-delay: -0.0s; }
+      .hb-red.r2 { left: 396px; top: 6px; animation-delay: -0.7s; }
+      .hb-red.r3 { left: 336px; top: 8px; animation-delay: -1.4s; }
+      .hb-red.r4 { left: 490px; top: 0px; animation-delay: -2.1s; }
+      .hb-win.n1 { left: 570px; top: 30px; animation-duration: 13s; animation-delay: -0.0s; }
+      .hb-win.n2 { left: 482px; top: 26px; animation-duration: 17s; animation-delay: -3.7s; }
+      .hb-win.n3 { left: 340px; top: 36px; animation-duration: 11s; animation-delay: -7.4s; }
+      .hb-win.n4 { left: 490px; top: 30px; animation-duration: 19s; animation-delay: -2.1s; }
+      .hb-win.n5 { left: 296px; top: 32px; animation-duration: 23s; animation-delay: -5.8s; }
+      .hb-win.n6 { left: 520px; top: 34px; animation-duration: 15s; animation-delay: -0.5s; }
+      .hb-win.n7 { left: 436px; top: 32px; animation-duration: 29s; animation-delay: -4.2s; }
+      .hb-glint { left: 50%; top: 0; width: 800px; height: 14px; margin-left: -400px; opacity: .55; -webkit-mask-image: linear-gradient(to bottom, #000, transparent); mask-image: linear-gradient(to bottom, #000, transparent); }
+
+      /* water: darker toward the horizon, six rows of crests rolling at different speeds */
+      .hb-water { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; background: linear-gradient(to bottom, #0A4472 0 12px, #034E7E 12px 26px, var(--beacon, #005A8B) 26px); border-top: 2px solid var(--navy, #132245); }
+      .hb-wave { left: -48px; right: -48px; height: 3px; background-repeat: repeat-x; background-size: 48px 100%; animation: hb-drift 10s linear infinite; }
+      .hb-w1 { top: 4px; height: 2px; background-image: linear-gradient(90deg, rgba(120, 175, 233, .3) 0 5px, transparent 5px 27px, rgba(120, 175, 233, .3) 27px 30px, transparent 30px); animation-duration: 19s; }
+      .hb-w2 { top: 10px; height: 2px; background-image: linear-gradient(90deg, rgba(120, 175, 233, .45) 0 8px, transparent 8px 30px, rgba(120, 175, 233, .45) 30px 35px, transparent 35px); background-position: 17px 0; animation-duration: 16s; animation-direction: reverse; }
+      .hb-w3 { top: 17px; background-image: linear-gradient(90deg, rgba(120, 175, 233, .6) 0 11px, transparent 11px 31px, rgba(120, 175, 233, .6) 31px 37px, transparent 37px); background-position: 6px 0; animation-duration: 13s; animation-delay: -4s; }
+      .hb-w4 { top: 25px; background-image: linear-gradient(90deg, rgba(120, 175, 233, .8) 0 14px, transparent 14px 30px, rgba(120, 175, 233, .8) 30px 38px, transparent 38px); background-position: 29px 0; animation-duration: 11s; animation-direction: reverse; animation-delay: -2s; }
+      .hb-w5 { top: 33px; background-image: linear-gradient(90deg, var(--sky, #78AFE9) 0 17px, transparent 17px 32px, var(--sky, #78AFE9) 32px 40px, transparent 40px); background-position: 12px 0; animation-duration: 9s; animation-delay: -6s; }
+      .hb-w6 { top: 41px; background-image: linear-gradient(90deg, #A9CDF2 0 20px, transparent 20px 33px, #A9CDF2 33px 42px, transparent 42px); background-position: 35px 0; animation-duration: 7.5s; animation-direction: reverse; animation-delay: -3s; }
+
+      /* the UMass Boston ferry: the lane carries it along the water, the boat bobs inside it */
+      .hb-lane { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; transform-origin: 0 0; animation: hb-sail-lg 54.4s linear -10.9s infinite; }
+      .hb-ferry { position: absolute; left: -46px; bottom: 0; width: 92px; height: 48px; clip-path: inset(-40px -24px 0 -80px); animation: hb-fade-lg 54.4s linear -10.9s infinite; }
+      .hb-boat { position: absolute; left: 0; bottom: -4px; width: 92px; height: 44px; animation: hb-heave 2.8s ease-in-out infinite alternate; }
+      .hb-boat svg { width: 92px; height: 44px; transform-origin: 46px 38px; animation: hb-pitch 3.9s ease-in-out infinite alternate; }
+      .hb-mast { left: 56px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0)); }
+      .hb-wake { left: -46px; bottom: 0; width: 50px; height: 2px; overflow: hidden; -webkit-mask-image: linear-gradient(to right, transparent, #000 75%); mask-image: linear-gradient(to right, transparent, #000 75%); }
+      .hb-wake i { left: 0; top: 0; width: calc(100% + 10px); height: 100%; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .9) 0 6px, rgba(255, 255, 255, 0) 6px 10px); animation: hb-churn .9s steps(5) infinite; }
+      .hb-wake2 { left: -70px; bottom: 2px; width: 64px; opacity: .5; }
+      .hb-wake2 i { background: repeating-linear-gradient(90deg, rgba(207, 224, 245, .9) 0 4px, rgba(207, 224, 245, 0) 4px 10px); animation-duration: 1.4s; }
+      .hb-bow { left: 70px; bottom: 0; width: 16px; height: 6px; }
+
+
+      /* the island: rocks, grass, a concrete pad and the lighthouse, with its beam and glow */
+      .hb-isle { position: absolute; right: 96px; bottom: 4px; width: 108px; height: 114px; }
+      .hb-isle .hb-rock { position: relative; width: 108px; height: 114px; }
+      .hb-isle .icon { position: absolute; left: 30px; top: 0; width: 48px; height: 72px; }
+      .hb-glow { left: 24px; top: -13px; width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(closest-side, rgba(254, 222, 66, .5), rgba(254, 222, 66, .18) 55%, rgba(254, 222, 66, 0)); animation: hb-glow 9s ease-in-out infinite; }
+      .hb-beam { top: 3px; height: 28px; -webkit-mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px); mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px); }
+      .hb-beam-l { right: 54px; width: 320px; background: linear-gradient(to left, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0)); clip-path: polygon(100% 40%, 0 0, 0 100%, 100% 60%); transform-origin: right center; animation: hb-sweep-l 9s ease-in-out infinite; }
+      .hb-beam-r { left: 54px; width: 140px; background: linear-gradient(to right, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0)); clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%); transform-origin: left center; transform: scaleX(0); animation: hb-sweep-r 9s ease-in-out infinite; }
+      .hb-surf { left: -6px; bottom: -4px; width: 120px; height: 9px; }
+      /* a channel buoy by the lighthouse, bobbing, with two lights that flash in turn */
+      .hb-buoy { left: -48px; bottom: 3px; width: 21px; height: 52px; clip-path: inset(-24px -24px 0 -24px); }
+      .hb-buoy-body { left: 0; bottom: -4px; width: 21px; height: 39px; transform-origin: 10.5px 33px; animation: hb-buoy 2.6s ease-in-out infinite alternate; }
+      .hb-lamp { top: 4px; width: 2px; height: 2px; animation: hb-flash 2.4s linear infinite; }
+      .hb-lamp::before, .hb-lamp::after { content: ""; position: absolute; }
+      .hb-lamp::before { left: -7px; top: -7px; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(closest-side, var(--c), transparent); opacity: .55; }
+      .hb-lamp::after { left: 0; top: 0; width: 2px; height: 2px; background: #FFFFFF; box-shadow: 2px 0 var(--c), -2px 0 var(--c), 0 2px var(--c), 0 -2px var(--c), 4px 0 var(--d), -4px 0 var(--d), 0 4px var(--d), 0 -4px var(--d); }
+      .hb-lamp.red { left: 3px; --c: #FF5A5F; --d: rgba(255, 90, 95, .45); }
+      .hb-lamp.white { left: 16px; --c: #FFF6C8; --d: rgba(255, 246, 200, .45); animation-delay: -1.2s; }
+      .hb-ring { left: -4px; bottom: 0; width: 28px; height: 4px; }
+      .hb-ring .f1, .hb-ring .f2 { left: 0; top: 0; }
+      .hb-ring .f1 { animation: hb-flick 1.1s linear infinite; }
+      .hb-ring .f2 { animation: hb-flick 1.1s linear -.55s infinite; }
+      .hb-bow .f1, .hb-surf .f1 { left: 0; top: 0; animation: hb-flick .9s linear infinite; }
+      .hb-bow .f2, .hb-surf .f2 { left: 0; top: 0; animation: hb-flick .9s linear -.45s infinite; }
+
+      /* ---------- day or night in the welcome window ----------
+         The slider in the title bar (wired by the script in _harborwalk.html)
+         sets data-scene="day" on the html element, remembered on the device.
+         Over a couple of seconds the day sky fades in over the night, the
+         stars and the city's lights go out, the towers take their daytime
+         colours, the water lightens, the lighthouse's beam and glow fade, two
+         small clouds drift in, and the greeting turns navy so it reads on
+         the light sky. Back to night, all of it in reverse. */
+      .hb-daysky {
+        position: absolute; inset: 0; z-index: 1; pointer-events: none;
+        background: linear-gradient(to bottom, #7DB8EE, #A3CDF3 55%, #CFE4F8);
+        opacity: 0; transition: opacity 2.4s ease-in-out;
       }
-      .star:nth-child(3n) { background: var(--gold); }
-      .star:nth-child(1) { left: 58%; top: 12%; }
-      .star:nth-child(2) { left: 70%; top: 26%; }
-      .star:nth-child(3) { left: 88%; top: 13%; }
-      .star:nth-child(4) { left: 80%; top: 38%; }
-      .star:nth-child(5) { left: 18%; top: 72%; }
-      .star:nth-child(6) { left: 44%; top: 78%; }
-      .star:nth-child(7) { left: 6%; top: 58%; }
-      .star:nth-child(8) { left: 36%; top: 12%; }
-      /* The lighthouse. The beams and the lamp glow are positioned from the
-         lamp itself (24px across, 17px down the 48 x 72 drawing), so they
-         stay lined up at any screen size. */
-      .lh { position: absolute; z-index: 2; right: 34px; bottom: 26px; width: 48px; height: 72px; }
-      .lh .icon { position: relative; z-index: 2; display: block; width: 48px; height: 72px; }
-      .beam {
-        position: absolute; z-index: 1; top: 3px; height: 28px;
-        background: linear-gradient(to left, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0));
-        /* scanlines, so the light reads as pixels too */
-        -webkit-mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px);
-        mask-image: repeating-linear-gradient(to bottom, #000 0 2px, transparent 2px 4px);
+      .hb-waterday {
+        left: 0; top: 0; width: 100%; height: 100%;
+        background: linear-gradient(to bottom, #7FB3E3 0 12px, #5F9BD6 12px 26px, #4A88C9 26px);
+        opacity: 0; transition: opacity 2.4s ease-in-out;
       }
-      .beam-l {
-        right: 24px; width: 440px;
-        clip-path: polygon(100% 40%, 0 0, 0 100%, 100% 60%);
-        transform-origin: right center;
-        animation: sweep-l 9s ease-in-out infinite;
+      .scene-copy h1, .scene-copy .lede { transition: color 2.4s ease-in-out; }
+      .hb-stars, .hb-glint, .hb-beam, .hb-mast { transition: opacity 1.6s ease; }
+      .hb-glow { transition: filter 1.6s ease; }
+      .hb-city path { transition: stroke 2.4s ease-in-out, fill 2.4s ease-in-out; }
+      .hb-clouds { position: absolute; inset: 0; opacity: 0; transition: opacity 2.4s ease-in-out; }
+      .hb-cloud { left: 0; transform: translateX(var(--rest)); animation: hb-cloud 150s linear var(--dl) infinite; }
+      .hb-cloud.c1 { top: 8px; --rest: 54cqw; --dl: -60s; }
+      .hb-cloud.c2 { top: 128px; --rest: 30cqw; --dl: -20s; animation-duration: 210s; }
+      @keyframes hb-cloud {
+        from { transform: translateX(-90px); }
+        to { transform: translateX(1300px); transform: translateX(100cqw); }
       }
-      .beam-r {
-        left: 24px; width: 140px;
-        clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%);
-        transform-origin: left center;
-        background: linear-gradient(to right, rgba(254, 222, 66, .9), rgba(254, 222, 66, 0));
-        animation: sweep-r 9s ease-in-out infinite;
+      html[data-scene="day"] .hb-daysky,
+      html[data-scene="day"] .hb-waterday,
+      html[data-scene="day"] .hb-clouds { opacity: 1; }
+      html[data-scene="day"] .scene-copy h1 { color: var(--navy); }
+      html[data-scene="day"] .scene-copy .lede { color: #1E3366; }
+      html[data-scene="day"] :is(.hb-stars, .hb-glint, .hb-beam, .hb-mast) { opacity: 0; }
+      html[data-scene="day"] .hb-glow { filter: opacity(0); }
+      html[data-scene="day"] :is(.hb-win, .hb-red) { visibility: hidden; transition: visibility 0s 1.2s; }
+      html[data-scene="day"] .hb-city [stroke="#18254B"] { stroke: #A9BBD5; }
+      html[data-scene="day"] .hb-city [stroke="#22345F"] { stroke: #7B92B6; }
+      html[data-scene="day"] .hb-city [stroke="#4C5C86"] { stroke: #5B6C8C; }
+      html[data-scene="day"] .hb-city :is([stroke="#FFE7A3"], [stroke="#F4F1E6"], [stroke="#BFD9FF"]) { stroke: #627AA1; }
+      html[data-scene="day"] .hb-city [fill="#18254B"] { fill: #A9BBD5; }
+      html[data-scene="day"] .hb-city [fill="#22345F"] { fill: #7B92B6; }
+      html[data-scene="day"] .hb-city [fill="#4C5C86"] { fill: #5B6C8C; }
+      html[data-scene="day"] .hb-city :is([fill="#FFE7A3"], [fill="#F4F1E6"], [fill="#BFD9FF"]) { fill: #627AA1; }
+      /* the slider: night on the left, day on the right */
+      .dayswitch {
+        position: relative; flex: none;
+        width: 56px; height: 28px; margin: 0; padding: 0;
+        background: #33477A; border: 2px solid #fff; border-radius: 999px;
+        box-shadow: inset 0 2px 0 rgba(0, 0, 0, .3);
+        transition: background-color 1.4s ease;
       }
-      /* the beam turns: long to the left, edge-on, short to the right, back */
-      @keyframes sweep-l { 0%, 100% { transform: scaleX(1); } 25%, 75% { transform: scaleX(0); } }
-      @keyframes sweep-r { 0%, 25%, 75%, 100% { transform: scaleX(0); } 50% { transform: scaleX(1); } }
-      /* the lamp flares as the beam passes edge-on */
-      .glow {
-        position: absolute; z-index: 1; left: 24px; top: 16px;
-        width: 60px; height: 60px; margin: -30px 0 0 -30px;
-        background: radial-gradient(circle, rgba(254, 222, 66, .95) 0 22%,
-                    rgba(254, 222, 66, .35) 45%, rgba(254, 222, 66, 0) 70%);
-        opacity: .15; pointer-events: none;
-        animation: lamp-flash 9s ease-in-out infinite;
+      .dayswitch::before {
+        content: ""; position: absolute; left: 30px; top: 6px; width: 2px; height: 2px;
+        background: #fff; box-shadow: 8px 4px #CFE0F5, 3px 10px #FEDE42, 14px 12px #fff;
+        transition: opacity .8s ease;
       }
-      @keyframes lamp-flash { 0%, 50%, 100% { opacity: .15; } 25%, 75% { opacity: 1; } }
-      .water {
-        position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 28px;
-        background-color: var(--beacon);
-        background-image: linear-gradient(90deg, var(--sky) 0 14px, transparent 14px);
-        background-size: 36px 4px; background-repeat: repeat-x; background-position: 6px 8px;
-        border-top: 2px solid var(--navy);
+      .dayswitch::after { content: ""; position: absolute; inset: -9px -6px; }
+      .ds-knob {
+        position: absolute; left: 2px; top: 2px; width: 20px; height: 20px;
+        background: #0C1631; border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, .35);
+        transition: transform .7s cubic-bezier(.45, .05, .2, 1), background-color 1.4s ease;
       }
+      .ds-knob svg {
+        position: absolute; left: 4px; top: 4px;
+        shape-rendering: crispEdges; transition: opacity .6s ease, transform .6s ease;
+      }
+      .ds-sun { opacity: 0; transform: rotate(-90deg) scale(.5); }
+      html[data-scene="day"] .dayswitch { background: #78AFE9; }
+      html[data-scene="day"] .dayswitch::before { opacity: 0; }
+      html[data-scene="day"] .ds-knob { transform: translateX(28px); background: #fff; }
+      html[data-scene="day"] .ds-moon { opacity: 0; transform: rotate(90deg) scale(.5); }
+      html[data-scene="day"] .ds-sun { opacity: 1; transform: none; }
+
+      /* narrower windows: move the island in and retune the ferry's trip */
+      @container harbor (max-width: 980px) {
+        .hb-isle { right: 72px; }
+        .hb-beam-l { width: 300px; }
+        .hb-beam-r { width: 112px; }
+        .hb-lane { animation: hb-sail-md 46.0s linear -9.2s infinite; }
+        .hb-ferry { animation: hb-fade-md 46.0s linear -9.2s infinite; }
+      }
+      @container harbor (max-width: 620px) {
+        .hb-isle { right: 24px; }
+        .hb-beam-l { width: 90px; }
+        .hb-city, .hb-glint { left: 0; margin-left: -130px; }
+        .hb-beam-r { width: 84px; }
+        .hb-lane { animation: hb-sail-sm 35.3s linear -7.1s infinite; }
+        .hb-ferry { animation: hb-fade-sm 35.3s linear -7.1s infinite; }
+      }
+
+      /* still frame for people who turn motion off: ferry moored mid-harbor, no jet */
       @media (prefers-reduced-motion: reduce) {
-        .beam-l, .beam-r, .glow { animation: none; }
-        .beam-r { transform: scaleX(0); }
-        .glow { opacity: .5; }
+        .harbor *, .harbor *::before, .harbor *::after { animation: none !important; }
+        .hb-jetlane { display: none; }
+        .hb-lane { transform: translate(calc(50% - 30px), -14px); }
+        .hb-lamp.white, .hb-ring .f2 { display: none; }
+        .hb-beam-r { transform: scaleX(0); }
+        .hb-bow .f2, .hb-surf .f2 { display: none; }
+      }
+
+      @keyframes hb-fly {
+        0% { transform: translate(calc(100% + 8px), 40px); }
+        64%, 100% { transform: translate(-110px, 12px); }
+      }
+      @keyframes hb-beacon { 0%, 21% { opacity: 1; } 22%, 100% { opacity: 0; } }
+      @keyframes hb-strobe { 0%, 5% { opacity: 1; } 6%, 13% { opacity: 0; } 14%, 19% { opacity: 1; } 20%, 100% { opacity: 0; } }
+      @keyframes hb-drift {
+        0% { transform: translate3d(-48px, 0, 0); }
+        25% { transform: translate3d(-36px, -1px, 0); }
+        50% { transform: translate3d(-24px, 0, 0); }
+        75% { transform: translate3d(-12px, 1px, 0); }
+        100% { transform: translate3d(0, 0, 0); }
+      }
+      @keyframes hb-twinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.8); } }
+      @keyframes hb-aviation { 0%, 34% { opacity: 1; } 35%, 100% { opacity: .15; } }
+      @keyframes hb-lightswitch { 0%, 69% { opacity: 0; } 70%, 100% { opacity: 1; } }
+      @keyframes hb-buoy { from { transform: translateY(1px) rotate(-5deg); } to { transform: translateY(-2px) rotate(5deg); } }
+      @keyframes hb-flash { 0% { opacity: 0; transform: scale(.5); } 6% { opacity: 1; transform: scale(1.15); } 30% { opacity: 1; transform: scale(.9); } 40%, 100% { opacity: 0; transform: scale(.5); } }
+      @keyframes hb-heave { from { transform: translateY(1px); } to { transform: translateY(-1px); } }
+      @keyframes hb-pitch { from { transform: rotate(-.8deg); } to { transform: rotate(.8deg); } }
+      @keyframes hb-churn { from { transform: translateX(0); } to { transform: translateX(-10px); } }
+      @keyframes hb-flick { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+      @keyframes hb-sweep-l { 0%, 100% { transform: scaleX(1); } 25%, 75% { transform: scaleX(0); } }
+      @keyframes hb-sweep-r { 0%, 25%, 75%, 100% { transform: scaleX(0); } 50% { transform: scaleX(1); } }
+      @keyframes hb-glow { 0%, 50%, 100% { opacity: .75; transform: scale(1); } 25% { opacity: 1; transform: scale(1.18); } 75% { opacity: .6; transform: scale(.94); } }
+      @keyframes hb-sail-lg {
+        0% { transform: translate(-60px, -14px) scale(1); }
+        59.61% { transform: translate(calc(84.3% - 150px), -15px) scale(0.94); animation-timing-function: cubic-bezier(.333, 0.469, .667, 0.803); }
+        76.85% { transform: translate(calc(100% - 150px), -19px) scale(0.8); animation-timing-function: cubic-bezier(.333, 0.519, .667, 0.852); }
+        94.49%, 100% { transform: translate(calc(100% - 80px), -37px) scale(0.32); }
+      }
+      @keyframes hb-fade-lg {
+        0%, 82.63% { opacity: 1; }
+        94.49%, 100% { opacity: 0; }
+      }
+      @keyframes hb-sail-md {
+        0% { transform: translate(-60px, -14px) scale(1); }
+        50.52% { transform: translate(calc(79% - 126px), -15px) scale(0.94); animation-timing-function: cubic-bezier(.333, 0.469, .667, 0.803); }
+        71.77% { transform: translate(calc(100% - 126px), -19px) scale(0.8); animation-timing-function: cubic-bezier(.333, 0.519, .667, 0.852); }
+        93.48%, 100% { transform: translate(calc(100% - 64px), -37px) scale(0.32); }
+      }
+      @keyframes hb-fade-md {
+        0%, 78.88% { opacity: 1; }
+        93.48%, 100% { opacity: 0; }
+      }
+      @keyframes hb-sail-sm {
+        0% { transform: translate(-60px, -14px) scale(1); }
+        41.99% { transform: translate(calc(75% - 78px), -15px) scale(0.94); animation-timing-function: cubic-bezier(.333, 0.469, .667, 0.803); }
+        63.11% { transform: translate(calc(100% - 78px), -19px) scale(0.8); animation-timing-function: cubic-bezier(.333, 0.519, .667, 0.852); }
+        91.5%, 100% { transform: translate(calc(100% - 32px), -37px) scale(0.32); }
+      }
+      @keyframes hb-fade-sm {
+        0%, 72.41% { opacity: 1; }
+        91.5%, 100% { opacity: 0; }
       }
       @media (min-width: 900px) {
         .scene { height: 240px; }
@@ -162,21 +391,15 @@
 #}
 {% block main %}
 <div class="home">
-  {# The welcome window. The stars, beams and water are decoration only
-     (aria-hidden); the <h1> stays bare and is still the first and only one
-     on the page. #}
+  {# The welcome window. The harbour scene is decoration only (aria-hidden);
+     the <h1> stays bare and is still the first and only one on the page. #}
   <div class="win hello sec-chat">
-    <div class="bar">{{ ui.icon("home") }}<span class="bar-title">Welcome back</span><span class="grip"></span></div>
+    <div class="bar">{{ ui.icon("home") }}<span class="bar-title">Welcome back</span>
+      {# Day or night for this window: see "day or night" in the style above. #}
+      <button class="dayswitch" type="button" role="switch" aria-checked="false"
+            aria-label="Daytime harbour" title="Daytime harbour" data-scene-toggle><span class="ds-knob"><svg class="ds-moon" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#FFFFFF" d="M9.5 4v1m1-5v1"/><path stroke="#FFF6C8" d="M.5 4v4m1-6v2m0 4v2m1-9v1m0 7v2m1-1v1"/><path stroke="#F2A900" d="M2.5 3v1m1-3v2m0 1v3m1 0v1m3 0v1m1 1v1m1-2v2m1-2v1"/><path fill="#FEDE42" d="M2 2h1v1h-1zm-1 2h2v3h-2zm0 3h3v1h-3zm1 1h5v1h-5zm1 1h6v1h-6zm1 1h4v2h-4z"/></svg><svg class="ds-sun" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#132245" d="M1.5 1v1m0 8v1m1-9v1m0 6v1m1-6v4m5-4v4m1-6v1m0 6v1m1-9v1m0 8v1"/><path stroke="#132245" stroke-width="2" d="M1 5v2m5-7v2m0 8v2m5-7v2"/><path stroke="#132245" stroke-width="4" d="M6 3v6"/><path fill="#FEDE42" d="M4 4h4v4h-4z"/><path stroke="#FFF6C8" d="M4.5 4v2m1-2v1"/></svg></span></button><span class="grip"></span></div>
     <div class="scene">
-      <span class="star"></span><span class="star"></span><span class="star"></span><span class="star"></span>
-      <span class="star"></span><span class="star"></span><span class="star"></span><span class="star"></span>
-      <div class="lh" aria-hidden="true">
-        <span class="beam beam-l"></span>
-        <span class="beam beam-r"></span>
-        <span class="glow"></span>
-        {{ ui.icon("lighthouse") }}
-      </div>
-      <div class="water"></div>
+      <i class="hb-daysky" aria-hidden="true"></i>
       <div class="scene-copy">
         <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
         <p class="lede">
@@ -190,6 +413,17 @@
             Your conversations will live here.
           {% endif %}
         </p>
+      </div>
+      {# The harbour scene: stars, jet, city, water, ferry, island and buoy.
+         After the greeting so the <h1> stays first; it sits under the text
+         (z-index 2 against the copy's 3) and is aria-hidden throughout. #}
+      <div class="harbor" aria-hidden="true">
+        <div class="hb-stars"><i class="hb-star p white"></i><i class="hb-star s white"></i><i class="hb-star m gold tw1"></i><i class="hb-star s blue"></i><i class="hb-star p white tw3"></i><i class="hb-star s white"></i><i class="hb-star l white tw2"></i><i class="hb-star p blue"></i><i class="hb-star s white"></i><i class="hb-star m white tw3"></i><i class="hb-star s gold"></i><i class="hb-star p white tw1"></i><i class="hb-star l gold tw3"></i><i class="hb-star s white"></i><i class="hb-star m blue tw2"></i><i class="hb-star p white"></i><i class="hb-star s white tw1"></i><i class="hb-star m white tw2"></i><i class="hb-star s white"></i><i class="hb-star p blue"></i><i class="hb-star p gold tw2"></i></div><div class="hb-clouds"><i class="hb-cloud c1"><svg width="60" height="26" focusable="false"><use href="#hw-cloud-d"/></svg></i><i class="hb-cloud c2"><svg width="84" height="14" focusable="false"><use href="#hw-cloud-f"/></svg></i></div>
+        <div class="hb-jetlane"><div class="hb-jet"><i class="hb-trail"></i><svg viewBox="0 0 11 5" width="11" height="5" shape-rendering="crispEdges" focusable="false"><path fill="#5A6B92" d="M9 0h1v1h-1zM8 1h2v1h-2zM1 2h10v1h-10zM0 3h10v1h-10zM5 4h2v1h-2z"/></svg><i class="hb-beacon"></i><i class="hb-strobe"></i></div></div>
+        <div class="hb-city"><svg viewBox="0 0 400 22" width="800" height="44" fill="none" shape-rendering="crispEdges" focusable="false"><path stroke="#4C5C86" d="M232 1.5h14M233 2.5h1m2 0h1M236 3.5h1M236 4.5h1M236 5.5h1M236 6.5h1M236 7.5h1"/><path stroke="#22345F" d="M218 2.5h1M153 3.5h11m54 0h1M153 4.5h1m1 0h1m1 0h7m33 0h3M153 5.5h11m1 0h7m24 0h5m5 0h4m7 0h2m16 0h1M153 6.5h3m1 0h7m1 0h3m1 0h1m1 0h1m14 0h8m2 0h3m1 0h1m4 0h6m5 0h4m15 0h1M153 7.5h11m1 0h7m1 0h12m1 0h1m1 0h3m1 0h2m2 0h5m4 0h1m1 0h1m1 0h2m4 0h6m14 0h1M133 8.5h6m14 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h7m1 0h1m1 0h2m1 0h8m2 0h1m1 0h3m4 0h6m4 0h3m1 0h2m13 0h3M133 9.5h1m1 0h4m2 0h11m1 0h11m1 0h7m1 0h12m1 0h1m1 0h1m1 0h4m2 0h5m4 0h1m1 0h4m4 0h6m2 0h7m3 0h5M133 10.5h6m2 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h2m1 0h8m2 0h1m1 0h1m1 0h1m4 0h6m4 0h3m1 0h2m2 0h1m1 0h1m1 0h3m2 0h7m1 0h5M133 11.5h3m1 0h2m2 0h11m1 0h11m1 0h7m1 0h12m1 0h8m2 0h5m4 0h1m1 0h4m4 0h6m2 0h7m2 0h1m1 0h5m1 0h1m1 0h1m1 0h1m3 0h9M119 12.5h11m3 0h6m2 0h1m1 0h3m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h6m1 0h8m2 0h3m1 0h1m4 0h6m4 0h3m1 0h2m2 0h3m1 0h1m1 0h1m2 0h7m1 0h5m3 0h3m1 0h1m1 0h3m16 0h7m4 0h5M105 13.5h10m4 0h1m1 0h3m1 0h1m1 0h1m1 0h1m3 0h6m2 0h11m1 0h11m1 0h7m1 0h12m1 0h3m1 0h1m1 0h2m2 0h5m4 0h1m1 0h4m4 0h6m2 0h7m2 0h5m1 0h1m1 0h1m1 0h3m3 0h9m16 0h1m1 0h1m1 0h3m4 0h5M105 14.5h1m1 0h8m4 0h11m3 0h6m2 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h2m1 0h8m2 0h1m1 0h1m1 0h1m4 0h6m4 0h3m1 0h2m2 0h1m1 0h1m1 0h3m2 0h7m1 0h5m3 0h9m2 0h12m2 0h7m4 0h5m3 0h9M105 15.5h10m4 0h1m1 0h1m1 0h3m1 0h3m3 0h3m1 0h2m2 0h11m1 0h11m1 0h7m1 0h12m1 0h1m1 0h1m1 0h1m1 0h2m2 0h5m4 0h3m1 0h2m4 0h6m2 0h7m2 0h1m1 0h1m1 0h3m1 0h5m3 0h9m2 0h1m1 0h3m1 0h3m1 0h2m2 0h1m1 0h1m1 0h3m4 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m4 0h10m4 0h6m3 0h9M2 16.5h5m2 0h8m88 0h5m1 0h4m4 0h11m3 0h6m2 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h5m1 0h2m1 0h8m2 0h3m1 0h1m4 0h6m4 0h3m1 0h2m2 0h1m1 0h3m1 0h1m2 0h7m1 0h5m3 0h1m1 0h3m1 0h3m2 0h12m2 0h7m4 0h5m3 0h9m4 0h1m1 0h5m1 0h2m4 0h6m3 0h3m1 0h1m1 0h3m26 0h6M2 17.5h1m1 0h1m1 0h1m2 0h8m51 0h12m2 0h7m1 0h11m4 0h10m4 0h1m1 0h3m1 0h1m1 0h1m1 0h1m3 0h6m2 0h11m1 0h11m1 0h7m1 0h12m1 0h1m1 0h1m1 0h1m1 0h2m2 0h5m4 0h1m1 0h1m1 0h2m4 0h6m2 0h7m2 0h5m1 0h1m1 0h5m3 0h9m2 0h1m1 0h5m1 0h1m1 0h2m2 0h1m1 0h5m4 0h5m3 0h9m4 0h10m4 0h6m3 0h9m3 0h9m14 0h6m25 0h6M2 18.5h5m2 0h8m2 0h12m24 0h10m3 0h7m1 0h1m1 0h2m2 0h7m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m4 0h10m4 0h11m3 0h6m2 0h1m1 0h5m1 0h3m1 0h3m1 0h5m1 0h1m1 0h1m1 0h3m1 0h1m1 0h1m1 0h3m1 0h1m1 0h4m1 0h8m2 0h3m1 0h1m4 0h6m4 0h1m1 0h1m1 0h2m2 0h1m1 0h1m1 0h1m1 0h1m2 0h7m1 0h5m3 0h1m1 0h1m1 0h3m1 0h1m2 0h12m2 0h7m4 0h5m3 0h9m4 0h5m1 0h1m1 0h2m4 0h6m3 0h1m1 0h5m1 0h1m3 0h1m1 0h7m3 0h10m1 0h6m25 0h3m1 0h2M2 19.5h1m1 0h3m2 0h3m1 0h4m2 0h3m1 0h8m1 0h12m1 0h6m4 0h1m1 0h3m1 0h4m3 0h12m2 0h7m1 0h11m4 0h10m4 0h3m1 0h1m1 0h3m1 0h1m3 0h3m1 0h2m2 0h11m1 0h11m1 0h7m1 0h12m1 0h3m1 0h1m1 0h2m2 0h5m4 0h1m1 0h1m1 0h2m4 0h6m2 0h7m2 0h1m1 0h5m1 0h1m1 0h1m1 0h1m3 0h9m2 0h1m1 0h5m1 0h4m2 0h1m1 0h1m1 0h1m1 0h1m4 0h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m4 0h10m4 0h6m3 0h9m3 0h9m3 0h5m1 0h4m1 0h3m1 0h2m1 0h10m3 0h7m4 0h6M2 20.5h5m2 0h8m2 0h12m1 0h1m1 0h10m1 0h3m1 0h2m4 0h10m3 0h12m2 0h1m1 0h5m1 0h1m1 0h1m1 0h5m1 0h1m4 0h10m4 0h11m3 0h6m2 0h1m1 0h7m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h5m1 0h2m1 0h8m2 0h3m1 0h1m4 0h6m4 0h3m1 0h2m2 0h3m1 0h3m2 0h7m1 0h5m3 0h1m1 0h3m1 0h3m2 0h12m2 0h7m4 0h5m3 0h9m4 0h10m4 0h6m3 0h9m3 0h3m1 0h5m3 0h10m1 0h6m1 0h5m1 0h4m3 0h1m1 0h5m4 0h6M2 21.5h5m2 0h8m2 0h12m1 0h12m1 0h6m4 0h10m3 0h12m2 0h7m1 0h11m4 0h10m4 0h9m1 0h1m3 0h6m2 0h11m1 0h11m1 0h7m1 0h12m1 0h3m1 0h4m2 0h5m4 0h1m1 0h1m1 0h2m4 0h6m2 0h7m2 0h1m1 0h3m1 0h1m1 0h1m1 0h3m3 0h9m2 0h1m1 0h1m1 0h3m1 0h1m1 0h2m2 0h1m1 0h1m1 0h3m4 0h1m1 0h1m1 0h1m3 0h3m1 0h5m4 0h10m4 0h6m3 0h9m3 0h9m3 0h10m1 0h6m1 0h10m3 0h7m4 0h6"/><path stroke="#BFD9FF" d="M154 4.5h1M170 6.5h1M142 10.5h1m1 0h1m1 0h1m1 0h1M136 11.5h1m69 0h1M174 12.5h1m24 0h1m28 0h1M189 13.5h1m47 0h1M144 14.5h1m1 0h1m23 0h1m7 0h1m47 0h1M274 15.5h1M146 16.5h1m19 0h1M187 17.5h1m72 0h1M91 18.5h1m86 0h1m45 0h1m26 0h1m83 0h1M3 19.5h1m118 0h1m83 0h1m86 0h1m72 0h1M33 20.5h1m132 0h1m3 0h1m5 0h1m41 0h1m124 0h1m40 0h1M206 21.5h1m26 0h1m28 0h1m3 0h1m7 0h1"/><path stroke="#FFE7A3" d="M156 4.5h1M168 6.5h1M191 7.5h1m14 0h1m1 0h1M156 8.5h1m1 0h1m1 0h1m1 0h1m3 0h1m3 0h1m11 0h1m35 0h1M134 9.5h1m52 0h1m18 0h1M154 10.5h1m3 0h1m3 0h1m3 0h1m1 0h1m7 0h1m1 0h1m1 0h1m1 0h1m14 0h1m1 0h1m18 0h1m7 0h1M233 11.5h1m7 0h1m1 0h1M142 12.5h1m3 0h1m11 0h1m1 0h1m1 0h1m5 0h1m1 0h1m7 0h1m72 0h1m1 0h1M126 13.5h1m1 0h1m62 0h1m14 0h1m34 0h1m32 0h1M106 14.5h1m41 0h1m1 0h1m3 0h1m5 0h1m5 0h1m1 0h1m28 0h1m1 0h1m14 0h1m3 0h1m5 0h1M120 15.5h1m1 0h1m3 0h1m9 0h1m52 0h1m1 0h1m9 0h1m6 0h1m24 0h1m11 0h1m1 0h1m12 0h1m3 0h1m3 0h1m16 0h1m9 0h1m1 0h1M110 16.5h1m33 0h1m3 0h1m7 0h1m7 0h1m3 0h1m1 0h1m28 0h1m18 0h1m9 0h1m77 0h1m5 0h1m18 0h1m1 0h1M5 17.5h1m118 0h1m1 0h1m1 0h1m62 0h1m2 0h1m11 0h1m1 0h1m57 0h1m1 0h1m5 0h1M75 18.5h1m17 0h1m1 0h1m3 0h1m4 0h1m37 0h1m5 0h1m7 0h1m5 0h1m3 0h1m3 0h1m3 0h1m41 0h1m11 0h1m20 0h1m60 0h1m1 0h1m16 0h1m11 0h1m55 0h1M12 19.5h1m9 0h1m33 0h1m32 0h1m34 0h1m3 0h1m7 0h1m52 0h1m18 0h1m24 0h1m7 0h1m1 0h1m3 0h1m12 0h1m5 0h1m7 0h1m1 0h1m1 0h1m6 0h1m9 0h1m3 0h1m57 0h1M48 20.5h1m34 0h1m9 0h1m58 0h1m1 0h1m5 0h1m7 0h1m5 0h1m7 0h1m43 0h1m148 0h1M18 21.5h1m46 0h1m66 0h1m56 0h1m4 0h1m13 0h1m32 0h1m3 0h1m22 0h1m7 0h1m25 0h1m24 0h1"/><path stroke="#F4F1E6" d="M156 6.5h1m42 0h1M187 7.5h1M180 8.5h1m16 0h1M189 9.5h1M156 10.5h1m17 0h1m49 0h1M150 12.5h1m3 0h1m1 0h1m9 0h1m51 0h1m7 0h1M120 13.5h1m3 0h1m151 0h1M156 14.5h1m17 0h1m1 0h1m5 0h1M187 15.5h1m47 0h1m40 0h1m16 0h1M150 16.5h1m25 0h1m5 0h1m41 0h1m24 0h1m3 0h1M3 17.5h1m116 0h1m68 0h1m47 0h1M77 18.5h1m102 0h1m18 0h1m18 0h1m7 0h1m28 0h1M60 19.5h1m130 0h1m95 0h1M91 20.5h1m7 0h1m42 0h1m7 0h1m7 0h1m40 0h1m49 0h1m3 0h1M128 21.5h1m108 0h1m22 0h1m24 0h1m1 0h1m7 0h1"/><path stroke="#18254B" d="M164 9.5h1M164 10.5h1m7 0h1m21 0h2m5 0h4M152 11.5h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m15 0h2m7 0h1M152 12.5h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m17 0h1M139 13.5h2m11 0h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m17 0h1M115 14.5h4m11 0h3m6 0h2m11 0h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h3m7 0h2m7 0h2m7 0h1m5 0h3m9 0h1M115 15.5h4m11 0h3m6 0h2m11 0h1m11 0h1m7 0h1m12 0h1m8 0h2m6 0h3m6 0h4m6 0h2m7 0h2m7 0h1m6 0h1m10 0h1m14 0h1M115 16.5h4m11 0h3m6 0h2m11 0h1m19 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m5 0h3m9 0h1m14 0h1M80 17.5h2m19 0h1m1 0h2m10 0h4m11 0h3m6 0h2m11 0h1m11 0h1m7 0h1m12 0h1m9 0h1m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m5 0h3m9 0h1m14 0h1m9 0h2M0 18.5h2m5 0h2m71 0h2m7 0h1m11 0h1m1 0h1m11 0h4m11 0h3m6 0h2m11 0h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m5 0h3m9 0h1m14 0h1m9 0h2m5 0h3m9 0h3m12 0h3m6 0h3m9 0h1m31 0h12M0 19.5h2m5 0h2m42 0h4m25 0h2m19 0h1m1 0h2m10 0h4m11 0h3m6 0h2m11 0h1m11 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m5 0h2m10 0h1m14 0h1m9 0h2m5 0h3m9 0h3m12 0h3m6 0h3m9 0h1m31 0h1m10 0h1m9 0h4M0 20.5h2m5 0h2m8 0h2m12 0h1m19 0h4m10 0h3m12 0h2m7 0h1m11 0h1m1 0h2m10 0h4m11 0h3m6 0h2m23 0h1m7 0h1m12 0h1m8 0h2m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m5 0h3m9 0h1m14 0h1m9 0h2m5 0h3m9 0h3m12 0h3m6 0h3m9 0h3m9 0h3m10 0h1m6 0h1m10 0h1m9 0h4M0 21.5h2m5 0h2m8 0h1m13 0h1m19 0h4m11 0h2m12 0h2m7 0h1m11 0h1m1 0h2m10 0h4m11 0h2m7 0h2m11 0h1m11 0h1m7 0h1m12 0h1m9 0h1m5 0h4m6 0h4m6 0h2m7 0h2m7 0h1m6 0h2m9 0h1m14 0h1m9 0h2m5 0h3m9 0h1m1 0h1m12 0h3m6 0h2m10 0h3m9 0h3m10 0h1m6 0h1m10 0h1m9 0h4"/></svg><i class="hb-red r1"></i><i class="hb-red r2"></i><i class="hb-red r3"></i><i class="hb-red r4"></i><i class="hb-win n1"></i><i class="hb-win n2"></i><i class="hb-win n3"></i><i class="hb-win n4"></i><i class="hb-win n5"></i><i class="hb-win n6"></i><i class="hb-win n7"></i></div>
+        <div class="hb-water"><i class="hb-waterday"></i><i class="hb-glint"><svg viewBox="0 0 400 7" width="800" height="14" fill="none" shape-rendering="crispEdges" focusable="false"><path stroke="#FFE7A3" d="M12 0.5h1m64 0h1m44 0h3m3 0h1m13 0h1m4 0h2m1 0h1m3 0h1m3 0h1m3 0h1m3 0h1m3 0h1m3 0h1m1 0h1m1 0h1m1 0h1m8 0h1m4 0h1m2 0h1m2 0h1m5 0h3m9 0h1m5 0h1m1 0h1m14 0h1m7 0h1m1 0h1m3 0h1m5 0h1m12 0h1m1 0h1m33 0h1m1 0h1m22 0h1m21 0h1m17 0h1M5 1.5h1m6 0h1m111 0h1m1 0h1m2 0h1m6 0h2m5 0h1m4 0h1m1 0h1m5 0h2m2 0h1m2 0h1m5 0h2m4 0h2m6 0h1m10 0h1m5 0h1m5 0h3m7 0h1m1 0h2m6 0h2m5 0h3m1 0h1m12 0h1m17 0h1m24 0h1m35 0h1m3 0h1M33 2.5h1m22 0h1m64 0h1m14 0h1m7 0h2m1 0h1m3 0h1m6 0h1m5 0h1m1 0h5m3 0h2m3 0h1m11 0h2m7 0h1m13 0h1m13 0h1m4 0h1m1 0h1m2 0h1m2 0h1m4 0h1m2 0h1m2 0h1m13 0h1m18 0h1m9 0h1m39 0h1m5 0h1m42 0h1M99 3.5h1m20 0h1m28 0h1m1 0h1m4 0h1m1 0h1m1 0h1m3 0h1m1 0h1m2 0h1m4 0h1m5 0h1m1 0h2m7 0h1m2 0h1m2 0h1m16 0h1m3 0h1m7 0h1m18 0h1m1 0h1m12 0h1m13 0h1m13 0h1m108 0h1M121 4.5h1m4 0h1m19 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m5 0h1m2 0h1m13 0h1m5 0h1m1 0h1m6 0h1m1 0h1m9 0h1m14 0h1m1 0h1m13 0h1m3 0h1m1 0h1m4 0h1m14 0h1m19 0h1m1 0h1m12 0h1m22 0h1M93 5.5h1m66 0h1m1 0h2m2 0h1m1 0h1m5 0h1m1 0h1m6 0h1m32 0h1m9 0h1m14 0h1m19 0h1m6 0h1m17 0h1m8 0h1m16 0h1M3 6.5h1m79 0h1m39 0h1m5 0h1m17 0h1m9 0h1m23 0h1m6 0h1m5 0h1m14 0h1m31 0h1m2 0h1m23 0h1m26 0h1m16 0h1"/><path stroke="#F4F1E6" d="M91 0.5h1m34 0h1m24 0h1m4 0h1m11 0h1m13 0h1m4 0h1m3 0h1m7 0h1m54 0h1m38 0h1m1 0h1M89 1.5h1m68 0h1m20 0h1m7 0h1m3 0h1m7 0h1m24 0h1m17 0h1M150 2.5h1m5 0h1m23 0h1m1 0h1m41 0h2m22 0h1m4 0h1m20 0h1m68 0h1M48 3.5h1m16 0h1m77 0h1m2 0h1m5 0h1m17 0h1m18 0h1m10 0h1m15 0h1m17 0h1m41 0h1m1 0h1M48 4.5h1m28 0h1m50 0h1m26 0h1m33 0h1m54 0h2m15 0h1m6 0h1m7 0h1M83 5.5h1m72 0h1m32 0h1m17 0h1M48 6.5h1m88 0h1m7 0h1m12 0h1m10 0h1m8 0h1m114 0h1"/></svg></i><i class="hb-wave hb-w1"></i><i class="hb-wave hb-w2"></i><i class="hb-wave hb-w3"></i><i class="hb-wave hb-w4"></i><i class="hb-wave hb-w5"></i><i class="hb-wave hb-w6"></i></div>
+        <div class="hb-lane"><div class="hb-ferry"><i class="hb-wake"><i></i></i><i class="hb-wake hb-wake2"><i></i></i><div class="hb-boat"><svg viewBox="0 0 46 22" width="92" height="44" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M30 0h1v1h-1zM24 5h13v1h-13zM24 6h1v1h-1zM27 6h1v1h-1zM30 6h1v1h-1zM33 6h1v1h-1zM24 7h12v1h-12zM6 9h32v1h-32zM6 10h1v1h-1zM9 10h1v1h-1zM12 10h1v1h-1zM15 10h1v1h-1zM18 10h1v1h-1zM21 10h1v1h-1zM24 10h1v1h-1zM27 10h1v1h-1zM30 10h1v1h-1zM33 10h2v1h-2zM37 10h1v1h-1zM6 11h1v1h-1zM9 11h1v1h-1zM12 11h1v1h-1zM15 11h1v1h-1zM18 11h1v1h-1zM21 11h1v1h-1zM24 11h1v1h-1zM27 11h1v1h-1zM30 11h1v1h-1zM33 11h2v1h-2zM37 11h1v1h-1z"/><path fill="#8C99B0" d="M30 1h1v1h-1zM2 2h1v1h-1zM28 2h5v1h-5zM2 3h1v1h-1zM30 3h1v1h-1zM2 4h1v1h-1zM2 5h1v1h-1zM2 6h1v1h-1zM7 6h16v1h-16zM2 7h1v1h-1zM7 7h1v1h-1zM10 7h1v1h-1zM13 7h1v1h-1zM16 7h1v1h-1zM19 7h1v1h-1zM22 7h1v1h-1zM2 8h1v1h-1zM2 9h1v1h-1zM0 10h5v1h-5zM39 10h6v1h-6zM0 11h1v1h-1zM2 11h1v1h-1zM4 11h1v1h-1zM41 11h1v1h-1zM44 11h1v1h-1z"/><path fill="#FF791F" d="M3 3h3v1h-3zM3 4h2v1h-2z"/><path fill="#C9DCF1" d="M23 4h15v1h-15zM5 8h34v1h-34z"/><path fill="#132245" d="M23 5h1v1h-1zM37 5h1v1h-1zM23 6h1v1h-1zM37 6h1v1h-1zM23 7h1v1h-1zM37 7h1v1h-1zM5 9h1v1h-1zM38 9h1v1h-1zM5 10h1v1h-1zM38 10h1v1h-1zM5 11h1v1h-1zM38 11h1v1h-1zM0 12h46v1h-46zM0 13h1v1h-1zM44 13h1v1h-1zM0 14h1v1h-1zM42 14h1v1h-1zM0 15h1v1h-1zM41 15h1v1h-1zM0 16h1v1h-1zM40 16h1v1h-1zM0 17h1v1h-1zM39 17h1v1h-1zM0 18h1v1h-1zM38 18h1v1h-1zM0 19h1v1h-1zM37 19h1v1h-1zM0 20h1v1h-1zM36 20h1v1h-1zM0 21h36v1h-36z"/><path fill="#FEDE42" d="M25 6h2v1h-2zM28 6h2v1h-2zM31 6h2v1h-2zM7 10h2v1h-2zM10 10h2v1h-2zM13 10h2v1h-2zM16 10h2v1h-2zM19 10h2v1h-2zM22 10h2v1h-2zM25 10h2v1h-2zM28 10h2v1h-2zM31 10h2v1h-2zM7 11h2v1h-2zM10 11h2v1h-2zM13 11h2v1h-2zM16 11h2v1h-2zM19 11h2v1h-2zM22 11h2v1h-2zM25 11h2v1h-2zM28 11h2v1h-2zM31 11h2v1h-2zM1 13h43v1h-43z"/><path fill="#78AFE9" d="M34 6h3v1h-3zM35 10h2v1h-2zM35 11h2v1h-2z"/><path fill="#3DDC97" d="M36 7h1v1h-1z"/><path fill="#1B2D57" d="M1 14h41v1h-41zM1 15h40v1h-40zM1 16h39v1h-39zM1 17h38v1h-38zM1 18h37v1h-37zM1 19h36v1h-36zM1 20h35v1h-35z"/><path fill="#FFFFFF" transform="translate(8.5 15) scale(.5)" d="M0 0h1v1h-1zM1 0h1v1h-1zM2 0h1v1h-1zM0 1h1v1h-1zM0 2h1v1h-1zM0 3h1v1h-1zM0 4h1v1h-1zM1 4h1v1h-1zM2 4h1v1h-1zM4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM4 4h1v1h-1zM5 4h1v1h-1zM6 4h1v1h-1zM8 0h1v1h-1zM8 1h1v1h-1zM8 2h1v1h-1zM8 3h1v1h-1zM8 4h1v1h-1zM9 4h1v1h-1zM10 4h1v1h-1zM12 0h1v1h-1zM14 0h1v1h-1zM12 1h1v1h-1zM14 1h1v1h-1zM12 2h1v1h-1zM14 2h1v1h-1zM12 3h1v1h-1zM14 3h1v1h-1zM12 4h1v1h-1zM13 4h1v1h-1zM14 4h1v1h-1zM16 0h1v1h-1zM20 0h1v1h-1zM16 1h1v1h-1zM17 1h1v1h-1zM19 1h1v1h-1zM20 1h1v1h-1zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h1v1h-1zM16 3h1v1h-1zM20 3h1v1h-1zM16 4h1v1h-1zM20 4h1v1h-1zM22 0h1v1h-1zM23 0h1v1h-1zM22 1h1v1h-1zM24 1h1v1h-1zM22 2h1v1h-1zM23 2h1v1h-1zM22 3h1v1h-1zM24 3h1v1h-1zM22 4h1v1h-1zM23 4h1v1h-1zM26 0h1v1h-1zM27 0h1v1h-1zM28 0h1v1h-1zM27 1h1v1h-1zM27 2h1v1h-1zM27 3h1v1h-1zM26 4h1v1h-1zM27 4h1v1h-1zM28 4h1v1h-1zM31 0h1v1h-1zM30 1h1v1h-1zM32 1h1v1h-1zM30 2h1v1h-1zM31 2h1v1h-1zM32 2h1v1h-1zM30 3h1v1h-1zM32 3h1v1h-1zM30 4h1v1h-1zM32 4h1v1h-1zM37 0h1v1h-1zM38 0h1v1h-1zM37 1h1v1h-1zM39 1h1v1h-1zM37 2h1v1h-1zM38 2h1v1h-1zM37 3h1v1h-1zM37 4h1v1h-1zM41 0h1v1h-1zM42 0h1v1h-1zM43 0h1v1h-1zM41 1h1v1h-1zM43 1h1v1h-1zM41 2h1v1h-1zM43 2h1v1h-1zM41 3h1v1h-1zM43 3h1v1h-1zM41 4h1v1h-1zM42 4h1v1h-1zM43 4h1v1h-1zM45 0h1v1h-1zM46 0h1v1h-1zM47 0h1v1h-1zM46 1h1v1h-1zM46 2h1v1h-1zM46 3h1v1h-1zM45 4h1v1h-1zM46 4h1v1h-1zM47 4h1v1h-1zM49 0h1v1h-1zM52 0h1v1h-1zM49 1h1v1h-1zM50 1h1v1h-1zM52 1h1v1h-1zM49 2h1v1h-1zM51 2h1v1h-1zM52 2h1v1h-1zM49 3h1v1h-1zM52 3h1v1h-1zM49 4h1v1h-1zM52 4h1v1h-1zM54 0h1v1h-1zM55 0h1v1h-1zM56 0h1v1h-1zM55 1h1v1h-1zM55 2h1v1h-1zM55 3h1v1h-1zM55 4h1v1h-1z"/></svg><i class="hb-mast"></i></div><i class="hb-bow"><i class="f1"><svg viewBox="0 0 8 3" width="16" height="6" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M3 0h1v1h-1zM1 1h4v1h-4zM6 1h1v1h-1zM0 2h8v1h-8z"/></svg></i><i class="f2"><svg viewBox="0 0 8 3" width="16" height="6" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M4 0h1v1h-1zM2 1h2v1h-2zM5 1h2v1h-2zM0 2h8v1h-8z"/></svg></i></i></div></div>
+        <div class="hb-isle"><i class="hb-beam hb-beam-l"></i><i class="hb-beam hb-beam-r"></i><i class="hb-glow"></i><svg class="hb-rock" viewBox="0 0 36 38" width="108" height="114" shape-rendering="crispEdges" focusable="false"><path fill="#132245" d="M5 23h1v1h-1zM7 23h22v1h-22zM30 23h1v1h-1zM6 24h1v1h-1zM8 24h1v1h-1zM27 24h1v1h-1zM29 24h1v1h-1zM4 25h1v1h-1zM8 25h1v1h-1zM27 25h1v1h-1zM31 25h1v1h-1zM3 26h1v1h-1zM8 26h1v1h-1zM27 26h1v1h-1zM32 26h1v1h-1zM2 27h1v1h-1zM33 27h1v1h-1zM2 28h1v1h-1zM33 28h1v1h-1zM2 29h1v1h-1zM33 29h1v1h-1zM2 30h1v1h-1zM33 30h1v1h-1zM1 31h1v1h-1zM3 31h1v1h-1zM6 31h3v1h-3zM28 31h5v1h-5zM34 31h1v1h-1zM1 32h2v1h-2zM9 32h2v1h-2zM25 32h2v1h-2zM33 32h2v1h-2zM0 33h1v1h-1zM11 33h1v1h-1zM14 33h5v1h-5zM24 33h1v1h-1zM35 33h1v1h-1zM0 34h1v1h-1zM12 34h2v1h-2zM19 34h2v1h-2zM23 34h1v1h-1zM35 34h1v1h-1zM0 35h1v1h-1zM11 35h1v1h-1zM21 35h1v1h-1zM23 35h1v1h-1zM25 35h5v1h-5zM35 35h1v1h-1zM0 36h1v1h-1zM4 36h4v1h-4zM11 36h1v1h-1zM22 36h1v1h-1zM24 36h1v1h-1zM30 36h1v1h-1zM35 36h1v1h-1zM0 37h1v1h-1zM3 37h1v1h-1zM8 37h1v1h-1zM10 37h1v1h-1zM22 37h2v1h-2zM31 37h1v1h-1zM35 37h1v1h-1z"/><path fill="#62A85B" d="M5 24h1v1h-1zM7 24h1v1h-1zM28 24h1v1h-1zM30 24h1v1h-1zM5 25h3v1h-3zM28 25h3v1h-3zM4 26h1v1h-1zM6 26h1v1h-1zM10 26h1v1h-1zM14 26h1v1h-1zM19 26h1v1h-1zM23 26h1v1h-1zM25 26h1v1h-1zM31 26h1v1h-1zM3 27h1v1h-1zM7 27h1v1h-1zM12 27h1v1h-1zM17 27h1v1h-1zM22 27h1v1h-1zM27 27h1v1h-1zM32 27h1v1h-1zM3 28h1v1h-1zM8 28h1v1h-1zM13 28h1v1h-1zM18 28h1v1h-1zM23 28h1v1h-1zM28 28h1v1h-1zM4 29h1v1h-1zM9 29h1v1h-1zM14 29h1v1h-1zM5 30h1v1h-1z"/><path fill="#D3DAE5" d="M9 24h18v1h-18z"/><path fill="#A7B2C4" d="M9 25h2v1h-2zM12 25h9v1h-9zM22 25h5v1h-5z"/><path fill="#77849B" d="M11 25h1v1h-1zM21 25h1v1h-1zM9 26h1v1h-1zM11 26h3v1h-3zM15 26h4v1h-4zM20 26h3v1h-3zM24 26h1v1h-1zM26 26h1v1h-1z"/><path fill="#387E4F" d="M5 26h1v1h-1zM7 26h1v1h-1zM28 26h3v1h-3zM4 27h3v1h-3zM8 27h4v1h-4zM13 27h4v1h-4zM18 27h4v1h-4zM23 27h4v1h-4zM28 27h4v1h-4zM4 28h4v1h-4zM9 28h4v1h-4zM14 28h4v1h-4zM19 28h4v1h-4zM24 28h4v1h-4zM29 28h4v1h-4zM5 29h1v1h-1zM13 29h1v1h-1zM20 29h2v1h-2zM26 29h2v1h-2zM31 29h1v1h-1zM4 30h1v1h-1zM13 30h1v1h-1zM21 30h1v1h-1zM27 30h1v1h-1z"/><path fill="#22553F" d="M3 29h1v1h-1zM6 29h3v1h-3zM10 29h3v1h-3zM15 29h5v1h-5zM22 29h4v1h-4zM28 29h3v1h-3zM32 29h1v1h-1zM9 30h1v1h-1zM14 30h1v1h-1zM20 30h1v1h-1zM26 30h1v1h-1zM31 30h1v1h-1zM4 31h2v1h-2zM13 31h1v1h-1zM21 31h1v1h-1zM27 31h1v1h-1z"/><path fill="#93A2BE" d="M3 30h1v1h-1zM2 31h1v1h-1zM3 32h6v1h-6zM27 32h6v1h-6zM1 33h2v1h-2zM9 33h1v1h-1zM25 33h2v1h-2zM1 34h1v1h-1zM14 34h5v1h-5zM24 34h1v1h-1zM1 35h1v1h-1zM12 35h2v1h-2zM24 35h1v1h-1zM1 36h1v1h-1zM12 36h1v1h-1zM23 36h1v1h-1zM25 36h3v1h-3zM1 37h1v1h-1zM11 37h1v1h-1z"/><path fill="#5F6F8D" d="M6 30h3v1h-3zM10 30h3v1h-3zM15 30h5v1h-5zM22 30h4v1h-4zM28 30h3v1h-3zM9 31h4v1h-4zM14 31h3v1h-3zM18 31h3v1h-3zM22 31h5v1h-5zM11 32h7v1h-7zM20 32h5v1h-5zM3 33h6v1h-6zM12 33h2v1h-2zM19 33h5v1h-5zM27 33h7v1h-7zM2 34h4v1h-4zM7 34h4v1h-4zM21 34h2v1h-2zM25 34h5v1h-5zM31 34h3v1h-3zM2 35h5v1h-5zM8 35h3v1h-3zM14 35h6v1h-6zM22 35h1v1h-1zM30 35h1v1h-1zM32 35h2v1h-2zM2 36h2v1h-2zM8 36h1v1h-1zM13 36h7v1h-7zM28 36h1v1h-1zM2 37h1v1h-1zM4 37h2v1h-2zM12 37h4v1h-4zM24 37h3v1h-3z"/><path fill="#3B4866" d="M32 30h1v1h-1zM17 31h1v1h-1zM33 31h1v1h-1zM18 32h2v1h-2zM10 33h1v1h-1zM34 33h1v1h-1zM6 34h1v1h-1zM11 34h1v1h-1zM30 34h1v1h-1zM34 34h1v1h-1zM7 35h1v1h-1zM20 35h1v1h-1zM31 35h1v1h-1zM34 35h1v1h-1zM9 36h2v1h-2zM20 36h2v1h-2zM29 36h1v1h-1zM31 36h4v1h-4zM6 37h2v1h-2zM9 37h1v1h-1zM16 37h6v1h-6zM27 37h4v1h-4zM32 37h3v1h-3z"/></svg>{{ ui.icon("lighthouse") }}<i class="hb-surf"><i class="f1"><svg viewBox="0 0 40 3" width="120" height="9" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M1 0h2v1h-2zM5 0h1v1h-1zM16 0h1v1h-1zM27 0h1v1h-1zM35 0h2v1h-2zM0 1h4v1h-4zM5 1h3v1h-3zM9 1h3v1h-3zM14 1h4v1h-4zM19 1h2v1h-2zM23 1h3v1h-3zM27 1h4v1h-4zM32 1h2v1h-2zM35 1h5v1h-5z"/><path fill="#A9CDF2" d="M1 2h2v1h-2zM5 2h3v1h-3zM13 2h2v1h-2zM19 2h3v1h-3zM28 2h2v1h-2zM32 2h3v1h-3zM37 2h2v1h-2z"/></svg></i><i class="f2"><svg viewBox="0 0 40 3" width="120" height="9" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M2 0h1v1h-1zM10 0h1v1h-1zM20 0h1v1h-1zM24 0h1v1h-1zM35 0h1v1h-1zM37 0h1v1h-1zM1 1h4v1h-4zM6 1h2v1h-2zM9 1h4v1h-4zM14 1h3v1h-3zM19 1h3v1h-3zM23 1h3v1h-3zM28 1h4v1h-4zM33 1h6v1h-6z"/><path fill="#A9CDF2" d="M0 2h2v1h-2zM5 2h2v1h-2zM9 2h3v1h-3zM15 2h3v1h-3zM21 2h2v1h-2zM25 2h3v1h-3zM31 2h2v1h-2zM36 2h2v1h-2z"/></svg></i></i><i class="hb-buoy"><i class="hb-buoy-body"><svg viewBox="0 0 7 13" width="21" height="39" fill="none" shape-rendering="crispEdges" focusable="false"><path stroke="#8C99B0" d="M3 0.5h1M2 1.5h3M2 2.5h3M3 3.5h1M2 4.5h1m1 0h1M1 5.5h1m1 0h1m1 0h1"/><path stroke="#132245" d="M0 6.5h7M0 7.5h1m5 0h1M0 8.5h1m5 0h1M0 9.5h1m5 0h1M0 10.5h1m5 0h1M0 11.5h1m5 0h1M0 12.5h7"/><path stroke="#D62828" d="M1 7.5h4M1 8.5h4M1 10.5h4M1 11.5h4"/><path stroke="#9E1C1C" d="M5 7.5h1M5 8.5h1M5 10.5h1M5 11.5h1"/><path stroke="#FFFFFF" d="M1 9.5h5"/></svg><i class="hb-lamp red"></i><i class="hb-lamp white"></i></i><i class="hb-ring"><i class="f1"><svg viewBox="0 0 14 2" width="28" height="4" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M3 0h1v1h-1zM5 0h2v1h-2zM8 0h1v1h-1zM10 0h1v1h-1zM1 1h12v1h-12z"/></svg></i><i class="f2"><svg viewBox="0 0 14 2" width="28" height="4" shape-rendering="crispEdges" focusable="false"><path fill="#FFFFFF" d="M2 0h1v1h-1zM5 0h1v1h-1zM7 0h2v1h-2zM11 0h1v1h-1zM0 1h14v1h-14z"/></svg></i></i></i></div>
       </div>
     </div>
   </div>

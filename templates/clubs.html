@@ -125,6 +125,9 @@
 
       .clubfind { margin-top: 16px; max-width: 26rem; }
       .clubfind label { margin-bottom: 6px; }
+      /* this label sits straight on the Harborwalk, so it lightens at night */
+      .clubfind label { transition: color 2s ease; }
+      html[data-sky="night"] .clubfind label { color: #EEF5FC; }
       .nomatch { margin-top: 24px; }
 
       /* ---------- one window per category ---------- */

@@ -36,7 +36,7 @@
 
          The pieces, in the order they appear below:
             1. tokens ............ colours, fonts, sizes (restyle from here)
-            2. base .............. the page ground ("the desk"), type, icons
+            2. base .............. the page ground (the Harborwalk), type, icons
             3. controls .......... fields and buttons
             4. top bar ........... brand, search, bell, account menu
             5. toasts, page, flashes, page headings
@@ -122,12 +122,8 @@
         overflow-wrap: break-word;
         -webkit-font-smoothing: antialiased;
         -webkit-tap-highlight-color: transparent;
-        /* the desk: sky blue with a faint white pixel grid every 32px */
-        background-color: var(--sky);
-        background-image:
-          linear-gradient(rgba(255, 255, 255, .32) 2px, transparent 2px),
-          linear-gradient(90deg, rgba(255, 255, 255, .32) 2px, transparent 2px);
-        background-size: 32px 32px;
+        /* the ground under the Harborwalk (below), in its sky colour */
+        background-color: #4A8EDE;
         /* room for the fixed taskbar */
         padding-bottom: calc(var(--tabbar-h) + 44px + env(safe-area-inset-bottom));
       }
@@ -153,6 +149,149 @@
       .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
       :focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
       button, a, input, select, summary { touch-action: manipulation; }
+
+      /* ---------- the Harborwalk ----------
+         The page ground on every page: UMass Boston's Harborwalk on Columbia
+         Point, in pixels (templates/_harborwalk.html). Fixed behind
+         everything (z-index -1) so it stays put while a long page scrolls.
+         The art is laid out at one CSS pixel to the art pixel and scaled up
+         whole (two screen pixels to the art pixel on phones, three from
+         480px, four on very wide screens), so every edge stays crisp. Back
+         to front: sky, stars, clouds, the harbour with moored boats and the
+         sun's glitter, the far shore, granite posts and chains, the walkway
+         with a bench or two, the grass bank, and a saucer lamp. */
+      body:has(.harborwalk) { background: #4A8EDE; }
+      .harborwalk {
+        position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+        background: #4A8EDE; shape-rendering: crispEdges;
+      }
+      .hw-art {
+        --k: 2;
+        position: absolute; left: 0; top: 0;
+        width: calc(100% / var(--k)); height: calc(100% / var(--k));
+        transform: scale(var(--k)); transform-origin: 0 0;
+      }
+      @media (min-width: 480px) { .hw-art { --k: 3; } }
+      @media (min-width: 2000px) { .hw-art { --k: 4; } }
+      .hw-art i, .hw-art svg { position: absolute; display: block; }
+      .hw-defs { width: 0; height: 0; }
+      .hw-sky {
+        left: 0; top: 0; width: 100%; height: 62%;
+        background:
+          linear-gradient(to top, #D3E6F8 0 3px, #C3DDF6 3px 7px, #B1D3F4 7px 12px, #9FC9F1 12px 18px, rgba(159, 201, 241, 0) 18px),
+          linear-gradient(to bottom, #4A8EDE, #69A5E6 45%, #93C2EF);
+      }
+      /* Clouds drift slowly to the right and slip off the edge, and a while
+         later each one comes back in from the left. A lane is the screen plus
+         its cloud plus a gap, so they arrive at uneven times; the high, big
+         ones move a little faster than the low, far ones. With reduced
+         motion they stay put, spread across the sky. */
+      .hw-lane {
+        left: calc(-1px * (var(--w) + var(--g)));
+        width: calc(100% + 1px * (var(--w) + var(--g))); height: 0;
+        animation: hw-drift var(--d) linear var(--dl) infinite;
+      }
+      .hw-art .hw-cl { left: 0; top: 0; }
+      @keyframes hw-drift { from { transform: translateX(0); } to { transform: translateX(100%); } }
+      .hw-shore { left: 0; top: calc(62% - 20px); width: 100%; height: 20px; }
+      .hw-water {
+        left: 0; top: 62%; bottom: 0; width: 100%;
+        background: linear-gradient(to bottom, #9CC6EA 0 2px, #84B6E2 2px 6px, #70A8DB 6px 14px, #5E9AD3 14px 28px, #4E8CCA 28px 48px, #4583C3 48px);
+      }
+      .hw-ripples { left: 0; top: 0; width: 100%; height: 100%; }
+      .hw-glitter { left: 58%; top: 2px; }
+      .hw-bob { animation: hw-bob 4s ease-in-out infinite alternate; }
+      @keyframes hw-bob { from { transform: translateY(0); } to { transform: translateY(1px); } }
+      .hw-glint { opacity: 0; animation: hw-twinkle-sun 5s linear infinite; }
+      @keyframes hw-twinkle-sun { 0%, 100% { opacity: 0; } 6% { opacity: 1; } 12% { opacity: 0; } }
+      .hw-rail { left: 0; bottom: 27px; width: 100%; height: 16px; }
+      .hw-walk { left: 0; bottom: 18px; width: 100%; height: 9px; }
+      .hw-bench { bottom: 18px; }
+      .hw-grass { left: 0; bottom: 0; width: 100%; height: 30px; }
+      .hw-pole {
+        left: calc(86% + 17px); top: calc(24% + 14px); bottom: 8px; width: 3px;
+        background: linear-gradient(90deg, #558A72 0 1px, #376251 1px 2px, #244539 2px);
+      }
+      .hw-lamp, .hw-lamplit { left: 86%; top: 24%; }
+      .hw-lampbase { left: calc(86% + 15px); bottom: 5px; }
+
+      /* Night, set by the button in the top bar (data-sky="night" on the
+         html element). Over about four seconds the sky deepens, a multiply
+         tint darkens the harbour and the bank, the clouds and the far shore
+         dim, a few stars come out like the ones over Home's harbour, the
+         windows across the water light up in three waves with their
+         reflections, and the lamp comes on. Going back to day, the lights
+         go out first, then the sky brightens. */
+      html[data-sky="night"] body:has(.harborwalk) { background: #0A1430; }
+      .hw-sky-n {
+        left: 0; top: 0; width: 100%; height: 62%;
+        background:
+          linear-gradient(to top, #3A4F80 0 3px, #33477A 3px 7px, #2C4072 7px 12px, #26396A 12px 18px, rgba(38, 57, 106, 0) 18px),
+          linear-gradient(to bottom, #0A1430, #13234C 50%, #26396A);
+      }
+      .hw-tint {
+        left: 0; top: 62%; bottom: 0; width: 100%;
+        background: linear-gradient(to bottom, #3E5079, #2E3F62);
+        mix-blend-mode: multiply;
+      }
+      .hw-sky-n, .hw-tint { opacity: 0; transition: opacity 3.2s ease-in-out .4s; }
+      html[data-sky="night"] .hw-sky-n,
+      html[data-sky="night"] .hw-tint { opacity: 1; transition-delay: 0s; }
+      .hw-art .hw-cl, .hw-shore, .hw-pole, .hw-lamp, .hw-lampbase { transition: filter 3.2s ease-in-out .4s; }
+      html[data-sky="night"] .hw-art .hw-cl { filter: brightness(.45) saturate(.75); transition-delay: 0s; }
+      html[data-sky="night"] .hw-shore { filter: brightness(.36) saturate(.6); transition-delay: 0s; }
+      html[data-sky="night"] :is(.hw-pole, .hw-lamp, .hw-lampbase) { filter: brightness(.5) saturate(.8); transition-delay: 0s; }
+      .hw-glitter { transition: opacity 1.4s ease 2s; }
+      html[data-sky="night"] .hw-glitter { opacity: 0; transition-delay: 0s; }
+      .hw-stars { left: 0; top: 0; width: 100%; height: 62%; opacity: 0; transition: opacity .9s ease; }
+      html[data-sky="night"] .hw-stars { opacity: 1; transition: opacity 1.8s ease 1.8s; }
+      .hw-lit { left: 0; top: calc(62% - 20px); width: 100%; height: 20px; }
+      .hw-reflect { left: 0; top: 62%; width: 100%; height: 6px; }
+      .hw-lampglow {
+        left: calc(86% - 14px); top: calc(24% - 14px); width: 64px; height: 36px;
+        background: radial-gradient(closest-side, rgba(255, 231, 163, .5), rgba(255, 231, 163, .16) 55%, rgba(255, 231, 163, 0));
+      }
+      .hw-lamppool {
+        left: calc(86% - 27px); bottom: 2px; width: 90px; height: 28px;
+        background: radial-gradient(closest-side, rgba(255, 222, 150, .34), rgba(255, 222, 150, 0));
+      }
+      .hw-lit, .hw-reflect, .hw-lampglow, .hw-lamppool, .hw-lamplit { opacity: 0; transition: opacity .5s ease; }
+      html[data-sky="night"] .hw-lit-a { opacity: 1; transition: opacity .7s ease 1.3s; }
+      html[data-sky="night"] .hw-lit-b { opacity: 1; transition: opacity .7s ease 2.1s; }
+      html[data-sky="night"] .hw-lit-c { opacity: 1; transition: opacity .7s ease 2.9s; }
+      html[data-sky="night"] .hw-reflect { opacity: .55; transition: opacity 1.2s ease 2.4s; }
+      html[data-sky="night"] :is(.hw-lampglow, .hw-lamppool, .hw-lamplit) { opacity: 1; transition: opacity .8s ease 1s; }
+      /* the stars: one art pixel with a soft glow, some with a pixel cross */
+      .hw-star { width: 1px; height: 1px; }
+      .hw-star::before, .hw-star::after { content: ""; position: absolute; left: 0; top: 0; }
+      .hw-star::before { border-radius: 50%; }
+      .hw-star::after { width: 1px; height: 1px; }
+      .hw-star.s::before { width: 5px; height: 5px; margin: -2px 0 0 -2px; }
+      .hw-star.p::before { width: 7px; height: 7px; margin: -3px 0 0 -3px; }
+      .hw-star.m::before { width: 9px; height: 9px; margin: -4px 0 0 -4px; }
+      .hw-star.l::before { width: 11px; height: 11px; margin: -5px 0 0 -5px; }
+      .hw-star.white::before { background: radial-gradient(closest-side, rgba(207, 224, 245, .4), rgba(207, 224, 245, .12) 60%, rgba(207, 224, 245, 0)); }
+      .hw-star.gold::before { background: radial-gradient(closest-side, rgba(254, 222, 66, .4), rgba(254, 222, 66, .12) 60%, rgba(254, 222, 66, 0)); }
+      .hw-star.blue::before { background: radial-gradient(closest-side, rgba(120, 175, 233, .4), rgba(120, 175, 233, .12) 60%, rgba(120, 175, 233, 0)); }
+      .hw-star.s.white::after { background: #FFFFFF; }
+      .hw-star.s.gold::after { background: #FFF6C8; }
+      .hw-star.s.blue::after { background: #E6F0FF; }
+      .hw-star.p.white::after { background: #FFFFFF; box-shadow: 0 -1px #CFE0F5, -1px 0 #CFE0F5, 1px 0 #CFE0F5, 0 1px #CFE0F5; }
+      .hw-star.p.blue::after { background: #E6F0FF; box-shadow: 0 -1px #78AFE9, -1px 0 #78AFE9, 1px 0 #78AFE9, 0 1px #78AFE9; }
+      .hw-star.m.gold::after { background: #FFF6C8; box-shadow: 0 -2px #8C7A34, 0 -1px #FEDE42, -2px 0 #8C7A34, -1px 0 #FEDE42, 1px 0 #FEDE42, 2px 0 #8C7A34, 0 1px #FEDE42, 0 2px #8C7A34; }
+      .hw-star.l.white::after { background: #FFFFFF; box-shadow: 0 -2px #5D74A8, -1px -1px #5D74A8, 0 -1px #CFE0F5, 1px -1px #5D74A8, -2px 0 #5D74A8, -1px 0 #CFE0F5, 1px 0 #CFE0F5, 2px 0 #5D74A8, -1px 1px #5D74A8, 0 1px #CFE0F5, 1px 1px #5D74A8, 0 2px #5D74A8; }
+      .hw-star.tw::after, .hw-star.tw::before { animation: hw-twinkle 3.6s ease-in-out var(--tw, 0s) infinite; }
+      @keyframes hw-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+      /* on a phone the cards cover the lamp, bar a sliver of pole */
+      @media (max-width: 479px) {
+        .hw-art :is(.hw-pole, .hw-lamp, .hw-lamplit, .hw-lampbase, .hw-lampglow, .hw-lamppool) { display: none; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hw-lane { animation: none !important; left: 0; width: 100%; }
+        .hw-art .hw-cl { left: var(--rx); }
+        .hw-glint { animation: none !important; opacity: 1; }
+        .harborwalk * { transition-delay: 0s !important; }
+      }
 
       /* ---------- 3. controls ---------- */
       button, input, select, textarea { font: inherit; color: inherit; }
@@ -265,10 +404,12 @@
       }
       .brand-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .brand-name { display: block; font: 400 28px/.85 var(--px); white-space: nowrap; }
-      /* "Connect on Campus @" and the UMass Boston logo, under the name */
+      /* "Connect on Campus @" and the UMass Boston logo, under the name and
+         lined up with its left edge, in navy */
       .brand-sub {
-        display: flex; align-items: center; justify-content: flex-end; gap: 4px;
-        color: var(--muted); font: 700 11px/1 var(--sans); white-space: nowrap;
+        display: flex; align-items: center; justify-content: flex-start; gap: 4px;
+        padding-left: 1px;
+        color: var(--navy); font: 700 11px/1 var(--sans); white-space: nowrap;
       }
       .brand-umb { display: block; width: auto; height: 22px; flex: none; }
       .topbar-gap { margin-left: auto; }
@@ -307,6 +448,20 @@
       .iconbtn:hover, .bell > summary:hover { background: var(--paper); text-decoration: none; }
       .iconbtn:active, .bell > summary:active { transform: translateY(3px); box-shadow: none; }
       .findlink { display: none; }
+      /* Day or night over the Harborwalk: a sun on white by day, a moon on
+         navy by night. The script in _harborwalk.html flips it and keeps
+         aria-pressed in step. */
+      .skybtn { overflow: hidden; transition: background-color .8s ease; }
+      .skybtn svg {
+        position: absolute; left: 8px; top: 8px; width: 24px; height: 24px;
+        shape-rendering: crispEdges;
+        transition: opacity .6s ease, transform .6s ease;
+      }
+      .skybtn .sky-moon { opacity: 0; transform: rotate(-60deg) scale(.5); }
+      html[data-sky="night"] .skybtn { background: #0C1631; }
+      html[data-sky="night"] .skybtn:hover { background: #1B2B57; }
+      html[data-sky="night"] .skybtn .sky-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
+      html[data-sky="night"] .skybtn .sky-moon { opacity: 1; transform: none; }
 
       /* the account menu, where sign out lives on every page */
       .who { position: relative; flex: none; }
@@ -356,6 +511,28 @@
          the eighth indistinguishable row. The next <a> draws its own dashed
          top border, so this only has to add weight. */
       .who-sep { height: 0; border-top: 2px solid var(--navy); }
+      /* On a phone the bar has no room for the day/night button, so it moves
+         into this menu as a row: a sun or a moon, and On or Off. */
+      .who-sky {
+        display: none; width: 100%; align-items: center; gap: 10px;
+        min-height: 40px; padding: 0 12px;
+        background: none; border: 0; border-top: 2px dashed var(--line);
+        color: var(--navy); font-size: .95rem; font-weight: 700; text-align: left;
+      }
+      .who-sky:hover { background: var(--paper); }
+      .who-sky svg { flex: none; width: 24px; height: 24px; shape-rendering: crispEdges; }
+      .who-sky .sky-moon { display: none; background: #0C1631; border-radius: 4px; }
+      html[data-sky="night"] .who-sky .sky-sun { display: none; }
+      html[data-sky="night"] .who-sky .sky-moon { display: block; }
+      .who-sky::after {
+        content: "Off"; margin-left: auto; padding: 1px 8px;
+        border: 2px solid var(--navy); border-radius: 999px; font-size: .8rem;
+      }
+      html[data-sky="night"] .who-sky::after { content: "On"; background: var(--navy); color: #fff; }
+      @media (max-width: 480px) {
+        .skybtn { display: none; }
+        .who-sky { display: flex; }
+      }
 
 
         
@@ -855,8 +1032,9 @@
       }
 
       /* ---------- 9. sign-in pages ---------- */
-      /* Brand panel, a gold tagline, then the form in a window. */
+      /* The brand panel and a gold band, then the form in a window. */
       .auth {
+        --drop: 2px 2px 0 rgba(19, 34, 69, .3); /* a thin, light shadow on these pages */
         min-height: 100vh; min-height: 100dvh;
         padding: 28px 16px calc(36px + env(safe-area-inset-bottom));
         display: grid; grid-template-columns: minmax(0, 1fr); place-items: center;
@@ -866,39 +1044,140 @@
         display: flex; flex-direction: column; gap: 18px;
       }
       .auth-stack.wide { max-width: 46rem; }
+      /* The brand panel: plain white like the form window, with the same
+         navy border. */
       .brandpanel {
-        display: flex; flex-direction: column; align-items: center; gap: 12px;
-        padding: 20px 16px 18px;
-        background: rgba(255, 255, 255, .86);
-        -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; gap: 14px;
+        margin-top: 30px; /* room for the birds on the panel's top */
+        padding: 28px 16px 22px;
+        background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
+        box-shadow: var(--drop);
         text-align: center;
       }
-      .brandpanel-logo {
-        display: block; width: 104px; height: 104px;
-        filter: drop-shadow(4px 4px 0 var(--navy));
+      /* Brushed steel, in the colour of the stainless campus sign: a cool
+         vertical ramp, a fine grain, one soft sheen, a bevelled frame drawn
+         with inset rings, and domed screws. */
+      .plaque {
+        --screw: #FFFFFF 0 1px, #C6CCD3 2px, #59606A 3px, rgba(89, 96, 106, 0) 4px;
+        --grain: repeating-linear-gradient(90deg, rgba(255, 255, 255, .1) 0 1px, rgba(10, 30, 50, .05) 1px 3px);
+        --sheen: linear-gradient(112deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .55) 43%, rgba(255, 255, 255, 0) 56%);
+        --steel: var(--sheen), var(--grain), linear-gradient(to bottom, #F2F4F6 0%, #CDD2D8 20%, #AAB1B9 48%, #D3D8DD 72%, #959CA5 100%);
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; gap: 12px;
+        max-width: 100%;
+        padding: 18px clamp(14px, 4.4vw, 24px) 16px;
+        border: 2px solid #2E3338; border-radius: 6px;
+        background:
+          radial-gradient(circle 4px at 11px 11px, var(--screw)),
+          radial-gradient(circle 4px at calc(100% - 11px) 11px, var(--screw)),
+          radial-gradient(circle 4px at 11px calc(100% - 11px), var(--screw)),
+          radial-gradient(circle 4px at calc(100% - 11px) calc(100% - 11px), var(--screw)),
+          var(--steel);
+        box-shadow:
+          inset 0 0 0 2px #5E656D, inset 0 0 0 4px #F7F8FA,
+          inset 0 0 0 6px #A4ABB3, inset 0 0 0 7px rgba(30, 34, 40, .5),
+          3px 4px 0 rgba(20, 24, 30, .35), 0 8px 14px rgba(20, 24, 30, .22);
       }
-      .brandpanel > div {
-        display: flex; flex-direction: column; align-items: center; gap: 10px;
+      /* the badge in a steel bezel */
+      .plaque .brandpanel-logo {
+        display: block; width: 92px; height: 92px; border-radius: 50%; filter: none;
+        box-shadow: 0 0 0 3px #4F565E, 0 0 0 5px #F2F4F6, 0 0 0 7px #A3AAB2,
+                    0 0 0 8px #2E3338, 0 5px 10px 8px rgba(20, 24, 30, .22);
       }
-      .brandpanel-name { font: 400 52px/.9 var(--px); }
-      /* the shorter, side-by-side version (onboarding) */
-      .brandpanel.compact { flex-direction: row; justify-content: center; gap: 16px; padding: 14px 16px; }
-      .brandpanel.compact > div { align-items: flex-start; gap: 8px; }
-      .brandpanel.compact .brandpanel-logo { width: 72px; height: 72px; }
-      .brandpanel.compact .brandpanel-name { font-size: 40px; }
-      @media (max-width: 400px) {
-        .brandpanel.compact { flex-direction: column; text-align: center; }
-        .brandpanel.compact > div { align-items: center; }
-        .brandpanel.compact .brandpanel-name { font-size: 34px; }
+      /* The wordmark sits in a trimmed nameplate (dark edge, a bright inner
+         line, a slightly recessed face), lettered in black metal with a navy
+         sheen. Plain dark text where a browser cannot clip a gradient to text. */
+      .nameplate {
+        padding: 6px 14px 3px;
+        background: linear-gradient(to bottom, #FBFCFD, #DCE1E6);
+        border: 2px solid #1F242B; border-radius: 4px;
+        box-shadow:
+          inset 0 0 0 1px #FFFFFF, inset 0 0 0 3px #A9B0B8,
+          inset 0 3px 5px rgba(16, 20, 26, .22),
+          0 1px 0 rgba(255, 255, 255, .85), 0 2px 4px rgba(16, 20, 26, .3);
+      }
+      .plaque-main .brandpanel-name {
+        padding: 2px 2px 4px;
+        font: 400 clamp(30px, calc(10.5vw - 2px), 40px)/1 var(--px);
+        color: #111827;
+        filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .9)) drop-shadow(0 -1px 0 rgba(20, 26, 40, .25));
+      }
+      @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+        .plaque-main .brandpanel-name {
+          background: linear-gradient(to bottom, #5A6B93 0%, #232D47 30%, #05070D 50%, #141C30 64%, #31477A 84%, #0C1220 100%);
+          -webkit-background-clip: text; background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+      }
+      /* the lower plaque: a whiter silver, engraved lettering, two screws,
+         and the UMass Boston logo on its own white tile */
+      .plaque-sub {
+        padding: 10px 22px;
+        border-color: #4F565E;
+        background:
+          radial-gradient(circle 4px at 10px 50%, var(--screw)),
+          radial-gradient(circle 4px at calc(100% - 10px) 50%, var(--screw)),
+          var(--sheen), var(--grain),
+          linear-gradient(to bottom, #FFFFFF 0%, #EEF1F4 28%, #D8DDE3 54%, #F3F5F7 78%, #C9CFD6 100%);
+        box-shadow:
+          inset 0 0 0 2px #8E959D, inset 0 0 0 4px #FFFFFF,
+          inset 0 0 0 6px #C3C9D0, inset 0 0 0 7px rgba(40, 46, 54, .35),
+          3px 4px 0 rgba(20, 24, 30, .3), 0 8px 14px rgba(20, 24, 30, .2);
       }
       .brandpanel-umb {
-        display: flex; align-items: center; justify-content: center; gap: 8px;
-        color: var(--muted); font: 700 16px/1 var(--sans);
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px;
+        margin: 0;
+        color: #1E2430; font: 700 clamp(14px, 4.1vw, 16px)/1.25 var(--sans);
+        text-shadow: 0 1px 0 rgba(255, 255, 255, .85);
       }
-      .brandpanel-umb img { display: block; width: auto; height: 44px; }
-      /* the tagline: black on UMass Boston yellow */
+      .umb-words { white-space: nowrap; }
+      .umb-tile {
+        display: inline-flex; padding: 3px 6px;
+        background: #fff;
+        border: 1px solid #9AA1A9; border-radius: 3px;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12), 0 1px 0 rgba(255, 255, 255, .9);
+      }
+      .brandpanel-umb img { display: block; width: auto; height: clamp(28px, 8.6vw, 34px); }
+      /* the shorter version (onboarding): badge beside the nameplate */
+      .brandpanel.compact { gap: 10px; padding: 24px 14px 16px; }
+      .brandpanel.compact .plaque-main { flex-direction: row; gap: 16px; padding: 12px 22px; }
+      .brandpanel.compact .brandpanel-logo { width: 64px; height: 64px; }
+      .brandpanel.compact .brandpanel-name { font-size: 36px; }
+      @media (max-width: 400px) {
+        .brandpanel.compact .plaque-main { flex-direction: column; gap: 8px; }
+        .brandpanel.compact .brandpanel-name { font-size: 30px; }
+      }
+      /* Two birds on the panel's top: a gull on the left end, a pigeon standing
+         in its flat twig nest on the right. Drawn frames swap (standing,
+         pecking or calling) with a short blink, so every pixel stays crisp.
+         The resting frame is the last keyframe, so with reduced motion they
+         simply stand there. Drawn bigger where there is room, at exactly
+         three screen pixels to the art pixel. */
+      .perch { position: absolute; top: -32px; display: block; pointer-events: none; transform-origin: 50% 100%; }
+      .perch i { position: absolute; left: 0; top: 0; display: block; }
+      .perch svg { display: block; }
+      .gull-perch { left: 14px; width: 48px; height: 36px; transform-origin: 0 100%; }
+      .pigeon-perch { right: 12px; width: 60px; height: 36px; transform-origin: 100% 100%; }
+      @media (min-width: 480px) {
+        .brandpanel { margin-top: 48px; }
+        .perch { transform: scale(1.5); }
+      }
+      .pigeon-stand { animation: pigeon-stand 9s linear infinite; }
+      .pigeon-peck { opacity: 0; animation: pigeon-peck 9s linear infinite; }
+      .perch .pigeon-blink { left: 22px; top: 6px; width: 4px; height: 2px; background: #C3CAD6; opacity: 0; animation: blink-a 9s linear infinite; }
+      .gull-stand { animation: gull-stand 11s linear -4s infinite; }
+      .gull-caw { opacity: 0; animation: gull-caw 11s linear -4s infinite; }
+      .perch .gull-blink { left: 36px; top: 4px; width: 2px; height: 2px; background: #FFFFFF; opacity: 0; animation: blink-b 11s linear -4s infinite; }
+      @keyframes pigeon-stand { 0%, 69.9% { opacity: 1; } 70%, 74.9% { opacity: 0; } 75%, 77.9% { opacity: 1; } 78%, 82.9% { opacity: 0; } 83%, 100% { opacity: 1; } }
+      @keyframes pigeon-peck { 0%, 69.9% { opacity: 0; } 70%, 74.9% { opacity: 1; } 75%, 77.9% { opacity: 0; } 78%, 82.9% { opacity: 1; } 83%, 100% { opacity: 0; } }
+      @keyframes gull-stand { 0%, 39.9% { opacity: 1; } 40%, 43.9% { opacity: 0; } 44%, 45.9% { opacity: 1; } 46%, 49.9% { opacity: 0; } 50%, 100% { opacity: 1; } }
+      @keyframes gull-caw { 0%, 39.9% { opacity: 0; } 40%, 43.9% { opacity: 1; } 44%, 45.9% { opacity: 0; } 46%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
+      @keyframes blink-a { 0%, 29.9% { opacity: 0; } 30%, 31.4% { opacity: 1; } 31.5%, 51.9% { opacity: 0; } 52%, 53.4% { opacity: 1; } 53.5%, 100% { opacity: 0; } }
+      @keyframes blink-b { 0%, 74.9% { opacity: 0; } 75%, 76.4% { opacity: 1; } 76.5%, 100% { opacity: 0; } }
+      /* the gold band: black on UMass Boston yellow, with an optional second
+         line set off under a thin rule */
       .goldline {
         padding: 12px 16px;
         background: var(--gold); color: #000;
@@ -907,6 +1186,68 @@
         font: 700 17px/1.35 var(--sans);
         text-align: center; text-wrap: balance;
       }
+      .goldline-note {
+        display: block; margin-top: 10px; padding-top: 10px;
+        border-top: 1px solid rgba(0, 0, 0, .25);
+        font-size: 15px; font-weight: 700;
+      }
+      /* Sign in turns the band into a key for new students, built to be the
+         first thing the eye lands on: the warmest, brightest colour on the
+         page, raised like every Beacon OS key, a white "New here?" tag, an
+         icon, a big tap target, an arrow that leans toward the next step, and
+         a single slow shine across it now and then (off with reduced motion,
+         where the last keyframe leaves it still). */
+      .cta-band {
+        position: relative; overflow: hidden;
+        display: flex; align-items: center; gap: 14px;
+        min-height: 72px; padding: 12px 14px;
+        background: var(--gold); color: #000;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 rgba(19, 34, 69, .45), 0 4px 10px rgba(19, 34, 69, .15);
+        text-decoration: none;
+        transition: transform .12s ease, box-shadow .12s ease;
+      }
+      .cta-band::after {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background: linear-gradient(105deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, .7) 50%, rgba(255, 255, 255, 0) 62%);
+        transform: translateX(-120%);
+        animation: cta-shine 8s ease-in-out 1.5s infinite;
+      }
+      @keyframes cta-shine { 0% { transform: translateX(-120%); } 16%, 100% { transform: translateX(120%); } }
+      .cta-band:hover { color: #000; text-decoration: none; transform: translateY(-2px); box-shadow: 0 5px 0 rgba(19, 34, 69, .45), 0 8px 14px rgba(19, 34, 69, .18); }
+      .cta-band:active { transform: translateY(3px); box-shadow: 0 0 0 var(--navy), 0 4px 8px rgba(19, 34, 69, .25); }
+      .cta-icon {
+        position: relative; flex: none;
+        display: grid; place-items: center; width: 44px; height: 44px;
+        background: var(--navy); color: #fff;
+        border-radius: 8px;
+      }
+      .cta-plus {
+        position: absolute; right: -7px; bottom: -7px;
+        display: grid; place-items: center; width: 20px; height: 20px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: 50%;
+      }
+      .cta-plus .icon { width: 12px; height: 12px; }
+      .cta-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; }
+      .cta-tag {
+        padding: 2px 8px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: 999px;
+        font: 700 12px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+      }
+      .cta-label { font: 700 18px/1.25 var(--sans); text-wrap: balance; }
+      .cta-go {
+        flex: none; display: grid; place-items: center; width: 40px; height: 40px;
+        background: var(--navy); color: var(--gold);
+        border-radius: 50%;
+        transition: transform .15s ease;
+      }
+      .cta-band:hover .cta-go, .cta-band:focus-visible .cta-go { transform: translateX(4px); }
+      /* the sign-in reminder, in black bold against the grey lede */
+      .auth-card .lede strong { color: #000; font-weight: 700; }
+      /* words for screen readers only, e.g. what a "Click here" link does */
+      .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       /* the form window; its .bar carries the page title */
       .auth-card {
         width: 100%;
@@ -1103,6 +1444,10 @@
        still resolves in freshly swapped markup; it contains no <style>, so it
        cannot disturb the head-CSS invariant either. #}
     {% include "_icons.html" %}
+    {# The Harborwalk behind every page, with the day/night script. Outside
+       #live so a navigation never rebuilds it, and carrying no style element
+       of its own, so the head stylesheet stays byte-identical. #}
+    {% include "_harborwalk.html" %}
     {# Where toasts land. Outside #live so a navigation while one is on screen
        does not take it away, and carrying no <style> of its own -- like the
        sprite above -- so the head stylesheet stays byte-identical. #}

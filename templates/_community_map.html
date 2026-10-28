@@ -14,7 +14,8 @@
       until its author makes it public from the card.
 
   data- attributes give the script what only the server knows: the API, the
-  two logo images, where a meetup's chat and "I'm in" live (with 0 standing in
+  landmark logos (UMass Boston, the Healey Library sign, UMass Boston
+  Recreation), where a meetup's chat and "I'm in" live (with 0 standing in
   for the id), and a flag to open straight away (?flag=<id>, used by the "See
   on map" links on meetup cards).
 
@@ -25,6 +26,8 @@
 <section class="campus-map-card" id="campusMapCard"
          data-flags-url="{{ url_for('map_flags_list') }}"
          data-umb-logo="{{ url_for('static', filename='bc-umb-logo.svg') }}"
+         data-healey-logo="{{ url_for('static', filename='landmark-healey.png') }}"
+         data-rec-logo="{{ url_for('static', filename='landmark-recreation.png') }}"
          data-chat-url="{{ url_for('chat', kind='group', target_id=0) }}"
          data-rsvp-url="{{ url_for('post_rsvp', post_id=0) }}"
          data-focus="{{ request.args.get('flag', '') }}">

@@ -94,6 +94,7 @@ CSS and markup; nothing in the backend depends on it.
 | Pixel icons | `templates/_icons.html` (one SVG sprite, used with `ui.icon("name")`) |
 | Club categories and club icons | `club_catalog.py` (which club goes where) and `club_icons.py` (the drawings) |
 | Sign-in brand panel and yellow tagline | `templates/_brandpanel.html` |
+| The Harborwalk behind every page, and the day/night switches | `templates/_harborwalk.html` (styles in `base.html`, section 2) |
 | Styles used by one page only | that page's `{% block appstyle %}` (or `{% block style %}`) |
 | Community map styles | `templates/_community_map.css` (included by `find.html`) |
 | Map pins, key and draft flag | `static/community-map.js` |
@@ -104,7 +105,7 @@ CSS and markup; nothing in the backend depends on it.
 | --- | --- | --- |
 | Beacon Blue | `#005A8B` | chats, primary buttons, your messages |
 | Navy | `#132245` | text, borders, shadows, meet ups, the taskbar |
-| Sky | `#78AFE9` | the desk background, friends |
+| Sky | `#78AFE9` | friends |
 | Orange | `#FF791F` | games, focus rings |
 | Yellow | `#FEDE42` | clubs, the Post key, highlights |
 | Alert red | `#D62828` | unread counts only |
@@ -124,7 +125,7 @@ Next** (everything you read), both from Google Fonts.
   with a hard navy shadow, and the header becomes its title bar with grip
   stripes and an optional count.
 - **Page heading**: wrap the page's `<h1>` and `.lede` in
-  `<div class="pagehead">` for the frosted label over the grid.
+  `<div class="pagehead">` for the frosted label over the Harborwalk.
 - **Buttons**: every submit button is a raised Beacon Blue key; add
   `class="ghost"` for the white one. Panels that need a different button
   qualify their rule with `button` (see `.bell-tools` in `base.html`).
