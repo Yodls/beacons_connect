@@ -16,8 +16,8 @@ tables and little else. The layout is nested tables with explicit widths.
 
 **No web fonts and no SVG.** The site's pixel typeface cannot load and Gmail
 drops <svg> entirely, so the lighthouse is drawn as a table of coloured
-cells -- one <td> per pixel -- which is the one technique that renders
-everywhere, and the headings fall back to a bold system stack.
+cells -- one <td> per run of a colour -- which is the one technique that
+renders everywhere, and the headings fall back to a bold system stack.
 
 The grid below is not a redrawing: it was extracted from the same path the
 site's #icon-lighthouse uses, so the mark in the email and the mark on the
@@ -25,6 +25,7 @@ home page are the same sixteen-by-twenty-four picture.
 """
 
 from html import escape
+from itertools import groupby
 
 # UMass Boston's palette, as base.html's :root holds it. Repeated rather than
 # imported because an email cannot read a stylesheet, and a wrong colour here
@@ -40,6 +41,12 @@ ON_NAVY = "#cfe0f5"
 NIGHT = "#0c1631"
 
 PIXEL = {"N": NAVY, "B": BEACON, "Y": GOLD, "W": "#ffffff", ".": None}
+
+# Who sent this and how to reach them, at the foot of every email. Mailbox
+# providers trust mail that says so, and CAN-SPAM asks for a postal address.
+CONTACT_EMAIL = "beaconsconnect@yodls.co"
+POSTAL_ADDRESS = ("University of Massachusetts Boston, "
+                  "100 William T. Morrissey Blvd, Boston, MA 02125")
 
 LIGHTHOUSE = (
     "......NNNN......",
@@ -76,25 +83,37 @@ CODE_FONT = ("'Courier New', Consolas, Monaco, monospace")
 
 
 def _lighthouse(scale=4):
-    """The mark, as one table cell per pixel.
+    """The mark, as one table cell per run of a colour.
+
+    It used to be one cell per pixel -- 384 of them, nearly all of every
+    email's markup, and a page that is almost all markup and hardly any words
+    is what spam filters look for. A row of the same colour is one cell now,
+    and each pixel row is its own one-row table, so cells of different widths
+    never have to agree on columns (colspan is where Outlook goes wrong).
 
     Empty cells collapse in Outlook, so every cell carries a zero-height
-    spacer rather than nothing, and the table is told to collapse its borders
-    so the pixels touch.
+    spacer rather than nothing, and the tables collapse their borders so the
+    pixels touch.
     """
+    width = scale * len(LIGHTHOUSE[0])
     rows = []
     for line in LIGHTHOUSE:
         cells = []
-        for ch in line:
+        for ch, run in groupby(line):
+            w = scale * len(list(run))
             colour = PIXEL[ch]
+            bgcolor = f' bgcolor="{colour}"' if colour else ""
             fill = f"background-color:{colour};" if colour else ""
             cells.append(
-                f'<td width="{scale}" height="{scale}" style="width:{scale}px;'
+                f'<td width="{w}" height="{scale}"{bgcolor} style="width:{w}px;'
                 f"height:{scale}px;{fill}font-size:0;line-height:0;"
                 'mso-line-height-rule:exactly;">&nbsp;</td>'
             )
-        rows.append("<tr>" + "".join(cells) + "</tr>")
-    width = scale * len(LIGHTHOUSE[0])
+        rows.append(
+            f'<tr><td><table role="presentation" width="{width}" cellpadding="0" '
+            'cellspacing="0" border="0" style="border-collapse:collapse;">'
+            f'<tr>{"".join(cells)}</tr></table></td></tr>'
+        )
     return (
         f'<table role="presentation" width="{width}" cellpadding="0" '
         'cellspacing="0" border="0" style="border-collapse:collapse;'
@@ -178,7 +197,9 @@ def _frame(subject, preheader, rows):
 
         <p style="margin:14px 0 0;font-family:{BODY_FONT};font-size:11px;
                   line-height:1.5;color:{MUTED};">
-          Beacons Connect &middot; University of Massachusetts Boston
+          Beacons Connect &middot; {escape(POSTAL_ADDRESS)}<br />
+          Questions or feedback?
+          <a href="mailto:{CONTACT_EMAIL}" style="color:{BEACON};">{CONTACT_EMAIL}</a>
         </p>
       </td>
     </tr>
@@ -285,10 +306,16 @@ def _why(reason, off_url, settings_url):
         "Email settings</a>")
 
 
+def _text_sign_off():
+    """The last lines of every text part: who sent it and how to reach them."""
+    return ("Beacons Connect - Connect on Campus @ UMass Boston\n"
+            f"{POSTAL_ADDRESS}\n"
+            f"Questions or feedback: {CONTACT_EMAIL}\n")
+
+
 def _text_footer(reason, off_url, settings_url):
     return (f"\n--\n{reason}\nTurn these emails off: {off_url}\n"
-            f"Email settings: {settings_url}\n"
-            "Beacons Connect - Connect on Campus @ UMass Boston\n")
+            f"Email settings: {settings_url}\n" + _text_sign_off())
 
 
 # -------------------------------------------------------------- the emails
@@ -311,7 +338,7 @@ def verification(name, code, minutes):
         "open to finish signing up.\n\n"
         "If you did not create an account, you can ignore this message -- "
         "nothing happens until the code is used.\n\n"
-        "Beacons Connect - Connect on Campus @ UMass Boston\n"
+        + _text_sign_off()
     )
 
     rows = (_hello(name, "Here is the code that finishes your sign-up.")
@@ -373,7 +400,7 @@ def password_code(name, code, minutes):
         "open.\n\n"
         "Didn't ask to change your password? You can ignore this message -- "
         "nothing changes until the code is used.\n\n"
-        "Beacons Connect - Connect on Campus @ UMass Boston\n"
+        + _text_sign_off()
     )
 
     rows = (_hello(name, "Here is the code to set a new password.")
@@ -398,7 +425,7 @@ def verified(name, login_url):
         f"Hi {_first(name)},\n\n"
         f"{line} You can sign in now with the email and password you chose.\n\n"
         f"Sign in: {login_url}\n\n"
-        "Beacons Connect - Connect on Campus @ UMass Boston\n"
+        + _text_sign_off()
     )
     rows = (_hello(name, escape(line))
             + _box("You can sign in now with the email and password you chose.")
