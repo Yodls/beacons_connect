@@ -2708,6 +2708,32 @@ def _applied_signup_expiry(cur):
     return column_exists(cur, "user", "created_at")
 
 
+def _work_site_settings(cur, dbname, say):
+    """The switches an admin flips in Site tools (require email
+    verification, only @umb.edu addresses), one row per switch.
+
+    Only a new, empty table. A missing row reads as the switch's default,
+    which is how the site behaved before, so nothing is written into it.
+    """
+    if not table_exists(cur, "user"):
+        raise Refuse(f"{dbname} has no 'user' table.")
+    if table_exists(cur, "site_settings"):
+        say("  = site_settings already exists")
+        return 0
+    cur.execute(
+        "CREATE TABLE site_settings ("
+        " key VARCHAR(60) PRIMARY KEY,"
+        " value VARCHAR(200) NOT NULL,"
+        " updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),"
+        ' updated_by INTEGER REFERENCES "user"(id) ON DELETE SET NULL)')
+    say("  + created site_settings")
+    return 1
+
+
+def _applied_site_settings(cur):
+    return table_exists(cur, "site_settings")
+
+
 def _work_fixture_schedule(cur, dbname, say):
     """Campus-wide meetups that appear at a time their poster chooses.
 
@@ -2824,6 +2850,8 @@ MIGRATIONS = [
      _work_signup_expiry, _applied_signup_expiry),
     ("add_fixture_schedule", "fixtures.publish_at and published_at",
      _work_fixture_schedule, _applied_fixture_schedule),
+    ("add_site_settings", "site_settings, for the admin's sign-up switches",
+     _work_site_settings, _applied_site_settings),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]

@@ -1337,3 +1337,21 @@ class MapFlagViewer(db.Model):
         # "Which flags were shared with me?" is the question the map asks.
         db.Index("ix_map_flag_viewers_user", "user_id"),
     )
+
+
+class SiteSetting(db.Model):
+    """One site-wide switch an admin can flip from Site tools, by name.
+
+    Read through app.setting(), which returns the switch's default when the
+    row (or this whole table, before its migration has run) is missing, so
+    a fresh database behaves exactly as the site always has.
+    """
+
+    __tablename__ = "site_settings"
+
+    key = db.Column(db.String(60), primary_key=True)
+    value = db.Column(db.String(200), nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Who flipped it last. Kept as null if that admin's account is deleted.
+    updated_by = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))

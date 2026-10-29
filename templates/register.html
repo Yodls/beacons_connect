@@ -15,7 +15,9 @@
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
-      {% set tagline = "Registration requires a umb.edu email for creation." %}
+      {# Follows the admin's "Only @umb.edu addresses" switch (Site tools). #}
+      {% set tagline = "Registration requires a umb.edu email for creation." if umb_only()
+                       else "Sign up with your email address." %}
       {% set tagline_note = "Emails take a minute, check your spam folder too!" %}
       {% include "_brandpanel.html" %}
 

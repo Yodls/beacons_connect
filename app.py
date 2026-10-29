@@ -46,7 +46,7 @@ import emails
 import games as rules
 import matching
 import notices
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from models import (
     Activity,
@@ -70,6 +70,7 @@ from models import (
     MAP_FLAG_KINDS,
     MapFlag,
     MapFlagViewer,
+    SiteSetting,
     MESSAGE_PARENTS,
     Message,
     MessageReaction,
@@ -328,6 +329,83 @@ def has_onboarded(user_id):
     ) is not None
 
 
+# ------------------------------------------------------------ sign-up switches
+#
+# Site-wide switches an admin flips in Site tools, stored one row each in
+# site_settings. Every switch here defaults to "on", which is how the site
+# behaved before there were switches: a missing row, or a database the
+# add_site_settings migration has not reached yet, reads as on.
+
+SIGNUP_SWITCHES = {
+    "require_verification": {
+        "label": "Require email verification",
+        "on": "New students get a 6-digit code by email and must enter it.",
+        "off": "New students are signed in as soon as they register.",
+    },
+    "umb_only": {
+        "label": "Only @umb.edu addresses",
+        "on": "Only @umb.edu addresses can register.",
+        "off": "Any email address can register.",
+    },
+}
+
+
+def setting(key, default="on"):
+    """A switch's stored value, or `default` when there is none yet."""
+    try:
+        row = db.session.get(SiteSetting, key)
+    except ProgrammingError:
+        # No site_settings table: the migration has not run on this
+        # database. Its default is the answer, and the failed read must not
+        # poison the rest of the request.
+        db.session.rollback()
+        return default
+    return default if row is None else row.value
+
+
+def setting_row(key):
+    """The stored row for a switch, for who changed it and when, or None."""
+    try:
+        return db.session.get(SiteSetting, key)
+    except ProgrammingError:
+        db.session.rollback()
+        return None
+
+
+def set_setting(key, value, who):
+    row = db.session.get(SiteSetting, key)
+    if row is None:
+        row = SiteSetting(key=key)
+        db.session.add(row)
+    row.value = value
+    row.updated_at = datetime.utcnow()
+    row.updated_by = who.id if who else None
+    db.session.commit()
+
+
+def verification_required():
+    return setting("require_verification") != "off"
+
+
+def umb_only():
+    return setting("umb_only") != "off"
+
+
+@app.context_processor
+def inject_signup_switches():
+    """So the sign-in pages' wording can follow the @umb.edu switch."""
+    return {"umb_only": umb_only}
+
+
+def let_in_unverified(user):
+    """With verification switched off, finish a waiting sign-up as a right
+    code would, and sign them in."""
+    finish_verification(user)
+    db.session.commit()
+    session.pop("pending_user_id", None)
+    login_user(user)
+
+
 # At most one code a minute to an address. Registering again resumes a
 # waiting sign-up (register), so without this a form could make the site
 # email any address as fast as it could be posted.
@@ -429,7 +507,12 @@ def sweep_unverified(now=None):
 
     Through the ORM, the way account_delete removes one, so the same
     cascades run.
+
+    Nothing goes while verification is switched off: those accounts can
+    sign in now (login lets them in), so they are not dead ends to clear.
     """
+    if not verification_required():
+        return 0
     stale = db.session.scalars(db.select(User).where(
         _unverified_and_expired(now or datetime.utcnow()))).all()
     for user in stale:
@@ -4813,7 +4896,7 @@ def admin_db_context():
     except db_ops.Refuse as exc:
         return {"db_here": "?", "db_host": "?", "db_why": str(exc),
                 "db_commands": [], "db_job": DB_JOB, "db_dev": DEV_DB,
-                "waiting_signups": []}
+                "waiting_signups": [], "signup_switches": []}
     return {
         "db_here": here,
         "db_host": host,
@@ -4822,6 +4905,7 @@ def admin_db_context():
         "db_job": DB_JOB,
         "db_dev": DEV_DB,
         "waiting_signups": waiting_signups(),
+        "signup_switches": signup_switch_rows(),
     }
 
 
@@ -6050,6 +6134,52 @@ def admin_verify_all():
     return verify_answer([verify_one(user) for user in waiting])
 
 
+def signup_switch_rows():
+    """Each sign-up switch as the Site tools page shows it."""
+    rows = []
+    for key, words in SIGNUP_SWITCHES.items():
+        row = setting_row(key)
+        on = (row.value if row else "on") != "off"
+        who = db.session.get(User, row.updated_by) if row and row.updated_by else None
+        rows.append({
+            "key": key, "on": on, "label": words["label"],
+            "note": words["on"] if on else words["off"],
+            "on_note": words["on"], "off_note": words["off"],
+            "changed": (f"Turned {'on' if on else 'off'} by "
+                        f"{who.name if who else 'an admin'} on "
+                        f"{boston_label(row.updated_at)}") if row else None,
+        })
+    return rows
+
+
+@app.route("/admin/settings/<key>", methods=["POST"])
+@login_required
+def admin_setting(key):
+    """Flip one sign-up switch. Turning one off is asked twice on the page,
+    and needs sure=yes here."""
+    away = not_admin()
+    if away:
+        return away
+
+    def said(text, ok, status=200):
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"ok": ok, "summary": text, "key": key,
+                            "on": setting(key) != "off"}), status
+        flash(text)
+        return redirect(url_for("admin") + "#tools")
+
+    if key not in SIGNUP_SWITCHES:
+        return said("There is no setting by that name.", False, 404)
+    value = request.form.get("value", "")
+    if value not in ("on", "off"):
+        return said("Say whether to turn it on or off.", False, 400)
+    if value == "off" and request.form.get("sure") != "yes":
+        return said("Press it again to confirm.", False, 400)
+    set_setting(key, value, current_user)
+    app.logger.info("%s turned %s %s", current_user.email, value, key)
+    return said(f"{SIGNUP_SWITCHES[key]['label']}: {value}.", True)
+
+
 @app.route("/admin/db/output")
 @login_required
 def admin_db_output():
@@ -6664,8 +6794,12 @@ def register():
             flash("Please choose an option for gender.")
         elif not email or not password:
             flash("Email and password are required.")
-        elif not email.endswith("@umb.edu"):
+        # The admin's "Only @umb.edu addresses" switch (Site tools). Off, any
+        # address that looks like one will do.
+        elif umb_only() and not email.endswith("@umb.edu"):
             flash("You must register with a @umb.edu email address.")
+        elif not _EMAIL_SHAPE.match(email) or len(email) > 255:
+            flash("That doesn't look like an email address.")
         elif len(password) < 8:
             flash("Password must be at least 8 characters.")
         elif password != request.form["confirm_password"]:
@@ -6674,7 +6808,8 @@ def register():
             taken = db.session.scalar(db.select(User).filter_by(email=email))
             if taken is not None and taken.email_verified:
                 flash("That email is already registered. Sign in instead.")
-            elif taken is not None and code_sent_recently(taken):
+            elif (taken is not None and verification_required()
+                  and code_sent_recently(taken)):
                 flash(CODE_WAIT)
             else:
                 # An address with a sign-up still waiting on its code is not
@@ -6698,6 +6833,11 @@ def register():
                 )
                 db.session.add(user)
                 db.session.commit()
+                if not verification_required():
+                    # The admin's "Require email verification" switch is
+                    # off: no code, and straight in (onboarding is next).
+                    let_in_unverified(user)
+                    return redirect(url_for("index"))
                 went = issue_verification_code(user)
                 if taken is not None and went == "sent":
                     flash(SIGNUP_RESUMED)
@@ -6748,6 +6888,11 @@ def verify():
         session.pop("pending_user_id", None)
         return redirect(url_for("login"))
 
+    # Verification was switched off while this browser sat on the code page.
+    if not verification_required():
+        let_in_unverified(user)
+        return redirect(url_for("index"))
+
     if request.method == "POST":
         expires_at = user.verification_expires_at.replace(tzinfo=timezone.utc)
 
@@ -6782,6 +6927,10 @@ def resend_code():
     if user is None:
         return redirect(url_for("register"))
 
+    if not user.email_verified and not verification_required():
+        let_in_unverified(user)
+        return redirect(url_for("index"))
+
     if not user.email_verified:
         went = issue_verification_code(user)
         flash("A new code is on its way." if went == "sent"
@@ -6797,6 +6946,12 @@ def login():
         user = db.session.scalar(db.select(User).filter_by(email=email))
 
         if user and check_password_hash(user.password_hash, request.form["password"]):
+            # Verification switched off: a sign-up still waiting on its code
+            # -- however old -- is let in now, so the students stuck there
+            # get in too.
+            if not user.email_verified and not verification_required():
+                let_in_unverified(user)
+                return redirect(url_for("index"))
             if not user.email_verified and signup_expired(user):
                 # Past its code: gone, and they start again.
                 sweep_unverified()
@@ -6906,7 +7061,7 @@ def forgot_password():
                 if email else None)
         if user is None:
             flash(RESET_NO_ACCOUNT)
-        elif not user.email_verified:
+        elif not user.email_verified and verification_required():
             flash(RESET_UNVERIFIED)
             return redirect(url_for("register"))
         else:

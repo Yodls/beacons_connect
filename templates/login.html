@@ -11,7 +11,9 @@
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
-      {% set brand_cta = {"href": url_for("register"), "label": "You must register a new account to gain access! (use your umb.edu email to register)"} %}
+      {# The band's wording follows the admin's "Only @umb.edu addresses" switch. #}
+      {% set brand_cta = {"href": url_for("register"), "label": "You must register a new account to gain access!"
+                          ~ (" (use your umb.edu email to register)" if umb_only() else "")} %}
       {% include "_brandpanel.html" %}
 
       <div class="auth-card">

@@ -102,6 +102,21 @@
       /* A tool that deletes, after its first tap: asking, in red. */
       .dbrow button.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
       .dbrow.done b { color: var(--muted); }
+      /* The sign-up switches: On in the site's blue, Off in warning red. */
+      .swstate {
+        display: inline-block; margin-left: 6px; padding: 1px 7px;
+        border: 2px solid currentColor; border-radius: var(--r-sm);
+        font-size: .8rem; vertical-align: 1px;
+      }
+      .swstate.on { color: var(--beacon); }
+      .swstate.off { color: var(--danger); }
+      .dbwarn {
+        margin: 0 14px 4px; padding: 8px 10px;
+        background: var(--danger-bg); color: var(--danger);
+        border-left: 4px solid var(--danger); border-radius: var(--r-sm);
+        font-weight: 700;
+      }
+      .dbwarn[hidden] { display: none; }
       .dbempty { margin: 0; padding: 12px 14px; color: var(--muted); }
       .dbresult {
         margin: 16px 14px 14px; padding: 10px 12px;
@@ -369,6 +384,28 @@
         twice.
       </p>
 
+      {# The sign-up switches (app.SIGNUP_SWITCHES, stored in site_settings).
+         Both start on, which is how the site has always behaved. Turning
+         one off asks for a second tap, as the tools that delete do. #}
+      <h3 class="dbgroup">Sign-up</h3>
+      <div class="dbrows switches">
+        {% for sw in signup_switches %}
+          <div class="dbrow" data-switch="{{ sw.key }}" data-on="{{ 'yes' if sw.on else 'no' }}"
+               data-url="{{ url_for('admin_setting', key=sw.key) }}"
+               data-on-note="{{ sw.on_note }}" data-off-note="{{ sw.off_note }}">
+            <div class="grow">
+              <b>{{ sw.label }} <span class="swstate {{ 'on' if sw.on else 'off' }}">{{ "On" if sw.on else "Off" }}</span></b>
+              <small class="swnote">{{ sw.note }}</small>
+              {% if sw.changed %}<small class="swwho">{{ sw.changed }}</small>{% endif %}
+            </div>
+            <button type="button" class="ghost dbswitch">{{ "Turn off" if sw.on else "Turn on" }}</button>
+          </div>
+        {% endfor %}
+        <p class="dbwarn" id="switchWarn"
+           {% if signup_switches | selectattr("on") | list %}hidden{% endif %}>Anyone can sign up
+          with any address, including one that isn't theirs.</p>
+      </div>
+
       {# Students whose code never reached them. Verifying one does what a
          right code would, and emails them to say so. #}
       <h3 class="dbgroup">Waiting for verification</h3>
@@ -493,7 +530,7 @@
   }
 
   // The first tap asks, the second runs. Five seconds to change your mind.
-  function confirmed(button) {
+  function confirmed(button, ask) {
     if (button.classList.contains("armed")) {
       clearTimeout(button.beaconArm);
       button.classList.remove("armed");
@@ -502,7 +539,7 @@
     }
     button.dataset.label = button.textContent;
     button.classList.add("armed");
-    button.textContent = "Run it? This can't be undone";
+    button.textContent = ask || "Run it? This can't be undone";
     button.beaconArm = setTimeout(() => {
       button.classList.remove("armed");
       button.textContent = button.dataset.label;
@@ -549,6 +586,38 @@
           poll();
         })
         .catch(failed);
+    });
+  });
+
+  // The sign-up switches. Turning one off is asked twice; on is not.
+  function warnIfOpen() {
+    const warn = document.getElementById("switchWarn");
+    const rows = document.querySelectorAll("#tools .dbrow[data-switch]");
+    if (warn) warn.hidden = [...rows].some((r) => r.dataset.on === "yes");
+  }
+  document.querySelectorAll("#tools .dbrow[data-switch]").forEach((row) => {
+    const button = row.querySelector(".dbswitch");
+    button.addEventListener("click", () => {
+      const on = row.dataset.on === "yes";
+      if (on && !confirmed(button, "Turn it off?")) return;
+      busy(true);
+      post(row.dataset.url, { value: on ? "off" : "on", sure: on ? "yes" : "" })
+        .then(({ ok, data }) => {
+          busy(false);
+          if (ok && data.ok) {
+            const now = !!data.on;
+            row.dataset.on = now ? "yes" : "no";
+            const state = row.querySelector(".swstate");
+            state.textContent = now ? "On" : "Off";
+            state.className = "swstate " + (now ? "on" : "off");
+            row.querySelector(".swnote").textContent = now ? row.dataset.onNote : row.dataset.offNote;
+            const who = row.querySelector(".swwho");
+            if (who) who.remove();
+            button.textContent = now ? "Turn off" : "Turn on";
+            warnIfOpen();
+          }
+          report(data.summary || "That didn't work.", ok && !!data.ok);
+        }).catch(failed);
     });
   });
 
