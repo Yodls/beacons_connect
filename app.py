@@ -37,6 +37,7 @@ from flask_login import (
 from flask_mail import Mail
 from jinja2 import ChoiceLoader, FileSystemLoader
 from flask_mail import Message as MailMessage
+import resend
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import club_catalog
@@ -135,12 +136,10 @@ mimetypes.add_type("image/webp", ".webp")
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
-app.config["MAIL_SERVER"] = os.environ["MAIL_SERVER"]
-app.config["MAIL_PORT"] = int(os.environ["MAIL_PORT"])
-app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS", "").lower() == "true"
-app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "").lower() == "true"
-app.config["MAIL_USERNAME"] = os.environ["MAIL_USERNAME"]
-app.config["MAIL_PASSWORD"] = os.environ["MAIL_PASSWORD"]
+# Email goes out through Resend's API (see send_guarded). Flask-Mail still
+# builds every message, and the tests capture mail through it, but it never
+# connects to a mail server, so it needs no server settings.
+resend.api_key = os.environ["RESEND_API_KEY"]
 app.config["MAIL_DEFAULT_SENDER"] = os.environ["MAIL_DEFAULT_SENDER"]
 # Set by tests/_env.py, so no suite can send a real email.
 app.config["MAIL_SUPPRESS_SEND"] = os.environ.get("MAIL_SUPPRESS_SEND") == "1"
@@ -267,7 +266,7 @@ def dev_may_mail(address):
                                  User.is_admin.is_(True))) is not None
 
 
-_send_for_real = mail.send
+_flask_mail_send = mail.send
 
 
 def send_guarded(message):
@@ -281,6 +280,36 @@ def send_guarded(message):
                                "emails admins and the addresses in DEV_MAIL_TO.")
         message.recipients = keep
     return _send_for_real(message)
+
+
+def _send_for_real(message):
+    """Everything past the guard. The suites replace this one name to catch
+    what would have gone out, so nothing may reach Resend except through it."""
+    if app.config.get("MAIL_SUPPRESS_SEND"):
+        # Flask-Mail's own send, which sends nothing when suppressed but still
+        # tells mail.record_messages() -- how the suites see what was "sent".
+        return _flask_mail_send(message)
+    return send_with_resend(message)
+
+
+def send_with_resend(message):
+    """Send a Flask-Mail message through Resend's API rather than SMTP.
+
+    Any failure raises (resend.exceptions.ResendError), and every caller
+    already treats that the way it treated a refusing mail server.
+    """
+    params = {
+        "from": message.sender,
+        "to": list(message.recipients),
+        "subject": message.subject,
+        "text": message.body or "",
+    }
+    if message.html:
+        params["html"] = message.html
+    if message.extra_headers:
+        # List-Unsubscribe and its one-click partner, on alerts and the summary.
+        params["headers"] = dict(message.extra_headers)
+    return resend.Emails.send(params)
 
 
 mail.send = send_guarded
@@ -877,7 +906,7 @@ def admin_test_email():
                               body=text, html=html))
     except Exception as error:  # noqa: BLE001 -- shown to the admin as it is
         app.logger.exception("test email to %s failed", to)
-        return said(f"Not sent. The mail server said: "
+        return said(f"Not sent. Resend said: "
                     f"{type(error).__name__}: {error}", False)
     return said(f"Sent \"{TEST_EMAILS[which]}\" to {to}. Check that inbox, "
                 "and its spam folder.", True)
@@ -8892,6 +8921,8 @@ def beacon_setup_problems():
         found.append("Flask-Mail is not set up on app, so \"Email me a code\" cannot send.")
     elif not app.config.get("MAIL_DEFAULT_SENDER"):
         found.append("MAIL_DEFAULT_SENDER is not set, so \"Email me a code\" cannot send.")
+    elif not resend.api_key:
+        found.append("RESEND_API_KEY is not set, so \"Email me a code\" cannot send.")
     folder = app.config.get("BEACON_UPLOAD_FOLDER") or _bc_os.path.join(app.static_folder or "", "uploads")
     where = folder if _bc_os.path.isdir(folder) else _bc_os.path.dirname(folder)
     if not _bc_os.access(where, _bc_os.W_OK):

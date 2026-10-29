@@ -9,7 +9,7 @@ A communication platform that motivates students to connect with each other in p
 - **Python 3** installed ([python.org/downloads](https://www.python.org/downloads/))
 - **Git** installed
 - Access to a **PostgreSQL database**
-- Access to a **mail server** (SMTP) for sending emails
+- A **[Resend](https://resend.com)** account with a verified sending domain, for sending emails
 
 ### 1. Clone the repository
 
@@ -45,18 +45,13 @@ Just move it into the `beacons_connect` folder and skip to step 5.
    ```
    SECRET_KEY=any-long-random-string
    DATABASE_URL=postgresql://username:password@host:5432/dbname
-   MAIL_SERVER=smtp.example.com
-   MAIL_PORT=587
-   MAIL_USE_TLS=true
-   MAIL_USE_SSL=false
-   MAIL_USERNAME=you@example.com
-   MAIL_PASSWORD=your-mail-password
-   MAIL_DEFAULT_SENDER=you@example.com
+   RESEND_API_KEY=re_your-api-key
+   MAIL_DEFAULT_SENDER=Beacons Connect <alerts@yourdomain.com>
    ```
 
    - `DATABASE_URL` should point to your PostgreSQL database.
-   - `MAIL_PORT` must be a number (usually `587` with TLS or `465` with SSL).
-   - `MAIL_USE_TLS` and `MAIL_USE_SSL` should be `true` or `false`. Normally only one of them is `true`.
+   - `RESEND_API_KEY` is an API key from the Resend dashboard (API Keys).
+   - `MAIL_DEFAULT_SENDER` must be an address on a domain you have verified in Resend (Domains), and on that exact domain: if you verified a subdomain such as `mail.yourdomain.com`, the address must be `…@mail.yourdomain.com`, not `…@yourdomain.com`.
    - Every value must be filled in, or the app will fail to start.
 
 2. Rename the file from `.env.example` to `.env`.
