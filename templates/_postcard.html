@@ -26,7 +26,11 @@
     details and the action row. The icon is written out rather than taken
     from ui.icon(), because the live channel renders this file on its own,
     without chat.html's imports. -#}
-<div class="post" data-post="{{ post.id }}" data-token="{{ post.card_token }}">
+{#- data-status, data-game and data-when: what the Meet up window's bar in a
+    friend chat reads off this card, so an RSVP or a cancellation moves the
+    bar the moment it moves the card. -#}
+<div class="post" data-post="{{ post.id }}" data-token="{{ post.card_token }}"
+     data-status="{{ post.status }}" data-game="{{ post.game }}" data-when="{{ post.when_text or '' }}">
   <div class="cardbar"><svg class="icon" aria-hidden="true"><use href="#icon-meet" /></svg><span>Meetup</span></div>
   <div class="cardpane">
   <b>{{ post.game }}</b>

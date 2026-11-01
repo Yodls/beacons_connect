@@ -1,0 +1,238 @@
+      /* ---------- the campus map in a meetup form ----------
+         The where, as it is on /find (static/pin-picker.js): a pin to drag
+         or tap into place, the spot in words under the map, and a row of
+         landmark chips for a one-tap choice. The chips work before the map
+         is up, and without it.
+
+         Two shapes, decided by the drawer's own width (a container query:
+         beside a game board the chat is narrow on a wide screen, and a
+         viewport query would get that wrong). Narrow, the form is one
+         column with the map between what and when, and a corner key grows
+         the map to fill the drawer. Wide, what and when stand beside the
+         map, which takes the drawer's whole height. */
+      {% include "_map_chrome.css" %}
+      .meetwin { container: meetwin / inline-size; }
+      /* One column: the fields' wrapper is not a box, so the form's own
+         wrap layout stands; the When and Note sections and the key go
+         after the map. */
+      .meet-fields { display: contents; }
+      .meet-sec { flex: 1 1 100%; }
+      .meet-when, .meet-note, .meet-fields > button[type="submit"] { order: 2; }
+      .pinbox { order: 1; flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+      /* ---------- what and when, as captioned sections ----------
+         A small pixel caption with an icon over each, ruled off from the
+         next with the dashed hairline the map's "Near" chip has, and the
+         fields filling the width edge to edge. */
+      .meetwin .meet-sec {
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 8px 0 10px;
+        border-top: 2px dashed var(--line-2);
+      }
+      .meetwin .meet-sec:first-child { border-top: 0; padding-top: 2px; }
+      /* A column: the form's row sizing (flex-basis 7rem) would set
+         heights in it. */
+      .meetwin .meet-sec > *, .meetwin .meet-sec > input, .meetwin .meet-sec > select,
+      .meetwin .meet-sec > textarea { flex: none; width: auto; }
+      .meet-cap {
+        display: flex; align-items: center; gap: 6px;
+        color: var(--muted);
+        font: 700 .72rem/1 var(--sans); letter-spacing: .08em; text-transform: uppercase;
+      }
+      .meet-cap .icon { width: 14px; height: 14px; }
+      .meet-cap small { font-weight: 400; letter-spacing: .02em; text-transform: none; }
+      .meet-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .meetwin .meet-row > .act { flex: 1 1 10rem; }
+      /* How many: one framed group like the time's -- a minus key, the
+         number, a plus key -- with "people" after it. */
+      .meet-count { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+      .meet-count .step, .meetwin .meet-count input {
+        margin: 0; min-height: 42px; height: 42px;
+        border: 2px solid var(--navy); border-radius: 0;
+        box-shadow: none; font-weight: 700;
+      }
+      .meet-count .step {
+        width: 40px; padding: 0;
+        background: #fff; color: var(--navy);
+        font-size: 1.25rem; line-height: 1; cursor: pointer;
+      }
+      .meet-count .step:first-child { border-radius: var(--r) 0 0 var(--r); }
+      .meet-count .step:hover { background: var(--paper); }
+      .meet-count .step:active { background: var(--gold); }
+      .meetwin .meet-count input {
+        width: 3.2rem; flex: none; padding: 0; text-align: center;
+        border-left: 0; border-right: 0;
+        background: #fff; box-shadow: inset 0 3px 0 var(--paper);
+        -moz-appearance: textfield; appearance: textfield;
+      }
+      .meet-count input::-webkit-outer-spin-button,
+      .meet-count input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .meet-count input + .step { border-radius: 0 var(--r) var(--r) 0; }
+      .meet-count small { color: var(--muted); font-weight: 700; font-size: .85rem; }
+      .meetwin .meet-row > .ondate { flex: 1 1 9rem; }
+      /* The time group stretches to the edge, its three parts sharing it. */
+      .meetwin .meet-row > .whenrow { flex: 1 1 13rem; display: flex; }
+      .meetwin .meet-row .timeset { flex: 1 1 auto; }
+      .meetwin .meet-row .timeset select { flex: 1 1 auto; }
+      /* The note, a box with room for a sentence or two, and air under it
+         before the key. */
+      .meetwin .meet-note { padding-bottom: 14px; }
+      .meetwin .meet-note textarea {
+        min-height: 60px; margin: 0; padding: 10px 12px; resize: none; line-height: 1.35;
+      }
+      .meetwin .meet-fields > button[type="submit"] { min-height: 48px; }
+      /* The lede is a hint now that the captions carry the structure. */
+      .meetwin .meet-lede { font-weight: 400; color: var(--muted); }
+      .pinbox[hidden] { display: none; }
+      .pin-stage {
+        /* Its own stacking context: Leaflet layers its tiles at z-index
+           200-400 and its zoom keys at 1000, which would otherwise paint
+           over the drawer's bar and the page's own chrome. */
+        position: relative; isolation: isolate; flex: none;
+        /* A column, so the map can be told to fill it when it grows: a
+           percentage height would not resolve against a flex-sized box. */
+        display: flex; flex-direction: column;
+      }
+      .pin-map {
+        position: relative; height: 200px;
+        background: var(--paper); color: var(--muted); font-family: var(--sans);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        overflow: hidden;
+      }
+      /* Without JavaScript there is no map to show; the pin goes on the
+         Campus Center, as the line under it says. */
+      .pinbox:not(.js) .pin-map, .pinbox:not(.js) .pin-grow { display: none; }
+      /* While Leaflet loads, and if it cannot: a line on the paper. */
+      .pin-map::before {
+        content: "Loading the campus map\2026";
+        position: absolute; inset: 0; z-index: 0;
+        display: grid; place-items: center; padding: 12px;
+        font: 700 .9rem/1.3 var(--sans); text-align: center;
+      }
+      .pin-map.down::before { content: "The map couldn't load. Pick a landmark below."; }
+      .pin-map.up::before { display: none; }
+      /* smaller zoom keys than the big map's */
+      .pin-map .leaflet-bar a { width: 34px; height: 34px; font-size: 24px; line-height: 32px; }
+      .pin-map .leaflet-control-attribution { font-size: 10px; }
+      /* the landmarks on it: small gold tiles, named on hover or touch */
+      .pin-landmark {
+        display: block; width: 14px; height: 14px;
+        background: var(--gold);
+        border: 2px solid var(--navy); border-radius: 2px;
+        box-shadow: 2px 2px 0 var(--navy);
+      }
+      /* The meetup's pin: lifted while it is being dragged, set down where
+         it lands. */
+      .pin-map .beacon-flag-pin { transition: transform .15s ease-out; }
+      .pin-map .beacon-flag-pin.lifted { transform: translateY(-6px); }
+      .pin-map .beacon-flag-pin.lifted .flag-head { box-shadow: 2px 2px 0 var(--navy), 0 8px 10px rgba(12, 22, 49, .25); }
+      @media (prefers-reduced-motion: reduce) { .pin-map .beacon-flag-pin { transition: none; } }
+      /* "Bigger map", top right of the map on a narrow screen; "Done" once
+         it has grown. A white key like the site's others. */
+      .pin-grow {
+        position: absolute; top: 8px; right: 8px; z-index: 1100;
+        min-height: 34px; margin: 0; padding: 0 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 0 2px 0 var(--navy);
+        font: 700 .9rem/1 var(--sans); cursor: pointer;
+      }
+      .pin-grow:hover { background: var(--paper); }
+      /* Grown: the form is the map, its line and its chips, as tall as the
+         screen allows (--meet-screen, set by the drawer's script) -- not
+         the chat, which on a phone is a short window under the page's
+         head: while the map is grown the drawer may rise over that head.
+         A column, so the map takes the height; the form is otherwise a
+         wrapping row. */
+      .meetwin:has(> .newmeet-menu.mapping) {
+        max-height: calc(100vh - 96px - var(--tabbar-h) - 16px);
+        max-height: calc(100dvh - 96px - var(--tabbar-h) - 16px);
+      }
+      .meetwin > .newmeet-menu.mapping {
+        display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+        height: var(--meet-screen); overflow: hidden;
+        /* The drawer's script caps the form inline (to the chat's room);
+           grown, it takes the screen's instead, and only !important beats
+           an inline style. */
+        max-height: none !important;
+      }
+      .newmeet-menu.mapping > :not(.pinbox) { display: none; }
+      .newmeet-menu.mapping .pinbox { flex: 1 1 auto; min-height: 0; }
+      .newmeet-menu.mapping .pin-stage { flex: 1 1 auto; min-height: 0; }
+      .newmeet-menu.mapping .pin-map { flex: 1 1 auto; height: auto; min-height: 0; }
+      /* where the pin is, in words: the navy pixel pin (a meetup's colour
+         on the map), the spot, and how to move it */
+      .pin-line {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+        margin: 0; padding: 6px 10px;
+        background: #fff; color: var(--navy);
+        border: 2px dashed var(--line-2); border-radius: var(--r);
+        font-size: .92rem;
+      }
+      .pin-dot { flex: none; width: 12px; height: 12px; background: var(--navy); box-shadow: 2px 2px 0 var(--orange); }
+      /* A <b>, but not the form's small muted heading that .newpost b makes
+         of one: the place, in the navy, on the same line as the pin. */
+      .pin-line .pin-where {
+        flex: 0 1 auto; color: var(--navy);
+        font-size: .95rem; font-weight: 700; letter-spacing: 0; text-transform: none;
+        overflow-wrap: anywhere;
+      }
+      .pin-hint { flex: 1 1 auto; color: var(--muted); font-size: .82rem; text-align: right; }
+      /* the chips: one row that scrolls sideways on a narrow screen, the
+         one the pin is near pressed in and gold */
+      .pin-chips {
+        display: flex; gap: 6px; padding: 2px 2px 4px;
+        overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+      }
+      .pin-chips::-webkit-scrollbar { display: none; }
+      .pin-chips .chip {
+        flex: none; min-height: 32px; margin: 0; padding: 0 10px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 0 2px 0 var(--navy);
+        font-size: .8rem; font-weight: 700; white-space: nowrap; cursor: pointer;
+      }
+      .pin-chips .chip:hover { background: var(--paper); }
+      .pin-chips .chip[aria-pressed="true"] { background: var(--gold); transform: translateY(2px); box-shadow: none; }
+      @media (max-width: 480px) {
+        .pin-map { height: 180px; }
+        .pin-hint { display: none; }
+      }
+
+      /* Wide: what and when on the left, the map on the right, as tall as
+         the drawer allows. */
+      @container meetwin (min-width: 40rem) {
+        .meetwin > .newmeet-menu {
+          display: grid;
+          grid-template-columns: minmax(17rem, 2fr) minmax(0, 3fr);
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas: "lede lede" "fields map";
+          /* Stretched, not centred as the form's rows are: the map fills
+             its cell, and the fields start level with it. */
+          align-items: stretch; justify-items: stretch;
+          gap: 10px 14px;
+          height: var(--meet-room);
+        }
+        /* With the map put away (Online, in a room), one column again. */
+        .meetwin > .newmeet-menu:has(.pinbox[hidden]) {
+          grid-template-columns: 1fr; grid-template-areas: "lede" "fields"; height: auto;
+        }
+        .meetwin .meet-lede { grid-area: lede; }
+        .meetwin .meet-fields {
+          grid-area: fields; display: flex; flex-direction: column; gap: 8px;
+          min-height: 0; overflow: auto;
+        }
+        /* A column: the form's row sizing (flex-basis 7rem, 10rem, 21rem)
+           would set heights here. */
+        .meetwin .meet-fields > *, .meetwin .meet-fields > input, .meetwin .meet-fields > select,
+        .meetwin .meet-fields > .ondate, .meetwin .meet-fields > .whenrow { flex: none; width: auto; order: 0; }
+        /* The note takes whatever is left above the key, and is never
+           squeezed below its own size: the column scrolls instead. */
+        .meetwin .meet-fields > .meet-note { flex: 1 1 auto; min-height: max-content; }
+        .meetwin .meet-fields > .meet-note textarea { flex: 1 1 60px; min-height: 60px; }
+        .meetwin > .newmeet-menu .meet-fields > button[type="submit"] { flex: none; margin-top: auto; }
+        .meetwin .pinbox { grid-area: map; order: 0; min-height: 0; }
+        .meetwin .pin-stage { flex: 1 1 auto; min-height: 220px; }
+        .meetwin .pin-map { flex: 1 1 auto; height: auto; min-height: 0; }
+        .meetwin .pin-grow { display: none; }
+      }

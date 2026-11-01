@@ -11,9 +11,10 @@
            meetup forms and cards . game pane and boards . group and club bars
          ================================================================= */
 
-      /* ---------- back link and header ---------- */
-      .backlink { margin: 0 0 12px; }
-      /* The conversation's title bar: Beacon Blue, white text. */
+      /* ---------- header ---------- */
+      /* The conversation's title bar: Beacon Blue, white text. The way
+         back to all chats is its first key; a club's member list is a key
+         on it too, opening as a window over the conversation. */
       .chathead {
         display: flex; align-items: center; gap: 12px;
         min-height: 72px; padding: 10px 12px;
@@ -21,7 +22,10 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
-      .chathead .grow { flex: 1 1 auto; min-width: 0; }
+      /* A small basis, not its words: a long title must shrink to an
+         ellipsis rather than push the bar's keys onto a row of their own. */
+      .chathead .grow { flex: 1 1 6rem; min-width: 0; }
+      .chathead .headbreak { display: none; }
       .chathead h1 {
         margin: 0; color: #fff; font: 400 30px/1 var(--px);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -50,6 +54,44 @@
         flex: none; padding: 3px 8px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
+      }
+      /* White keys on the bar: the way back, and a club's member list. */
+      .chathead .headkey, .chathead .roster > summary {
+        flex: none; display: inline-flex; align-items: center; gap: 6px;
+        min-height: 40px; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+        font-size: .9rem; font-weight: 700; text-decoration: none; white-space: nowrap;
+        cursor: pointer;
+      }
+      .chathead .headkey:hover, .chathead .roster > summary:hover { background: var(--paper); text-decoration: none; }
+      .chathead .headkey:active { transform: translateY(3px); box-shadow: none; }
+      .chathead .back .arrow { font-size: 1.1rem; line-height: 1; }
+      /* The member list: the key on the bar, and its window dropping over
+         the conversation rather than taking a row of the page. */
+      .chathead #club-slot { flex: none; }
+      .chathead .roster { margin: 0; position: relative; }
+      .chathead .roster > summary .icon { width: 18px; height: 18px; }
+      .chathead .roster-body {
+        position: absolute; right: 0; top: calc(100% + 8px); z-index: 30;
+        width: min(24rem, calc(100vw - 2rem));
+        max-height: min(60vh, 28rem); max-height: min(60dvh, 28rem);
+        overflow: auto; margin: 0;
+      }
+      @media (max-width: 560px) {
+        /* On a phone the bar is two rows: the way back, the badge and the
+           title; then whatever keys the chat has, to the right. A chat
+           with no keys has one row. */
+        .chathead .headbreak:not(:last-child) { display: block; flex: 1 1 100%; height: 0; margin-top: -6px; }
+        .chathead .headbreak + * { margin-left: auto; }
+        /* And the keys say less: the arrow, and the people icon with the
+           count. */
+        .chathead .back span:not(.arrow) { display: none; }
+        .chathead .back { padding: 0 10px; }
+        .chathead .roster > summary .rtext { display: none; }
+        .chathead .roster > summary::after { content: attr(data-count); }
+        .chathead .roster > summary { padding: 0 10px; }
       }
       /* The way out, where the header has one. Closed it is another key on
          the bar; open, the question needs a line of its own -- inside a flex
@@ -318,10 +360,10 @@
       .composer input { margin: 0; min-height: 48px; }
       .composer button { margin: 0; min-height: 48px; padding: 0 18px; white-space: nowrap; }
 
-      /* "Play" and "Meet up": raised keys the height of the composer, with
-         their menus opening upward as small windows. */
-      .pickgame, .newmeet { position: relative; flex: none; }
-      .pickgame > summary, .newmeet > summary {
+      /* "Play": a raised key the height of the composer, with its menu
+         opening upward as a small window. (Meet up is the drawer below.) */
+      .pickgame { position: relative; flex: none; }
+      .pickgame > summary {
         display: flex; align-items: center; gap: 6px;
         height: 48px; padding: 0 12px;
         list-style: none; cursor: pointer; white-space: nowrap;
@@ -329,23 +371,20 @@
         box-shadow: 0 4px 0 var(--navy);
         font-size: .95rem; font-weight: 700;
       }
-      .pickgame > summary::-webkit-details-marker,
-      .newmeet > summary::-webkit-details-marker { display: none; }
+      .pickgame > summary::-webkit-details-marker { display: none; }
       /* Filled and labelled: the point of this button is that somebody who
          has never used the app notices it. Orange for games. */
       .pickgame > summary { background: var(--orange); color: var(--navy); }
-      /* Navy for meeting in person, the colour of the Meet up page. */
-      .newmeet > summary { background: var(--navy); color: #fff; }
-      .pickgame > summary:active, .newmeet > summary:active,
-      .pickgame[open] > summary, .newmeet[open] > summary { transform: translateY(4px); box-shadow: none; }
-      .pickgame-menu, .newmeet-menu {
+      .pickgame > summary:active,
+      .pickgame[open] > summary { transform: translateY(4px); box-shadow: none; }
+      .pickgame-menu {
         position: absolute; z-index: 30; bottom: calc(100% + 10px);
         padding: 10px;
         background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
-      .pickgame-menu b, .newmeet-menu b {
+      .pickgame-menu b {
         color: var(--muted); font-size: .76rem; font-weight: 700;
         letter-spacing: .06em; text-transform: uppercase;
       }
@@ -358,38 +397,145 @@
         background: #fff; color: var(--navy); box-shadow: 0 3px 0 var(--navy);
       }
       .pickgame-menu button[type="submit"]:hover { background: var(--game-bg); }
-      /* Anchored to its right edge: from a left anchor this form ran off the
-         right of the window. */
-      /* Anchored LEFT by default. The key sits near the left edge of a
-         one-column chat at every width, so a right-anchored 384px menu
-         opened off-screen -- at 1280px it landed at x = -105. Only the
-         two-column game layout, where the composer is in the right rail,
-         wants it on the right: see the min-width: 900px block below. */
-      .newmeet-menu { left: 0; right: auto; width: min(24rem, calc(100vw - 2rem)); max-height: calc(100vh - 8rem); overflow: auto; }
-      /* A form is wider than a list of buttons, so on a phone it is pinned
-         to the viewport instead. */
-      @media (max-width: 899px) {
-        .newmeet-menu {
-          position: fixed; left: 8px; right: 8px; width: auto;
-          bottom: calc(var(--tabbar-h) + 5rem);
-          max-height: calc(100vh - var(--tabbar-h) - 6rem);
-          max-height: calc(100dvh - var(--tabbar-h) - 6rem);
-          overflow: auto;
-        }
-      }
-      /* On a phone the game menu would run off the right edge from a left
-         anchor, and the labels cost width the message field needs. */
+      /* On a phone the labels cost width the message field needs. */
       @media (max-width: 480px) {
-        .pickgame > summary, .newmeet > summary { width: 48px; padding: 0; justify-content: center; }
-        .pickgame > summary span, .newmeet > summary span { display: none; }
+        .pickgame > summary { width: 48px; padding: 0; justify-content: center; }
+        .pickgame > summary span { display: none; }
       }
 
-      /* Beside a board the conversation column is narrow, so the two keys
-         drop their labels there too and leave the width to the message. */
-      .gamewrap.playing .pickgame > summary, .gamewrap.playing .newmeet > summary {
+      /* Beside a board the conversation column is narrow, so the keys drop
+         their labels there too and leave the width to the message. */
+      .gamewrap.playing .pickgame > summary {
         width: 48px; padding: 0; justify-content: center;
       }
-      .gamewrap.playing .pickgame > summary span, .gamewrap.playing .newmeet > summary span { display: none; }
+      .gamewrap.playing .pickgame > summary span { display: none; }
+
+      /* ---------- Meet up, as a drawer inside the conversation ----------
+         The navy key in the composer row opens it; the gold title bar folds
+         it. It lives along the bottom edge of the messages, inside the
+         chat's own frame (_meetwin.html, positioned in .logwrap): folded, a
+         gold strip; open, a sheet over the foot of the conversation. Nothing
+         else on the page moves: the chat keeps its height, the page does not
+         scroll, and the messages stay where they are under the sheet. */
+      .logwrap { position: relative; min-width: 0; }
+      /* Room under the newest message for the gold strip, when one is
+         showing (a meetup arranged). Set by the server on load, so the page
+         never re-lays itself out, and eased with the strip's slide when it
+         comes or goes. */
+      #log { transition: padding-bottom .28s cubic-bezier(.2, .8, .2, 1); }
+      .logwrap.has-strip #log { padding-bottom: 62px; }
+      @media (prefers-reduced-motion: reduce) { #log { transition: none; } }
+      .meetkey {
+        flex: none; display: flex; align-items: center; gap: 6px;
+        height: 48px; margin: 0; padding: 0 12px;
+        background: var(--navy); color: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 4px 0 var(--navy);
+        font-size: .95rem; font-weight: 700; white-space: nowrap; cursor: pointer;
+      }
+      .meetkey:hover { background: var(--navy); color: #fff; }
+      .meetkey:active, .meetkey[aria-expanded="true"] { transform: translateY(4px); box-shadow: none; }
+      @media (max-width: 480px) {
+        .meetkey { width: 48px; padding: 0; justify-content: center; }
+        .meetkey span { display: none; }
+      }
+      .gamewrap.playing .meetkey { width: 48px; padding: 0; justify-content: center; }
+      .gamewrap.playing .meetkey span { display: none; }
+
+      .meetwin {
+        /* Inside the log's 2px frame, with the frame's own inner corners,
+           so the strip ends where the paper does. Never taller than the
+           window it is in: the form scrolls inside it if it must. */
+        position: absolute; left: 2px; right: 2px; bottom: 2px; z-index: 2;
+        /* Never taller than the chat it sits in, nor than the room between
+           the top bar and the floating tab bar (a small phone): the form
+           scrolls inside it instead. */
+        max-height: calc(100% - 4px);
+        max-height: min(calc(100% - 4px), calc(100vh - 96px - var(--tabbar-h) - 16px));
+        max-height: min(calc(100% - 4px), calc(100dvh - 96px - var(--tabbar-h) - 16px));
+        display: flex; flex-direction: column;
+        margin: 0; overflow: hidden;
+        background: #fff;
+        border-top: 2px solid var(--navy);
+        border-radius: 0 0 6px 6px;
+      }
+      .meetwin[hidden] { display: none; }
+      /* The title bar, in the site's gold: the meet pin, the title in the
+         pixel face, the grip, how many are going, and the minimise key. */
+      .meetbar {
+        flex: none; display: flex; align-items: center; gap: 10px;
+        min-height: 44px; padding: 0 10px;
+        list-style: none; cursor: pointer; user-select: none;
+        background: var(--gold); color: var(--navy);
+      }
+      .meetbar::-webkit-details-marker { display: none; }
+      .meetwin[open] > .meetbar { border-bottom: 2px solid var(--navy); }
+      .meetbar .icon { flex: none; }
+      .meetbar-title {
+        min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font: 400 24px/1 var(--px); letter-spacing: .01em;
+      }
+      .meetbar .grip { order: 1; }
+      .meetbar .count {
+        order: 2; flex: none; min-width: 32px; height: 28px; padding: 0 8px;
+        display: grid; place-items: center;
+        background: var(--navy); color: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .8rem/1 var(--sans); white-space: nowrap;
+      }
+      .meetbar .count[hidden] { display: none; }
+      /* The minimise key: a white square key with a line while the window
+         is open, and a chevron pointing down to unfold it while it is not. */
+      .winbtn {
+        order: 3; flex: none; width: 28px; height: 28px;
+        display: grid; place-items: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 0 2px 0 var(--navy);
+      }
+      .winbtn::before { content: ""; width: 12px; height: 3px; background: var(--navy); }
+      .meetwin:not([open]) .winbtn::before {
+        width: 8px; height: 8px; background: none;
+        border: solid var(--navy); border-width: 0 3px 3px 0;
+        transform: translateY(-2px) rotate(45deg);
+      }
+      .meetbar:hover .winbtn { background: var(--paper); }
+      /* The form, flat on paper inside the window rather than a window of
+         its own: these undo the .newpost card's frame. */
+      .meetwin > .newmeet-menu {
+        /* Its own cap, the drawer's less the 46px bar: a <details> does not
+           lay its contents out as a shrinking column in every browser, so
+           the form scrolls on its own rather than being cut off. */
+        position: static; width: auto;
+        max-height: calc(100vh - 96px - var(--tabbar-h) - 16px - 46px);
+        max-height: calc(100dvh - 96px - var(--tabbar-h) - 16px - 46px);
+        flex: 1 1 auto; min-height: 0; overflow: auto;
+        margin: 0; padding: 12px;
+        background: var(--paper);
+        border: 0; border-radius: 0; box-shadow: none;
+      }
+      .meetwin .meet-lede {
+        flex: 1 1 100%; color: var(--navy);
+        font: 700 .95rem/1.3 var(--sans); letter-spacing: 0; text-transform: none;
+      }
+      .meetwin .newpost button[type="submit"] { flex: 1 1 100%; min-height: 46px; }
+      /* Beside a board (wide screens only) the conversation column is pinned
+         and sized to the screen; the wrapper takes the log's place in it and
+         the log fills the wrapper, so the drawer stays inside the chat there
+         too. Under a board, on a phone, the log keeps its own fixed height:
+         without this media query it lost it and grew to fit every message,
+         taking the drawer at its foot down behind the tab bar. */
+      @media (min-width: 900px) {
+        .gamewrap.playing .talkcol .logwrap {
+          flex: 1 1 auto; min-height: 12rem;
+          display: flex; flex-direction: column;
+        }
+        .gamewrap.playing .talkcol .logwrap #log { flex: 1 1 auto; height: auto; min-height: 0; }
+      }
+
+      /* The where in the drawer's form: the small campus map, its line of
+         words and the landmark chips. */
+      {% include "_pin_picker.css" %}
 
       /* ---------- meetup forms ---------- */
       .launch, .newpost {
@@ -540,9 +686,6 @@
         }
         .gamewrap.playing .talkcol #log { flex: 1 1 auto; height: auto; min-height: 12rem; }
         .gamewrap.playing .talkcol .sendrow { flex: none; }
-        /* The composer is in the 21rem right rail here, so a left-anchored
-           menu would run past the right edge instead. */
-        .gamewrap.playing .newmeet-menu { left: auto; right: 0; }
       }
       .talkcol { min-width: 0; }
       .gamewrap.playing #log { margin-top: 0; }
@@ -769,18 +912,28 @@
 {% block main %}
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='chess-board.css') }}">
-  <p class="nav backlink"><a href="{{ url_for('index') }}">&larr; All chats</a></p>
-
   <div class="chathead">
+    {# The way back, first on the bar. #}
+    <a class="headkey back" href="{{ url_for('index') }}" aria-label="All chats"><span class="arrow" aria-hidden="true">&larr;</span><span>All chats</span></a>
     {% if kind == "club" %}{{ ui.club_badge(title) }}{% else %}{{ ui.avatar(title, target_id) }}{% endif %}
     <div class="grow">
       {# The chip stays outside the <h1>: the browser harness identifies pages
          by h1 textContent, so the heading has to read exactly the title. #}
       <h1>{{ title }}</h1>
       <span class="status">{{ subtitle }}
+        {%- if kind == "club" %} &middot; {{ members | length }} member{{ "" if members | length == 1 else "s" }}{% endif -%}
         {%- if pronouns %} <span class="pronouns">{{ pronouns }}</span>{% endif -%}
       </span>
     </div>
+    {# On a phone the bar is two rows: the title's, then the keys', right
+       aligned. Nothing on a wider screen (chat.html's stylesheet). #}
+    <span class="headbreak" aria-hidden="true"></span>
+
+    {% if kind == "club" %}
+      {# A club's members: a key on the bar, its list a window over the
+         conversation (_clubpane.html). #}
+      <div id="club-slot">{% include "_clubpane.html" %}</div>
+    {% endif %}
 
     {# The person a queue put you with. A pair chat is the one one-on-one
        surface with no way to become friends -- a match chat already is one,
@@ -848,89 +1001,12 @@
     {% endif %}
   </div>
 
-  {% if kind == "club" %}
-    {# A club's members, which this page used to show nothing of. #}
-    <div id="club-slot">{% include "_clubpane.html" %}</div>
-  {% endif %}
-
   {% if group %}
     {# Swapped by the live channel when somebody joins or
        leaves. One slot for the bar and the roster together:
        both carry the member count, and two slots for one fact
        is two ways to disagree about it. #}
     <div id="group-slot">{% include "_grouppane.html" %}</div>
-  {% endif %}
-
-  {% if kind == "community" %}
-    <form class="newpost" method="post" action="{{ url_for('post_new') }}">
-      <b>Looking for a game?</b>
-      <select name="game" class="act" required>
-        {% for a in catalogue %}
-          <option value="{{ a.name }}"
-                  data-online="{{ 1 if a.online else 0 }}"
-                  data-inperson="{{ 1 if a.in_person else 0 }}">{{ a.name }}</option>
-        {% endfor %}
-        {# The write-in. data-inperson so the mode narrowing above settles on
-           "In person" by itself: an activity you typed, at a place you typed,
-           is not something anybody plays online. #}
-        <option value="other" data-online="0" data-inperson="1">Other&hellip;</option>
-      </select>
-      <select name="mode" class="mode">
-        {% for key, label in post_modes.items() %}
-          <option value="{{ key }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-      <select name="location" class="loc">
-        <option value="">Where</option>
-        {% for a in catalogue %}
-          {% if a.locations %}
-            <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
-              {% for loc in a.locations %}
-                <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
-              {% endfor %}
-            </optgroup>
-          {% endif %}
-        {% endfor %}
-      </select>
-      {# Shown only for a write-in. Rendered plainly rather than hidden, so the
-         form still works with no JavaScript -- the server ignores these unless
-         the chosen activity is Other. #}
-      <input name="custom_game" class="custom" maxlength="60"
-             placeholder="What are you playing?" aria-label="Activity" />
-      <input name="custom_location" class="custom" maxlength="120"
-             placeholder="Where?" aria-label="Meetup location" />
-      <input name="max_players" type="number" min="2" max="50" value="2"
-             aria-label="How many players" title="How many players" />
-      {# The day in words, and the time as three choices. AM/PM starts blank
-         on purpose -- a preselected one is exactly the guess that makes a
-         meetup's time ambiguous -- and the server refuses an hour without it.
-         The day stays free text so "Tonight" and "Now" are still sayable. #}
-        {# Required: the meetup's chat ends after this date, and a meetup
-             whose "when" is a sentence has no day to end after.
-             The time beside it stays optional. #}
-        <input name="when_on" type="date" class="ondate" required
-             aria-label="Date" title="Date" />
-      <span class="whenrow">
-        {# One group, not three boxes: a single border with hairlines between,
-           so the hour, the minutes and the half of the day read as one time
-           and cannot be split across two lines by wrapping. #}
-        <span class="timeset">
-          <select name="when_hour" aria-label="Hour">
-            <option value="">Hour</option>
-            {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-          </select>
-          <select name="when_minute" aria-label="Minutes">
-            {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
-          </select>
-          <select name="when_ampm" aria-label="AM or PM">
-            <option value="">AM/PM</option>
-            {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-          </select>
-        </span>
-      </span>
-      <input name="note" maxlength="300" placeholder="Note (optional)" />
-      <button type="submit">Post</button>
-    </form>
   {% endif %}
 
   {# The slot is always present on a one-on-one chat, even with no game: it
@@ -948,6 +1024,11 @@
     <div class="talkcol">
   {# data-cards is the deck token, handed over on the markup the way
      the game pane and the roster hand theirs over. #}
+  {# The log and, in any chat a meetup can be posted from, the Meet up
+     drawer along its foot (_meetwin.html): the wrapper is what the drawer
+     is positioned in. #}
+  {% set meet_here = kind in ("match", "pair", "club", "community") and not ended %}
+  <div class="logwrap{% if meet_here and current_meetup %} has-strip{% endif %}" id="logwrap">
   <div id="log" data-cards="{{ card_token }}" data-reacts="{{ reacts_token }}"
        data-log="{{ log_token }}">
     {% for message in messages %}
@@ -1051,6 +1132,8 @@
       <p class="why" id="empty">No messages yet. Say hello.</p>
     {% endfor %}
   </div>
+  {% if meet_here %}{% include "_meetwin.html" %}{% endif %}
+  </div>
 
   {% if not ended %}
   <div class="replying" id="replying" hidden>
@@ -1075,91 +1158,12 @@
         </form>
       </details>
     {% endif %}
-
-    {# Arranging to meet, in the conversation where you are already talking
-       about it: a one-on-one, or a club. Not a group chat, whose people are
-       already gathered; /find is for finding more.
-
-       The form is the campus room's, and it names the conversation, so the
-       meetup belongs to it and never reaches /find. In a one-on-one it skips
-       the two questions it does not have to ask -- in person by definition,
-       and for the two of you. A club is a room full of people, so it asks
-       both, as the campus room does, and the meetup gets its own chat. #}
-    {% if kind in ("match", "pair", "club") %}
-      {% set in_club = kind == "club" %}
-      <details class="newmeet">
-        <summary>{{ ui.icon("meet") }}<span>Meet up</span></summary>
-        <form class="newpost newmeet-menu" method="post"
-              action="{{ url_for('post_new') }}">
-          <b>{{ "Post a meetup for the club" if in_club else "Meet up in person" }}</b>
-          <input type="hidden" name="from_kind" value="{{ kind }}" />
-          <input type="hidden" name="from_id" value="{{ target_id }}" />
-          <select name="game" class="act" required aria-label="Activity">
-            {% for a in catalogue %}
-              <option value="{{ a.name }}"
-                      data-online="{{ 1 if a.online else 0 }}"
-                      data-inperson="{{ 1 if a.in_person else 0 }}">{{ a.name }}</option>
-            {% endfor %}
-            <option value="other" data-online="0" data-inperson="1">Other&hellip;</option>
-          </select>
-          {% if in_club %}
-            {# class="mode", so the narrowing script above hides whatever the
-               chosen activity cannot be, and the places with it. #}
-            <select name="mode" class="mode" aria-label="Online or in person">
-              {% for key, label in post_modes.items() %}
-                <option value="{{ key }}">{{ label }}</option>
-              {% endfor %}
-            </select>
-          {% endif %}
-          <select name="location" class="loc" aria-label="Where">
-            <option value="">Where</option>
-            {% for a in catalogue %}
-              {% if a.locations %}
-                <optgroup label="{{ a.name }}" data-act="{{ a.name }}">
-                  {% for loc in a.locations %}
-                    <option value="{{ loc }}" data-act="{{ a.name }}">{{ loc }}</option>
-                  {% endfor %}
-                </optgroup>
-              {% endif %}
-            {% endfor %}
-          </select>
-          {# Shown only for a write-in, by the same script the campus form
-             uses. Rendered plainly so the form still works with no
-             JavaScript: the server ignores these unless the activity is
-             Other. #}
-          <input name="custom_game" class="custom" maxlength="60"
-                 placeholder="What are you doing?" aria-label="Activity" />
-          <input name="custom_location" class="custom" maxlength="120"
-                 placeholder="Where?" aria-label="Meetup location" />
-          {% if in_club %}
-            {# Worded, not a bare number: "4" on its own beside "Where" read
-               as nothing in particular. #}
-            <label class="howmany">People
-              <input name="max_players" type="number" min="2" max="50" value="4"
-                     title="How many people, you included" />
-            </label>
-          {% endif %}
-          <input name="when_on" type="date" class="ondate" required
-                 aria-label="Date" title="Date" />
-          <span class="whenrow">
-            <span class="timeset">
-              <select name="when_hour" aria-label="Hour">
-                <option value="">Hour</option>
-                {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-              </select>
-              <select name="when_minute" aria-label="Minutes">
-                {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
-              </select>
-              <select name="when_ampm" aria-label="AM or PM">
-                <option value="">AM/PM</option>
-                {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-              </select>
-            </span>
-          </span>
-          <input name="note" maxlength="300" placeholder="Note (optional)" />
-          <button type="submit">{{ "Post" if in_club else "Ask them" }}</button>
-        </form>
-      </details>
+    {# The way to the Meet up window above: arranging to meet, in the
+       conversation where you are already talking about it. Not a group
+       chat, whose people are already gathered; /find is for finding more. #}
+    {% if meet_here %}
+      <button type="button" class="meetkey" aria-controls="meetwin"
+              aria-expanded="false">{{ ui.icon("meet") }}<span>Meet up</span></button>
     {% endif %}
 
   {# A meetup's chat stops taking messages once the meetup is over or has been
@@ -1185,20 +1189,77 @@
   </div>
     </div>
   </div>
+  <script>
+    // The conversation as tall as the screen allows: the composer row ends
+    // 16px above the floating tab bar, however much sits above the log (a
+    // club's roster, a group's bar). Run here, straight after the markup,
+    // so the chat is sized before it is first painted and nothing moves on
+    // load. Measured from the page rather than the window, so scrolling
+    // never changes it, and against the tab bar where it really floats. On
+    // a screen too short for a readable log (under 16rem), the log keeps
+    // that much and the page scrolls, as it always did. Beside a game the
+    // column is sized by the foot script.
+    //
+    // Sized again when anything above or below the log changes size -- the
+    // roster opened, the reply chip shown, a game arriving -- by watching
+    // those, never the log itself, so resizing it cannot feed back.
+    (function () {
+      var log = document.getElementById("log");
+      var wrap = log && log.closest(".gamewrap");
+      var row = wrap && wrap.querySelector(".talkcol .sendrow");
+      if (!log || !row || !window.getComputedStyle) { return; }
+      function px(el, prop) { return parseFloat(getComputedStyle(el)[prop]) || 0; }
+      function size() {
+        if (wrap.classList.contains("playing")) { log.style.height = ""; return; }
+        // Where the tab bar's top edge is on the screen. It is fixed, so
+        // that is where it is at any scroll; with none (a wide window
+        // without one), the foot of the window.
+        var root = document.documentElement;
+        var bar = document.querySelector("nav.tabbar");
+        var floor = bar && getComputedStyle(bar).position === "fixed"
+          ? bar.getBoundingClientRect().top : root.clientHeight;
+        var chip = document.getElementById("replying");
+        var under = row.offsetHeight + px(row, "marginTop")
+                  + (chip && !chip.hidden ? chip.offsetHeight + px(chip, "marginTop") : 0);
+        var top = log.getBoundingClientRect().top + window.pageYOffset;
+        var want = Math.floor(floor - 16 - top - under);
+        var was = log.style.height;
+        var next = Math.max(want, 256) + "px";
+        log.style.height = next;
+        // Reading the latest, the reader stays at the latest.
+        if (next !== was && log.scrollHeight - log.scrollTop - log.clientHeight < 80) {
+          log.scrollTop = log.scrollHeight;
+        }
+      }
+      window.beaconLogSizer = size;
+      size();
+      if (window.ResizeObserver) {
+        if (window.beaconLogWatch) { window.beaconLogWatch.disconnect(); }
+        var watch = window.beaconLogWatch = new ResizeObserver(function () { size(); });
+        for (var el = wrap.parentElement.firstElementChild; el && el !== wrap; el = el.nextElementSibling) {
+          watch.observe(el);
+        }
+        [document.getElementById("gamepane-slot"), document.getElementById("replying"), row]
+          .forEach(function (el) { if (el) { watch.observe(el); } });
+      }
+    })();
+  </script>
 {% endblock %}
 
 {% block script %}
 <script src="{{ url_for('static', filename='naval-battleship.js') }}"></script>
 <script src="{{ url_for('static', filename='chess-board.js') }}"></script>
+{# The small map in the Meet up drawer. Mounted when the drawer opens. #}
+<script src="{{ url_for('static', filename='pin-picker.js') }}"></script>
 <script>
-  // Narrows mode and location to whatever activity is picked. Without this the
-  // form still works: every location is listed under its activity and the
-  // server validates the pair.
+  // Narrows mode to whatever activity is picked, and shows the where (the
+  // map) only for meeting in person. Without this the form still works:
+  // the server validates the pair.
   (function () {
     document.querySelectorAll("form .act").forEach(function (act) {
       var form = act.closest("form");
       var mode = form.querySelector(".mode");
-      var loc = form.querySelector(".loc");
+      var pinbox = form.querySelector(".pinbox");
 
       function sync() {
         var opt = act.options[act.selectedIndex];
@@ -1231,32 +1292,34 @@
           }
         }
 
-        // Nothing to choose from: the activity is not in the catalogue, so it
-        // has no known spots. The student types the place instead.
+        // A write-in is in person by definition, so there is no mode to
+        // choose; otherwise the where is only for meeting in person.
         if (mode) { mode.hidden = writing; }
-        if (loc) { loc.disabled = writing; }
-
-        if (loc && !writing) {
-          var wanted = !mode || mode.value === "inperson";
-          loc.closest("form").querySelectorAll(".loc optgroup").forEach(function (g) {
-            g.hidden = !(wanted && g.dataset.act === name);
-          });
-          Array.prototype.forEach.call(loc.options, function (o) {
-            if (!o.value) { return; }
-            var show = wanted && o.dataset.act === name;
-            o.hidden = !show;
-            o.disabled = !show;
-          });
-          if (loc.options[loc.selectedIndex].disabled) { loc.selectedIndex = 0; }
-          loc.hidden = !wanted;
-        } else if (loc) {
-          loc.hidden = true;
-        }
+        if (pinbox) { pinbox.hidden = !(writing || !mode || mode.value === "inperson"); }
       }
 
       act.addEventListener("change", sync);
       if (mode) { mode.addEventListener("change", sync); }
       sync();
+    });
+  })();
+
+  // The people count's minus and plus keys (the Meet up drawer in a club
+  // or the campus room): one step either way, kept within the field's own
+  // min and max. The number can still be typed.
+  (function () {
+    document.querySelectorAll(".meet-count").forEach(function (group) {
+      var field = group.querySelector("input");
+      group.querySelectorAll(".step").forEach(function (key) {
+        key.addEventListener("click", function () {
+          var step = parseInt(key.dataset.step, 10) || 0;
+          var low = parseInt(field.min, 10) || 2, high = parseInt(field.max, 10) || 50;
+          var now = parseInt(field.value, 10);
+          if (isNaN(now)) { now = low; }
+          field.value = Math.min(high, Math.max(low, now + step));
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      });
     });
   })();
 
@@ -1276,6 +1339,8 @@
     var queued = false;
     function size() {
       queued = false;
+      // The log without a game (the script after the chat's markup).
+      if (window.beaconLogSizer) { window.beaconLogSizer(); }
       var col = document.querySelector(".gamewrap.playing .talkcol");
       var any = document.querySelector(".talkcol");
       if (any && any !== col) { any.style.height = ""; }
@@ -1295,25 +1360,232 @@
     size();
   })();
 
-  // Below 900px the Meet up form is pinned to the screen (see .newmeet-menu),
-  // a fixed distance above the tab bar -- which assumes its key is at the
-  // bottom of the screen. On a short page it is not, and the form opened on
-  // top of its own key, so it could not be closed with it: the club form,
-  // being the longest, found this at 768px. So once it is open, it is placed
-  // from where the key really is.
+  // The Meet up window (#meetwin), in any chat a meetup can be posted from.
+  // The key in the composer row shows it and folds it; folding with nothing
+  // arranged hides it altogether. Its bar names the meetup arranged here --
+  // in a club or the campus room, your own (data-mine-only) -- read off that
+  // meetup's card in the log so an RSVP or a cancellation moves the bar the
+  // moment it moves the card (the live script calls beaconMeetBar after it
+  // places a card).
   (function () {
-    document.querySelectorAll("details.newmeet").forEach(function (box) {
-      box.addEventListener("toggle", function () {
-        var menu = box.querySelector(".newmeet-menu");
-        if (!menu) { return; }
-        menu.style.bottom = "";
-        menu.style.maxHeight = "";
-        if (!box.open || getComputedStyle(menu).position !== "fixed") { return; }
-        var top = box.querySelector("summary").getBoundingClientRect().top;
-        menu.style.bottom = (window.innerHeight - top + 10) + "px";
-        menu.style.maxHeight = Math.max(160, top - 16) + "px";
-      });
+    var win = document.getElementById("meetwin");
+    var key = document.querySelector(".meetkey");
+    var log = document.getElementById("log");
+    var wrap = document.getElementById("logwrap");
+    if (!win || !key || !log) { return; }
+    var form = win.querySelector("form");
+    var title = win.querySelector(".meetbar-title");
+    var going = win.querySelector(".meetbar-going");
+    var lede = win.querySelector(".meet-lede");
+    // The bar's words with nothing arranged, which differ by chat
+    // (_meetwin.html), for when a meetup it named is cancelled.
+    var DEFAULT = win.dataset.title || "Meet up in person";
+    var LEDE = win.dataset.lede || "";
+    // In a club or the campus room everybody posts: the bar takes up only a
+    // card of your own, never the latest of somebody else's.
+    var mineOnly = win.dataset.mineOnly === "yes";
+    function ours(card) { return !mineOnly || !!card.closest(".msg.mine"); }
+    // Cards already in the log when the page loaded: a card newer than
+    // these is one that was posted while the page was open.
+    var seen = 0;
+    log.querySelectorAll(".post[data-post]").forEach(function (c) {
+      seen = Math.max(seen, parseInt(c.dataset.post, 10) || 0);
     });
+    var expecting = false;   // we just posted one; adopt its card when it lands
+
+    function arranged() { return win.dataset.arranged === "yes"; }
+    function reflect() {
+      var showing = win.open && !win.hidden;
+      key.setAttribute("aria-expanded", showing ? "true" : "false");
+      // The open drawer is a sheet over the foot of the conversation: the
+      // messages under it stay where they are. Only the gold strip -- a
+      // meetup arranged, or one just posted -- keeps room for itself under
+      // the newest message, and that room eases in and out (#log's padding
+      // transition). Reading the latest, the reader stays at the latest.
+      var strip = !win.hidden && (arranged() || expecting);
+      if (wrap && wrap.classList.contains("has-strip") !== strip) {
+        var atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+        wrap.classList.toggle("has-strip", strip);
+        if (atEnd) { followEnd(); }
+      }
+    }
+    // Keeps the log at its newest message while its bottom room eases.
+    function followEnd() {
+      var until = performance.now() + SLIDE_MS + 60;
+      (function frame() {
+        log.scrollTop = log.scrollHeight;
+        if (performance.now() < until) { requestAnimationFrame(frame); }
+      })();
+    }
+    // The drawer slides: anchored to the bottom of the chat, so animating
+    // its height grows it up out of the bottom edge and sinks it back down.
+    // A press mid-slide turns it round from wherever it has got to. With
+    // the OS asking for less motion (or no animation support, as in a test
+    // DOM) it simply appears, as it used to.
+    var SLIDE_MS = 280;
+    var SLIDE_EASE = "cubic-bezier(.2, .8, .2, 1)";
+    var moving = null;
+    function still() {
+      return !win.animate || !window.matchMedia
+        || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+    function heightNow() {
+      return win.hidden ? 0 : win.getBoundingClientRect().height;
+    }
+    function stop() {
+      if (moving) { moving.onfinish = null; moving.cancel(); moving = null; }
+    }
+    function slide(from, to, done) {
+      if (still() || Math.abs(from - to) < 1) { done(); reflect(); return; }
+      moving = win.animate([{ height: from + "px" }, { height: to + "px" }],
+                           { duration: SLIDE_MS, easing: SLIDE_EASE });
+      moving.onfinish = function () { moving = null; done(); reflect(); };
+    }
+    // The form's own height cap: the chat's height, less the bar, so on a
+    // short chat (a phone) the form scrolls inside the drawer rather than
+    // being cut off at the drawer's foot. Set from the chat's real height,
+    // because a <details> does not shrink its contents to fit.
+    var bar = win.querySelector(".meetbar");
+    function capForm() {
+      var room = wrap ? wrap.clientHeight - 4 : log.clientHeight;
+      // And the drawer's own limit on a small phone (.meetwin's max-height):
+      // the room between the top bar and the floating tab bar.
+      var tab = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--tabbar-h")) || 68;
+      var screen = window.innerHeight - 96 - tab - 16;
+      room = Math.min(room, screen);
+      var cap = Math.max(120, room - bar.offsetHeight - 2) + "px";
+      form.style.maxHeight = cap;
+      // And as variables, for the layouts that fill them: the map beside
+      // the fields on a wide drawer takes the chat's room; the map grown on
+      // a narrow one takes the screen's, rising over the chat's head.
+      form.style.setProperty("--meet-room", cap);
+      form.style.setProperty("--meet-screen", Math.max(120, screen - bar.offsetHeight - 2) + "px");
+    }
+    function show() {
+      var from = heightNow();
+      stop();
+      win.hidden = false;
+      win.open = true;
+      // The map in the form, the first time; the chips work before it is up.
+      if (window.BeaconPin) { BeaconPin.mount(form.querySelector(".pinbox")); }
+      capForm();
+      reflect();
+      var to = win.getBoundingClientRect().height;
+      // No page scroll and no jump in the messages: the key that opens it
+      // sits right under the chat, so it opens where the reader is looking.
+      slide(from, to, function () {});
+      // The fields fade in over the last part of the slide, so they don't
+      // show before there is room for them.
+      if (!still() && from < to) {
+        form.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }],
+                     { duration: SLIDE_MS, easing: "ease-out" });
+      }
+      var first = win.querySelector(".act");
+      if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+    }
+    function fold() {
+      var from = heightNow();
+      stop();
+      // Down to the gold strip when there is a meetup to name (or one was
+      // just posted and its card is on its way), otherwise out of sight.
+      var keep = arranged() || expecting;
+      // The open bar's height (with its bottom rule) is the folded strip's
+      // (bar plus the drawer's top rule), so it lands without a twitch.
+      var to = keep ? bar.offsetHeight : 0;
+      win.hidden = false;
+      win.open = true;   // stays open while it sinks; closed once it lands
+      slide(from, to, function () {
+        win.open = false;
+        if (!arranged() && !expecting) { win.hidden = true; }
+      });
+    }
+    function cardOpen(card) {
+      return card && card.dataset.status === "open";
+    }
+    function adopt(card) {
+      win.dataset.arranged = "yes";
+      win.dataset.post = card.dataset.post;
+      title.textContent = card.dataset.game
+        + (card.dataset.when ? " · " + card.dataset.when : "");
+      var count = card.querySelector(".going");
+      going.textContent = count ? count.textContent.split(":")[0].trim() : "";
+      going.hidden = !count;
+      if (lede) { lede.textContent = "Another meetup?"; }
+      // A strip that was not there rises out of the bottom edge.
+      if (win.hidden) {
+        win.hidden = false;
+        win.open = false;
+        stop();
+        slide(0, win.getBoundingClientRect().height, function () {});
+      }
+    }
+    function letGo() {
+      win.dataset.arranged = "no";
+      delete win.dataset.post;
+      title.textContent = DEFAULT;
+      going.hidden = true;
+      if (lede) { lede.textContent = LEDE; }
+      // A folded strip with nothing left to name sinks away.
+      if (!win.open && !win.hidden && !expecting) {
+        var from = heightNow();
+        stop();
+        slide(from, 0, function () { win.hidden = true; });
+      }
+    }
+    function sync() {
+      var mine = win.dataset.post
+        ? log.querySelector('.post[data-post="' + win.dataset.post + '"]') : null;
+      if (mine && cardOpen(mine)) { adopt(mine); }
+      else if (win.dataset.post) { letGo(); }
+      // One posted since the page loaded -- by us (expecting) or, in a
+      // one-on-one, by them -- when nothing is arranged: the bar takes it up.
+      if (!arranged() || expecting) {
+        var cards = log.querySelectorAll(".post[data-post]");
+        for (var i = cards.length - 1; i >= 0; i--) {
+          var id = parseInt(cards[i].dataset.post, 10) || 0;
+          if (id > seen && cardOpen(cards[i]) && ours(cards[i])) {
+            adopt(cards[i]);
+            seen = id;
+            expecting = false;
+            break;
+          }
+        }
+      }
+      reflect();
+    }
+    window.beaconMeetBar = sync;
+
+    key.addEventListener("click", function () {
+      if (win.open && !win.hidden) { fold(); } else { show(); }
+    });
+    // The bar is the <summary>. Left to the browser it would snap open and
+    // shut; it slides the same way the key does instead.
+    win.querySelector(".meetbar").addEventListener("click", function (event) {
+      event.preventDefault();
+      if (win.open) { fold(); } else { show(); }
+    });
+    // Anything else that closes the <details> (keyboard, the browser):
+    // a folded window with nothing to name goes away. Not mid-slide, when
+    // the slide decides.
+    win.addEventListener("toggle", function () {
+      if (moving) { return; }
+      if (!win.open && !arranged() && !expecting) { win.hidden = true; }
+      reflect();
+    });
+    // Posted: the enhancer has reset the form and closed the <details> it
+    // is in, in one frame. Opened again at once and folded with the slide,
+    // down to a strip that sync() names from the card when it lands.
+    // Refused: nothing changes, as typed.
+    form.addEventListener("beacon:done", function (event) {
+      if (event.detail && event.detail.refused) { show(); return; }
+      expecting = true;
+      win.hidden = false;
+      win.open = true;
+      fold();
+      sync();
+    });
+    sync();
   })();
 </script>
 <script>
@@ -1535,9 +1807,29 @@
     // so a card can also be filled into a message that arrived live a moment
     // ago and has none -- a meetup posted while you watch used to appear as
     // its one-line summary and nothing else.
-    function placeCard(card) {
-      var msg = log.querySelector('.msg[data-id="' + card.id + '"]');
-      if (!msg) { return; }
+    // A card whose message is not in the log yet, kept until it is. The
+    // cards token moves the moment a meetup is saved, and one round can
+    // read the cards just after that and the messages just before: the
+    // card then arrives first, with no message to go into, and the token
+    // has already moved, so nothing would send it again. Keyed by message,
+    // and only for a message newer than any this page has: an older one is
+    // simply not on the page (the log shows the latest), and never will be.
+    var early = {};
+    // Every message row by id, built once per answer. The deck holds every
+    // card in the room -- hundreds in the campus room -- and a lookup per
+    // card across the whole log made one RSVP cost seconds.
+    function rowsById() {
+      var rows = {};
+      log.querySelectorAll(".msg[data-id]").forEach(function (r) { rows[r.dataset.id] = r; });
+      return rows;
+    }
+    function placeCard(card, rows) {
+      var msg = rows[card.id];
+      if (!msg) {
+        if (card.id > after) { early[card.id] = card; }
+        return;
+      }
+      delete early[card.id];
       var had = msg.querySelector(".post");
       // Its own token, so an RSVP to one meetup leaves every other card in
       // the room alone.
@@ -1563,6 +1855,10 @@
         var again = fresh.querySelector("details.confirm");
         if (again) { again.setAttribute("open", ""); }
       }
+    }
+    // The Meet up window's bar follows the cards (friend chats).
+    function cardsMoved() {
+      if (window.beaconMeetBar) { window.beaconMeetBar(); }
     }
 
     // Who is in this chat, by the same means: a token on the markup, and a
@@ -1931,6 +2227,13 @@
       if (data.messages && data.messages.length) {
         var stuck = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
         data.messages.forEach(add);
+        // Cards that came ahead of their messages, now that these are here.
+        var held = Object.keys(early).map(function (id) { return early[id]; });
+        if (held.length) {
+          var byId = rowsById();
+          held.forEach(function (card) { placeCard(card, byId); });
+          cardsMoved();
+        }
         if (window.BeaconChat) { window.BeaconChat.dress(); }
         if (stuck) { log.scrollTop = log.scrollHeight; }
       }
@@ -1973,7 +2276,9 @@
       var deal = data.cards;
       if (deal && deal.token !== deck) {
         deck = deal.token;
-        (deal.cards || []).forEach(placeCard);
+        var rows = rowsById();
+        (deal.cards || []).forEach(function (card) { placeCard(card, rows); });
+        cardsMoved();
       }
 
       // The roster, when somebody has joined or left. Nothing else moves

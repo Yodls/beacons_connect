@@ -2371,9 +2371,36 @@ def chat(kind, target_id):
         invitable = [f for f in matching.friend_names(current_user.id)
                      if f["user_id"] not in inside]
 
+    rows = chat_rows(kind, parent)
+
+    # The meetup the Meet up window's bar names: the newest one in this
+    # conversation that is open and has not been and gone (the board's
+    # rule). In a club or the campus room, where everybody posts, only one
+    # of your own. None when there isn't one, and the window waits behind
+    # its key.
+    current_meetup = None
+    if kind in MEETUP_CHATS or kind == COMMUNITY:
+        room = kind in ("club", COMMUNITY)
+        posted = [row.get("post") for row in rows
+                  if not room or row.get("mine")]
+        ids = [p["id"] for p in posted if p]
+        if ids:
+            live = set(db.session.scalars(
+                db.select(GamePost.id).where(GamePost.id.in_(ids),
+                                             GamePost.status == "open",
+                                             still_on())))
+            current_meetup = next((p for p in reversed(posted)
+                                   if p and p["id"] in live), None)
+
+    # The Meet up drawer's activities. Not built for a group chat, which has
+    # no drawer: the comment below is about not paying for a form that is
+    # not there.
+    catalogue = activity_catalogue(presets_only=True) if kind in CARD_CHATS else []
+
     return render_template(
         "chat.html",
         kind=kind,
+        current_meetup=current_meetup,
         target_id=target_id,
         title=title,
         pronouns=pronoun_label(other.pronouns) if other else None,
@@ -2406,7 +2433,7 @@ def chat(kind, target_id):
         # The other person, which is not target_id in a pair chat: there the
         # url carries the pairing's id, not theirs.
         partner_id=opponent_id,
-        messages=chat_rows(kind, parent),
+        messages=rows,
         game_kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
         post_modes=POST_MODES,
         when_hours=WHEN_HOURS,
@@ -2419,8 +2446,12 @@ def chat(kind, target_id):
         # club. Still not built for a group chat: the comment this replaces
         # was about not paying for a form that is not there, and for that one
         # it still is not.
-        catalogue=(activity_catalogue(presets_only=True)
-                   if kind in CARD_CHATS else []),
+        catalogue=catalogue,
+        # The small map in the Meet up drawer: the campus area, its
+        # landmarks, and where each activity's pin starts.
+        map_bounds=MAP_FLAG_BOUNDS,
+        landmarks=landmarks() if catalogue else [],
+        activity_starts=activity_starts(catalogue),
         # What the cards on this page add up to, handed over the way the game
         # pane's and the roster's tokens are: on the markup. Without it the
         # first live round of every visit to a room with cards would come
@@ -4410,13 +4441,14 @@ def post_new():
     activity = None if wrote_in else find_activity(game)
     allowed = [] if activity is None else [loc.name for loc in activity.locations]
 
-    # From the map on /find there is no place to pick: the pin says where,
-    # and its words are the nearest landmark's, as the form's head showed
-    # them. With no pin (no JavaScript, or the map could not load) it is
-    # the Campus Center, where the pin would have started. Not for the
-    # chat forms, which still ask.
+    # From a form whose where is a map -- /find's (back=find), and the Meet
+    # up drawer in a chat (where=map) -- there is no place to pick: the pin
+    # says where, and its words are the nearest landmark's, as the form
+    # showed them. With no pin (no JavaScript, or the map could not load)
+    # it is the Campus Center, where the pin would have started.
     pinned = False
-    if request.form.get("back") == "find" and mode == "inperson" and not location:
+    map_form = request.form.get("where") == "map" or request.form.get("back") == "find"
+    if map_form and mode == "inperson" and not location:
         if point is not None and not point_bad:
             location = nearest_place_name(*point)
         else:
@@ -6973,6 +7005,48 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/present")
+@login_required
+def present():
+    """The project's slide deck (a Canva design), filling the screen. Admins
+    only, opened from Present in the account menu; anybody else is sent away
+    as the admin page sends them. (The sign-in page's Present key is gone for
+    now; while it was there, this page was open to everyone.)"""
+    away = not_admin()
+    if away:
+        return away
+    if not PRESENTATION_URL:
+        flash("No presentation is set up. Add PRESENTATION_URL to the "
+              "server's .env file.")
+        return redirect(url_for("admin"))
+    return render_template("present.html", deck=PRESENTATION_URL)
+
+
+def presentation_url(link):
+    """The deck's link as the Present page embeds it: Canva's smart embed.
+
+    PRESENTATION_URL in .env, and kept out of the repository. Either of
+    Canva's links will do -- the plain view link (.../view) or the embed one
+    (.../view?embed): a view link is turned into its embed form here. Empty
+    means no deck, and Present is not offered.
+    """
+    link = (link or "").strip()
+    if not link:
+        return ""
+    if "canva.com/design/" in link and "embed" not in link:
+        link = link.split("?", 1)[0].split("#", 1)[0] + "?embed"
+    return link
+
+
+PRESENTATION_URL = presentation_url(os.environ.get("PRESENTATION_URL"))
+
+
+@app.context_processor
+def inject_presentation():
+    """So the account menu offers Present only when there is a deck."""
+    return {"presentation_set": bool(PRESENTATION_URL)}
+
+
 @app.route("/logout")
 @login_required
 def logout():
@@ -7544,14 +7618,18 @@ MAP_FLAG_BOUNDS = {
 }
 
 
+# "short" is the name on the landmark chips under the map in a meetup form
+# (_meetwin.html), where seven full names would not fit on one line.
 APPROVED_MAP_LOCATIONS = {
     "campus-center": {
         "name": "Campus Center",
+        "short": "Campus Center",
         "latitude": 42.312960,
         "longitude": -71.036660,
     },
     "healey-library": {
         "name": "Healey Library",
+        "short": "Healey",
         "latitude": 42.313620,
         "longitude": -71.039720,
     },
@@ -7560,26 +7638,31 @@ APPROVED_MAP_LOCATIONS = {
     # that description rather than surveyed, like the rest: nudge it here.
     "integrated-sciences-complex": {
         "name": "Integrated Sciences Complex",
+        "short": "ISC",
         "latitude": 42.313400,
         "longitude": -71.040940,
     },
     "university-hall": {
         "name": "University Hall",
+        "short": "University Hall",
         "latitude": 42.313320,
         "longitude": -71.035550,
     },
     "clark-athletic-center": {
         "name": "Clark Athletic Center",
+        "short": "Clark Athletic",
         "latitude": 42.315080,
         "longitude": -71.039570,
     },
     "wheatley-hall": {
         "name": "Wheatley Hall",
+        "short": "Wheatley",
         "latitude": 42.312080,
         "longitude": -71.038290,
     },
     "mccormack-hall": {
         "name": "McCormack Hall",
+        "short": "McCormack",
         "latitude": 42.312750,
         "longitude": -71.039350,
     },
@@ -7638,6 +7721,29 @@ def place_points():
                    "lng": APPROVED_MAP_LOCATIONS[key]["longitude"],
                    "near": "Near " + APPROVED_MAP_LOCATIONS[key]["name"]}
             for name, key in PLACE_LANDMARKS.items()}
+
+
+def landmarks():
+    """The landmarks for the small map in a meetup form (static/pin-picker.js):
+    the chips under it and the tiles on it, Campus Center first."""
+    return [{"key": key, "name": p["name"], "short": p["short"],
+             "lat": p["latitude"], "lng": p["longitude"]}
+            for key, p in APPROVED_MAP_LOCATIONS.items()]
+
+
+def activity_starts(catalogue):
+    """Where each activity's pin starts, as {activity name: {lat, lng}}: the
+    landmark of the first of its places that is at one (PLACE_LANDMARKS).
+    Activities with no such place are left out and start on the Campus
+    Center."""
+    starts = {}
+    for a in catalogue:
+        key = next((PLACE_LANDMARKS[loc] for loc in a["locations"]
+                    if loc in PLACE_LANDMARKS), None)
+        if key:
+            place = APPROVED_MAP_LOCATIONS[key]
+            starts[a["name"]] = {"lat": place["latitude"], "lng": place["longitude"]}
+    return starts
 
 
 def metres_between(lat1, lng1, lat2, lng2):

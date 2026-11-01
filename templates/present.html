@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BeaconsConnect presentation</title>
+{#
+  The project's slide deck, from Presentation in an admin's account menu:
+  the Canva design (app.PRESENTATION_URL) filling the whole window, on
+  navy. Its own page rather than base.html's, so there is no top bar, tab
+  bar or Harborwalk behind the slides. Canva's own controls (arrows) are
+  inside the frame.
+
+  Full screen. A browser only lets a page go full screen from a click on
+  that page, so it opens with one large "Start presentation" key; pressing
+  it puts the deck full screen. Press Esc to leave full screen (at the end,
+  say), and a gold "Home" key appears, with "Resume" beside it to go back
+  in. Without JavaScript, the deck is simply there with the Home key.
+#}
+<style>
+  :root {
+    --navy: #132245; --night: #0c1631; --gold: #fede42; --paper: #eef5fc;
+    --sans: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui,
+            -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { margin: 0; height: 100%; background: var(--night); }
+  .deck {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%; border: 0;
+  }
+
+  /* The site's keys: raised, navy-edged, gold for the one to press. */
+  .key {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px; padding: 0 20px;
+    background: #fff; color: var(--navy);
+    border: 2px solid var(--navy); border-radius: 8px;
+    box-shadow: 0 4px 0 var(--navy);
+    font: 700 1rem/1 var(--sans); text-decoration: none; cursor: pointer;
+  }
+  .key.gold { background: var(--gold); }
+  .key:hover { background: var(--paper); }
+  .key.gold:hover { background: #fff2a8; }
+  .key:active { transform: translateY(4px); box-shadow: none; }
+  .key:focus-visible { outline: 3px solid #ff791f; outline-offset: 3px; }
+  .key svg { width: 18px; height: 18px; flex: none; }
+  .key[hidden] { display: none; }
+
+  /* Before it starts: the deck dimmed behind one card with the Start key. */
+  .start {
+    position: fixed; inset: 0; z-index: 2;
+    display: grid; place-items: center; padding: 16px;
+    background: rgba(12, 22, 49, .72);
+  }
+  .start[hidden] { display: none; }
+  .start-card {
+    display: grid; gap: 14px; justify-items: center; text-align: center;
+    max-width: 26rem; padding: 26px 24px 22px;
+    background: #fff; color: var(--navy);
+    border: 2px solid var(--navy); border-radius: 8px;
+    box-shadow: 4px 4px 0 var(--navy);
+    font-family: var(--sans);
+  }
+  .start-card h1 { margin: 0; font-size: 1.5rem; }
+  .start-card p { margin: 0; color: #4f5f7e; line-height: 1.45; }
+  .start-card .key.gold { min-height: 54px; padding: 0 28px; font-size: 1.1rem; }
+  .start-card .skip { color: var(--navy); font: 700 .92rem var(--sans); }
+
+  /* Out of full screen (Esc, at the end): Home and Resume, top-left over
+     the deck. Hidden while presenting. */
+  .after {
+    position: fixed; top: 14px; left: 14px; z-index: 1;
+    display: flex; gap: 10px;
+  }
+  .after[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <iframe class="deck" src="{{ deck }}" title="BeaconsConnect presentation"
+          allow="fullscreen" allowfullscreen></iframe>
+
+  <div class="after" id="after">
+    <a class="key gold" id="home" href="{{ url_for('index') }}"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1 1 7h2v8h4v-5h2v5h4V7h2z"/></svg>Home</a>
+    <button type="button" class="key" id="resume" hidden>Resume full screen</button>
+  </div>
+
+  <div class="start" id="start" hidden>
+    <div class="start-card">
+      <h1>BeaconsConnect presentation</h1>
+      <p>Opens full screen. Use the arrows, or click, to move through the
+        slides. Press Esc when you're done.</p>
+      <button type="button" class="key gold" id="go">Start presentation</button>
+      <a class="skip" href="{{ url_for('index') }}">Back to the site</a>
+    </div>
+  </div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var start = document.getElementById("start");
+    var after = document.getElementById("after");
+    var resume = document.getElementById("resume");
+    var go = document.getElementById("go");
+    var deck = document.querySelector(".deck");
+    var can = !!(root.requestFullscreen && document.fullscreenEnabled);
+    // Without full screen to offer (an old browser, an iPhone), the deck is
+    // simply here with Home in the corner, as it would be without this.
+    if (!can) { return; }
+
+    var started = false;
+    function full() { return !!document.fullscreenElement; }
+    function enter() {
+      root.requestFullscreen().then(function () {
+        started = true;
+        start.hidden = true;
+        // The deck takes the keys, so the arrows move the slides at once.
+        try { deck.focus(); } catch (e) { /* not focusable here */ }
+      }).catch(function () { start.hidden = false; });
+    }
+    function paint() {
+      // Presenting: nothing over the slides. Not: Home, and Resume once it
+      // has been full screen.
+      after.hidden = full();
+      resume.hidden = !started || full();
+    }
+
+    start.hidden = false;
+    go.addEventListener("click", enter);
+    resume.addEventListener("click", enter);
+    document.addEventListener("fullscreenchange", paint);
+    paint();
+    try { go.focus(); } catch (e) { /* fine */ }
+  })();
+</script>
+</body>
+</html>

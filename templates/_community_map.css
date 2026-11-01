@@ -35,32 +35,12 @@
         height: 22rem; z-index: 1;
         background: var(--paper); font-family: var(--sans);
       }
-      /* calmer map tiles, so the pins carry the colour */
-      #beaconCampusMap .leaflet-tile-pane { filter: saturate(.55) contrast(1.06) brightness(1.04); }
+      /* The tiles, zoom keys, tooltips and flag pins are shared with the
+         small map in a meetup form: _map_chrome.css. */
+      {% include "_map_chrome.css" %}
       /* placing a flag: an orange dashed frame and a crosshair */
       .campus-map-card.placing #beaconCampusMap { outline: 4px dashed var(--orange); outline-offset: -6px; }
       .campus-map-card.placing .leaflet-container { cursor: crosshair; }
-      /* zoom buttons as raised keys */
-      #beaconCampusMap .leaflet-bar {
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 0 3px 0 var(--navy); overflow: hidden;
-      }
-      #beaconCampusMap .leaflet-bar a {
-        width: 40px; height: 40px; color: var(--navy);
-        font: 400 28px/38px var(--px); border-bottom: 2px solid var(--navy);
-      }
-      #beaconCampusMap .leaflet-bar a:last-child { border-bottom: 0; }
-      #beaconCampusMap .leaflet-control-attribution {
-        background: rgba(255, 255, 255, .9); color: var(--navy);
-        font: 400 11px/1.4 var(--sans);
-      }
-      #beaconCampusMap .leaflet-control-attribution a { color: var(--beacon); }
-      #beaconCampusMap .leaflet-tooltip {
-        padding: 4px 8px; color: var(--navy); font: 700 13px/1.2 var(--sans);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        box-shadow: 2px 2px 0 var(--navy);
-      }
-      #beaconCampusMap .leaflet-tooltip-top::before { border-top-color: var(--navy); }
       /* "Show where I am", floating top right: the familiar locate target,
          Beacon Blue on white like the map's own zoom buttons */
       .map-locate { position: absolute; z-index: 1000; top: 10px; right: 10px; color: var(--beacon); }
@@ -270,31 +250,8 @@
       .flag-count { color: var(--muted); font-size: .86rem; text-align: center; }
       .map-privacy { color: var(--muted); font-size: .8rem; line-height: 1.45; }
 
-      /* ---------- the pins (built in community-map.js) ---------- */
-      .beacon-flag-icon, .approved-place-icon, .user-position-icon,
-      .draft-position-icon { background: transparent; border: 0; }
-      /* a flag: a square pixel head on a pole */
-      .beacon-flag-pin {
-        display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-        width: 36px; height: 52px;
-      }
-      .flag-head {
-        min-width: 32px; height: 32px; padding: 0 2px;
-        display: grid; place-items: center;
-        background: var(--flag-color); color: var(--flag-ink, #fff);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        box-shadow: 2px 2px 0 var(--navy);
-      }
-      .flag-head .icon { width: 24px; height: 24px; }
-      .flag-head img { display: block; width: 60px; height: 16px; margin: 0 4px; }
-      .flag-pole { width: 4px; height: 16px; background: var(--navy); }
-      /* the selected flag */
-      .beacon-flag-pin.on .flag-head { outline: 3px solid #fff; box-shadow: 0 0 0 5px var(--navy); }
-      /* your own flags can be dragged */
-      .beacon-flag-icon.leaflet-marker-draggable { cursor: grab; }
-      /* the draft flag: dashed and bobbing until it is submitted */
-      .beacon-flag-pin.draft .flag-head { border-style: dashed; animation: flag-bob 1.2s steps(2) infinite; }
-      @keyframes flag-bob { 50% { transform: translateY(-3px); } }
+      /* ---------- the landmark pins (built in community-map.js); the flag
+         pins are in _map_chrome.css ---------- */
       /* landmarks: a pixel lighthouse on a yellow tile, with the building's
          short name under it (WHEAT, MCORM, UHALL, ISC) */
       .campus-lighthouse-pin {
@@ -334,9 +291,6 @@
         display: block; width: 18px; height: 18px;
         background: var(--orange);
         border: 3px solid #fff; box-shadow: 0 0 0 2px var(--navy);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .beacon-flag-pin.draft .flag-head { animation: none; }
       }
 
       /* ---------- sizes ---------- */

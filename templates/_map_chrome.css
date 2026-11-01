@@ -1,0 +1,58 @@
+      /* ---------- what both campus maps share ----------
+         The big map on /find (static/community-map.js) and the small one
+         in a meetup form (static/pin-picker.js): the chrome Leaflet draws,
+         as raised keys and navy frames, and the flag pins. Included by
+         _community_map.css and _pin_picker.css; both map elements carry
+         class="beacon-map". */
+      /* calmer map tiles, so the pins carry the colour */
+      .beacon-map .leaflet-tile-pane { filter: saturate(.55) contrast(1.06) brightness(1.04); }
+      /* zoom buttons as raised keys */
+      .beacon-map .leaflet-bar {
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); overflow: hidden;
+      }
+      .beacon-map .leaflet-bar a {
+        width: 40px; height: 40px; color: var(--navy);
+        font: 400 28px/38px var(--px); border-bottom: 2px solid var(--navy);
+      }
+      .beacon-map .leaflet-bar a:last-child { border-bottom: 0; }
+      .beacon-map .leaflet-control-attribution {
+        background: rgba(255, 255, 255, .9); color: var(--navy);
+        font: 400 11px/1.4 var(--sans);
+      }
+      .beacon-map .leaflet-control-attribution a { color: var(--beacon); }
+      .beacon-map .leaflet-tooltip {
+        padding: 4px 8px; color: var(--navy); font: 700 13px/1.2 var(--sans);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 2px 2px 0 var(--navy);
+      }
+      .beacon-map .leaflet-tooltip-top::before { border-top-color: var(--navy); }
+
+      /* the pins (built by the scripts) */
+      .beacon-flag-icon, .approved-place-icon, .user-position-icon,
+      .draft-position-icon { background: transparent; border: 0; }
+      /* a flag: a square pixel head on a pole */
+      .beacon-flag-pin {
+        display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+        width: 36px; height: 52px;
+      }
+      .flag-head {
+        min-width: 32px; height: 32px; padding: 0 2px;
+        display: grid; place-items: center;
+        background: var(--flag-color); color: var(--flag-ink, #fff);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        box-shadow: 2px 2px 0 var(--navy);
+      }
+      .flag-head .icon { width: 24px; height: 24px; }
+      .flag-head img { display: block; width: 60px; height: 16px; margin: 0 4px; }
+      .flag-pole { width: 4px; height: 16px; background: var(--navy); }
+      /* the selected flag */
+      .beacon-flag-pin.on .flag-head { outline: 3px solid #fff; box-shadow: 0 0 0 5px var(--navy); }
+      /* your own flags, and a meetup's pin, can be dragged */
+      .beacon-flag-icon.leaflet-marker-draggable { cursor: grab; }
+      /* the draft flag: dashed and bobbing until it is submitted */
+      .beacon-flag-pin.draft .flag-head { border-style: dashed; animation: flag-bob 1.2s steps(2) infinite; }
+      @keyframes flag-bob { 50% { transform: translateY(-3px); } }
+      @media (prefers-reduced-motion: reduce) {
+        .beacon-flag-pin.draft .flag-head { animation: none; }
+      }

@@ -1,0 +1,176 @@
+{#
+  Meet up, as a drawer inside a conversation window: a friend chat, a pair
+  chat, a club, or the campus room.
+
+  The navy key in the composer row opens it; its gold title bar -- the
+  <summary> -- folds it. It sits along the bottom edge of the messages,
+  inside the chat's own frame, over the paper: folded, a gold strip; open,
+  the form slides up inside the chat and the messages scroll above it.
+  Nothing outside the chat moves. Hidden altogether until the key is
+  pressed, unless there is a meetup to name (current_meetup): then the
+  strip stays, naming it, with how many are going, kept in step with the
+  card in the log by chat.html's script. In a club or the campus room,
+  where everybody posts, that is only ever one of your own (data-mine-only).
+
+  The form asks what, where and when, as captioned sections. What and when
+  (.meet-fields) stand beside the map when the drawer is wide, and the map
+  comes between them when it is narrow (_pin_picker.css). The where is the
+  campus map (.pinbox, driven by static/pin-picker.js once the drawer
+  opens): a pin that starts where the activity usually is (data-lat and
+  data-lng on its option) and is dragged, tapped into place, or put on a
+  landmark with the chips under the map. There is no place
+  to pick; the pin's point is posted (latitude, longitude, with where=map so
+  the server keeps the pin's words, "Near Healey Library"). Without
+  JavaScript the map is not there and the meetup goes on the Campus Center,
+  as the line under the map says and as /find's form does.
+
+  Every meetup from here is in person -- that is what the drawer is for --
+  so it never asks, and offers only activities that can be played in
+  person. A one-on-one is for the two of you; a club or the campus room is
+  a room full of people, so those ask how many. The campus room names no
+  conversation, so its meetups are the campus room's (post_new). Every
+  field name is kept from the forms this replaced: tests and the enhancer
+  drive them by those.
+#}
+{% import "_ui.html" as ui %}
+{% set in_room = kind in ("club", "community") %}
+{% set win_title = "Post a meetup" if in_room else "Meet up in person" %}
+{% if kind == "club" %}
+  {% set win_lede = "Post a meetup for the club. Members see it here." %}
+{% elif kind == "community" %}
+  {% set win_lede = "Looking for a game? Everyone on campus sees it here." %}
+{% else %}
+  {% set win_lede = "Say what, where and when. They'll see it here in the chat." %}
+{% endif %}
+<details class="newmeet meetwin" id="meetwin"
+         data-title="{{ win_title }}" data-lede="{{ win_lede }}"
+         {% if in_room %}data-mine-only="yes"{% endif %}
+         data-arranged="{{ 'yes' if current_meetup else 'no' }}"
+         {% if current_meetup %}data-post="{{ current_meetup.id }}"{% else %}hidden{% endif %}>
+  <summary class="meetbar">
+    {{ ui.icon("meet") }}
+    <span class="meetbar-title">
+      {%- if current_meetup -%}
+        {{ current_meetup.game }}{% if current_meetup.when_text %} &middot; {{ current_meetup.when_text }}{% endif %}
+      {%- else -%}
+        {{ win_title }}
+      {%- endif -%}
+    </span>
+    <span class="grip"></span>
+    <span class="count meetbar-going" {% if not current_meetup %}hidden{% endif %}>
+      {%- if current_meetup %}{{ current_meetup.count }} of {{ current_meetup.max_players }} going{% endif -%}
+    </span>
+    <span class="winbtn" aria-hidden="true"></span>
+  </summary>
+  <form class="newpost newmeet-menu" method="post" action="{{ url_for('post_new') }}">
+    <b class="meet-lede">{{ "Another meetup?" if current_meetup else win_lede }}</b>
+    {% if kind != "community" %}
+      <input type="hidden" name="from_kind" value="{{ kind }}" />
+      <input type="hidden" name="from_id" value="{{ target_id }}" />
+    {% endif %}
+    {# In person, always: the server's default without this is online. #}
+    <input type="hidden" name="mode" value="inperson" />
+
+    {# What and when: captioned sections, ruled off from one another. #}
+    <div class="meet-fields">
+      <div class="meet-sec meet-what">
+        <span class="meet-cap">{{ ui.icon("game") }}What</span>
+        <div class="meet-row">
+          {# Only what can be played in person. Each activity carries where
+             its pin starts, when it has a usual place on the map. #}
+          <select name="game" class="act" required aria-label="Activity">
+            {% for a in catalogue %}
+              {% if a.in_person %}
+                <option value="{{ a.name }}"
+                        data-online="{{ 1 if a.online else 0 }}"
+                        data-inperson="1"
+                        {%- if a.name in activity_starts %}
+                        data-lat="{{ activity_starts[a.name].lat }}"
+                        data-lng="{{ activity_starts[a.name].lng }}"
+                        {%- endif %}>{{ a.name }}</option>
+              {% endif %}
+            {% endfor %}
+            {# The write-in: an activity you typed is not something anybody
+               plays online. #}
+            <option value="other" data-online="0" data-inperson="1">Other&hellip;</option>
+          </select>
+          {% if in_room %}
+            {# How many, you included: a stepper beside the activity, so a
+               number is not a field on its own. The keys are the script's
+               (chat.html); the number can be typed. #}
+            <span class="meet-count" title="How many people, you included">
+              <button type="button" class="step" data-step="-1" aria-label="Fewer people">&minus;</button>
+              <input name="max_players" type="number" min="2" max="50"
+                     value="{{ 4 if kind == 'club' else 2 }}"
+                     aria-label="How many people, you included" />
+              <button type="button" class="step" data-step="1" aria-label="More people">+</button>
+              <small>people</small>
+            </span>
+          {% endif %}
+        </div>
+        {# Shown only for a write-in, by the narrowing script. Rendered
+           plainly so the form still works with no JavaScript: the server
+           ignores it unless the activity is Other. #}
+        <input name="custom_game" class="custom" maxlength="60"
+               placeholder="What are you doing?" aria-label="Activity" />
+      </div>
+      <div class="meet-sec meet-when">
+        <span class="meet-cap">{{ ui.icon("calendar") }}When</span>
+        {# Required: a meetup whose "when" is a sentence has no day to end
+           after. The time beside it stays optional; AM/PM starts blank on
+           purpose, and the server refuses an hour without it. #}
+        <div class="meet-row">
+          <input name="when_on" type="date" class="ondate" required
+                 aria-label="Date" title="Date" />
+          <span class="whenrow">
+            <span class="timeset">
+              <select name="when_hour" aria-label="Hour">
+                <option value="">Hour</option>
+                {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+              </select>
+              <select name="when_minute" aria-label="Minutes">
+                {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
+              </select>
+              <select name="when_ampm" aria-label="AM or PM">
+                <option value="">AM/PM</option>
+                {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+              </select>
+            </span>
+          </span>
+        </div>
+      </div>
+      <div class="meet-sec meet-note">
+        <span class="meet-cap">{{ ui.icon("pencil") }}Note <small>optional</small></span>
+        <textarea name="note" maxlength="300" rows="2" aria-label="Note"
+                  placeholder="Bring a ball, meet by the main doors&hellip;"></textarea>
+      </div>
+      <button type="submit">{{ "Post" if in_room else "Ask them" }}</button>
+    </div>
+
+    {# Where: the map, with a pin to drag or tap into place
+       (static/pin-picker.js). The corner key grows the map to fill a narrow
+       drawer. #}
+    <div class="pinbox" data-bounds='{{ map_bounds | tojson }}' data-places='{{ landmarks | tojson }}'>
+      <input type="hidden" name="where" value="map" />
+      <input type="hidden" name="latitude" />
+      <input type="hidden" name="longitude" />
+      <div class="pin-stage">
+        <div class="pin-map" role="application"
+             aria-label="Campus map. Tap it, or drag the pin, to say where you'll meet."></div>
+        <button type="button" class="pin-grow" aria-expanded="false" aria-label="Bigger map">&#x2922;</button>
+      </div>
+      <p class="pin-line">
+        <span class="pin-dot" aria-hidden="true"></span>
+        <b class="pin-where" aria-live="polite">Near Campus Center</b>
+        <span class="pin-hint">Drag the pin, tap the map, or pick a landmark.</span>
+      </p>
+      <div class="pin-chips" role="group" aria-label="Landmarks">
+        {% for p in landmarks %}
+          <button type="button" class="chip" data-key="{{ p.key }}"
+                  data-lat="{{ p.lat }}" data-lng="{{ p.lng }}" title="{{ p.name }}"
+                  aria-pressed="{{ 'true' if p.key == 'campus-center' else 'false' }}">{{ p.short }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+</details>
