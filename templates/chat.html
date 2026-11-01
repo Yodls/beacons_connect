@@ -34,6 +34,8 @@
          down would otherwise centre this line too */
       .chathead .status {
         display: block; margin: 3px 0 0; text-align: left;
+        /* One line, as the title is: on a phone the keys share the row. */
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         color: var(--on-navy); font-size: .9rem; font-weight: 700;
       }
       .chathead .status::before {
@@ -55,44 +57,123 @@
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
       }
-      /* White keys on the bar: the way back, and a club's member list. */
-      .chathead .headkey, .chathead .roster > summary {
+      /* White keys on the bar: the way back, and in a club or a group chat
+         the member list. */
+      .chathead .headkey {
         flex: none; display: inline-flex; align-items: center; gap: 6px;
-        min-height: 40px; padding: 0 12px;
+        min-height: 40px; margin: 0; padding: 0 12px;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 0 3px 0 var(--navy);
         font-size: .9rem; font-weight: 700; text-decoration: none; white-space: nowrap;
         cursor: pointer;
       }
-      .chathead .headkey:hover, .chathead .roster > summary:hover { background: var(--paper); text-decoration: none; }
+      .chathead .headkey:hover { background: var(--paper); color: var(--navy); text-decoration: none; }
+      /* Pressed only while being pressed, as the Meet up key is: an open
+         member list does not hold the key down. */
       .chathead .headkey:active { transform: translateY(3px); box-shadow: none; }
       .chathead .back .arrow { font-size: 1.1rem; line-height: 1; }
-      /* The member list: the key on the bar, and its window dropping over
-         the conversation rather than taking a row of the page. */
-      .chathead #club-slot { flex: none; }
-      .chathead .roster { margin: 0; position: relative; }
-      .chathead .roster > summary .icon { width: 18px; height: 18px; }
-      .chathead .roster-body {
-        position: absolute; right: 0; top: calc(100% + 8px); z-index: 30;
-        width: min(24rem, calc(100vw - 2rem));
-        max-height: min(60vh, 28rem); max-height: min(60dvh, 28rem);
-        overflow: auto; margin: 0;
-      }
+      .chathead .memkey .icon { width: 18px; height: 18px; }
+      /* The pair chat's keys carry an icon for a phone (below); on a wider
+         screen they are words. */
+      .chathead .kicon { display: none; }
       @media (max-width: 560px) {
-        /* On a phone the bar is two rows: the way back, the badge and the
-           title; then whatever keys the chat has, to the right. A chat
-           with no keys has one row. */
-        .chathead .headbreak:not(:last-child) { display: block; flex: 1 1 100%; height: 0; margin-top: -6px; }
+        /* On a phone the bar is one row: the badge and the title, then the
+           keys at the right, saying less -- the arrow, the people icon with
+           the count, a person to befriend them, a cross to end a pairing.
+           Each keeps its words for a screen reader. A club's way out is in
+           the member list here (.barleave). */
+        .chathead { gap: 8px; }
+        .chathead .grow { flex-basis: 4rem; }
+        /* The pixel face is wide: a size smaller, so a name fits beside
+           the keys. */
+        .chathead h1 { font-size: 23px; }
+        .chathead .status { font-size: .8rem; }
         .chathead .headbreak + * { margin-left: auto; }
-        /* And the keys say less: the arrow, and the people icon with the
-           count. */
         .chathead .back span:not(.arrow) { display: none; }
-        .chathead .back { padding: 0 10px; }
-        .chathead .roster > summary .rtext { display: none; }
-        .chathead .roster > summary::after { content: attr(data-count); }
-        .chathead .roster > summary { padding: 0 10px; }
+        .chathead .headkey { padding: 0 10px; }
+        .chathead .memkey .rtext { display: none; }
+        .chathead .memkey::after { content: attr(data-count); }
+        .chathead > .barleave { display: none; }
+        .chathead .kicon { display: inline-flex; align-items: center; gap: 1px; }
+        .chathead .kicon .icon { width: 18px; height: 18px; }
+        .chathead .klabel { display: none; }
+        .chathead .pairkey, .chathead .confirm > summary.leave {
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 40px; min-height: 40px; padding: 0 8px;
+        }
+        .chathead .kplus { font: 700 .95rem/1 var(--sans); }
       }
+      /* The narrowest phones: three keys do not fit beside a title. The bar
+         breaks into two rows there, the way back staying at the right end
+         of the title's row and the other keys taking the row below. */
+      @media (max-width: 359px) {
+        .chathead .headbreak:not(:nth-last-child(-n+3)) { display: block; flex: 1 1 100%; height: 0; margin-top: -6px; order: 2; }
+        .chathead .headbreak:not(:nth-last-child(-n+3)) ~ * { order: 3; }
+        .chathead .headbreak:not(:nth-last-child(-n+3)) ~ .back { order: 1; }
+        .chathead:has(> .barleave) > .headbreak { display: none; }
+        .chathead:has(> .barleave) > .headbreak ~ *,
+        .chathead:has(> .barleave) > .headbreak ~ .back { order: 0; }
+      }
+
+      /* ---------- the members sheet ----------
+         Slides down from the top of the conversation when the key on the
+         bar is pressed (the Meet up drawer's mirror: it rises from the
+         foot). Inside the log's frame, over the messages; never taller than
+         the log, scrolling inside. Nothing else on the page moves. */
+      .memwin {
+        position: absolute; left: 2px; right: 2px; top: 2px; z-index: 3;
+        max-height: calc(100% - 4px);
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        background: #fff;
+        border-bottom: 2px solid var(--navy);
+        border-radius: 6px 6px 0 0;
+        box-shadow: 0 6px 0 rgba(19, 34, 69, .18);
+      }
+      .chathead + .gamewrap:not(.playing) .memwin { border-radius: 0; }
+      .memwin[hidden] { display: none; }
+      .membar {
+        flex: none; display: flex; align-items: center; gap: 10px;
+        min-height: 44px; padding: 0 10px;
+        background: var(--navy); color: #fff;
+        border-bottom: 2px solid var(--navy);
+      }
+      .membar .icon { flex: none; }
+      .membar-title { font: 400 24px/1 var(--px); letter-spacing: .01em; }
+      .membar .grip { order: 1; }
+      .membar .count {
+        order: 2; flex: none; min-width: 32px; height: 28px; padding: 0 8px;
+        display: grid; place-items: center;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .8rem/1 var(--sans);
+      }
+      /* The close key: the drawer's minimise key, pointing up to fold away. */
+      .memwin .memclose { order: 3; margin: 0; padding: 0; cursor: pointer; }
+      .memwin .memclose::before {
+        content: ""; width: 8px; height: 8px; background: none;
+        border: solid var(--navy); border-width: 3px 0 0 3px;
+        transform: translateY(2px) rotate(45deg);
+      }
+      .membody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 12px 10px; background: #fff; }
+      /* The group's code and invite line, flat at the top of the sheet. */
+      .membody .groupbar {
+        margin: 6px 0 4px; padding: 8px 10px;
+        background: var(--paper); box-shadow: none;
+        border: 2px dashed var(--line-2);
+      }
+      .membody .roster-body { margin: 0; padding: 0; border: 0; box-shadow: none; }
+      /* A club's way out, at the foot of the list: on a phone only, where
+         the bar has no room for it (see .barleave). */
+      .membody .memleave { display: none; }
+      @media (max-width: 560px) {
+        .membody .memleave {
+          display: block; margin: 10px 0 2px; padding-top: 10px;
+          border-top: 2px dashed var(--line-2);
+        }
+      }
+
       /* The way out, where the header has one. Closed it is another key on
          the bar; open, the question needs a line of its own -- inside a flex
          row it would otherwise be squeezed to a word a line. So the bar is
@@ -434,7 +515,9 @@
         font-size: .95rem; font-weight: 700; white-space: nowrap; cursor: pointer;
       }
       .meetkey:hover { background: var(--navy); color: #fff; }
-      .meetkey:active, .meetkey[aria-expanded="true"] { transform: translateY(4px); box-shadow: none; }
+      /* Pressed only while it is being pressed: an open drawer does not hold
+         it down, or touching the drawer looks like pressing the key. */
+      .meetkey:active { transform: translateY(4px); box-shadow: none; }
       @media (max-width: 480px) {
         .meetkey { width: 48px; padding: 0; justify-content: center; }
         .meetkey span { display: none; }
@@ -913,9 +996,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='chess-board.css') }}">
   <div class="chathead">
-    {# The way back, first on the bar. #}
-    <a class="headkey back" href="{{ url_for('index') }}" aria-label="All chats"><span class="arrow" aria-hidden="true">&larr;</span><span>All chats</span></a>
-    {% if kind == "club" %}{{ ui.club_badge(title) }}{% else %}{{ ui.avatar(title, target_id) }}{% endif %}
+    {# A pair chat is keyed on the pairing; its circle takes the person's
+       colours, as a friend chat's does. #}
+    {% if kind == "club" %}{{ ui.club_badge(title) }}{% else %}{{ ui.avatar(title, partner_id if kind == "pair" and partner_id else target_id) }}{% endif %}
     <div class="grow">
       {# The chip stays outside the <h1>: the browser harness identifies pages
          by h1 textContent, so the heading has to read exactly the title. #}
@@ -929,10 +1012,13 @@
        aligned. Nothing on a wider screen (chat.html's stylesheet). #}
     <span class="headbreak" aria-hidden="true"></span>
 
-    {% if kind == "club" %}
-      {# A club's members: a key on the bar, its list a window over the
-         conversation (_clubpane.html). #}
-      <div id="club-slot">{% include "_clubpane.html" %}</div>
+    {# On the right of the bar, before the way out. Who is in here: the members sheet (#memwin) slides down from the top
+       of the conversation. A club and a group chat have one. The words are
+       kept exactly ("Who is in here · N"): tests read the count off them.
+       On a phone they give way to the people icon and the count. #}
+    {% if kind == "club" or group %}
+      <button type="button" class="headkey memkey" aria-controls="memwin" aria-expanded="false"
+              data-count="{{ members | length }}">{{ ui.icon("people") }}<span class="rtext">Who is in here &middot; <span class="memcount">{{ members | length }}</span></span></button>
     {% endif %}
 
     {# The person a queue put you with. A pair chat is the one one-on-one
@@ -951,14 +1037,14 @@
               action="{{ url_for('match_respond', other_id=partner_id, action='accept') }}">
           <input type="hidden" name="from_kind" value="pair" />
           <input type="hidden" name="from_id" value="{{ target_id }}" />
-          <button type="submit">Accept friend request</button>
+          <button type="submit" class="pairkey" aria-label="Accept friend request"><span class="kicon" aria-hidden="true">{{ ui.icon("user") }}<span class="kplus">&check;</span></span><span class="klabel">Accept friend request</span></button>
         </form>
       {% else %}
         <form method="post" data-region=".chathead"
               action="{{ url_for('match_ask', other_id=partner_id) }}">
           <input type="hidden" name="from_kind" value="pair" />
           <input type="hidden" name="from_id" value="{{ target_id }}" />
-          <button type="submit" class="ghost">Add friend</button>
+          <button type="submit" class="ghost pairkey" aria-label="Add friend"><span class="kicon" aria-hidden="true">{{ ui.icon("user") }}<span class="kplus">+</span></span><span class="klabel">Add friend</span></button>
         </form>
       {% endif %}
     {% endif %}
@@ -976,8 +1062,14 @@
        membership are one row, and a pairing's status is one row shared by
        two people. #}
     {% if kind in ("club", "pair") %}
-      <details class="confirm">
-        <summary class="leave">{{ "Leave club" if kind == "club" else "Close chat" }}</summary>
+      {# barleave: a club's, which on a phone is at the foot of the member
+         list instead (#memwin), so the bar stays one row. #}
+      <details class="confirm{% if kind == 'club' %} barleave{% endif %}">
+        {% if kind == "club" %}
+          <summary class="leave">Leave club</summary>
+        {% else %}
+          <summary class="leave" aria-label="Close chat"><span class="kicon" aria-hidden="true">{{ ui.icon("close") }}</span><span class="klabel">Close chat</span></summary>
+        {% endif %}
         <div class="confirm-body">
           <span class="confirm-ask">
             {% if kind == "club" %}
@@ -999,15 +1091,9 @@
         </div>
       </details>
     {% endif %}
+    {# The way back, last on the bar, with the other keys on the right. #}
+    <a class="headkey back" href="{{ url_for('index') }}" aria-label="All chats"><span class="arrow" aria-hidden="true">&larr;</span><span>All chats</span></a>
   </div>
-
-  {% if group %}
-    {# Swapped by the live channel when somebody joins or
-       leaves. One slot for the bar and the roster together:
-       both carry the member count, and two slots for one fact
-       is two ways to disagree about it. #}
-    <div id="group-slot">{% include "_grouppane.html" %}</div>
-  {% endif %}
 
   {# The slot is always present on a one-on-one chat, even with no game: it
      is what the poller fills when an invite arrives, which is how the
@@ -1029,6 +1115,50 @@
      is positioned in. #}
   {% set meet_here = kind in ("match", "pair", "club", "community") and not ended %}
   <div class="logwrap{% if meet_here and current_meetup %} has-strip{% endif %}" id="logwrap">
+  {% if kind == "club" or group %}
+    {# The members sheet: hidden until the key on the title bar is pressed,
+       then it slides down from the top of the conversation, over the
+       messages, the way the Meet up drawer rises from the foot. Nothing
+       else moves. #}
+    <section class="memwin" id="memwin" hidden aria-label="Who is in here">
+      <div class="membar">
+        {{ ui.icon("people") }}<span class="membar-title">Who is in here</span>
+        <span class="grip"></span>
+        <span class="count memcount">{{ members | length }}</span>
+        <button type="button" class="winbtn memclose" aria-label="Close the member list"></button>
+      </div>
+      <div class="membody">
+        {% if kind == "club" %}
+          <div id="club-slot">{% include "_clubpane.html" %}</div>
+          {# The way out of the club, here on a phone (the bar's is hidden
+             there to keep the bar one row); on a wider screen it is on the
+             bar and this one is hidden. The same question first. #}
+          <details class="confirm memleave">
+            <summary class="leave">Leave club</summary>
+            <div class="confirm-body">
+              <span class="confirm-ask">
+                Leave {{ title }}? You will lose this hub and have to join the
+                club again to get it back.
+              </span>
+              <span class="confirm-row">
+                <form method="post" action="{{ url_for('leave_club', club_id=target_id) }}">
+                  <input type="hidden" name="back" value="index" />
+                  <button type="submit" class="leave-yes">Yes, leave</button>
+                </form>
+                <button type="button" class="confirm-no">Cancel</button>
+              </span>
+            </div>
+          </details>
+        {% else %}
+          {# Swapped by the live channel when somebody joins or leaves. One
+             slot for the code line and the roster together: both carry
+             the member count, and two slots for one fact is two ways to
+             disagree about it. #}
+          <div id="group-slot">{% include "_grouppane.html" %}</div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
   <div id="log" data-cards="{{ card_token }}" data-reacts="{{ reacts_token }}"
        data-log="{{ log_token }}">
     {% for message in messages %}
@@ -1360,6 +1490,67 @@
     size();
   })();
 
+  // The members sheet (#memwin), in a club or a group chat. The key on the
+  // title bar slides it down from the top of the conversation, the close
+  // key or Escape slides it back up; the Meet up drawer and it are never
+  // open together. Nothing else moves. With the OS asking for less motion
+  // (or no animation support, as in a test DOM) it simply appears.
+  (function () {
+    var win = document.getElementById("memwin");
+    var key = document.querySelector(".memkey");
+    if (!win || !key) { return; }
+    var body = win.querySelector(".membody");
+    var SLIDE_MS = 280;
+    var SLIDE_EASE = "cubic-bezier(.2, .8, .2, 1)";
+    var moving = null;
+    function still() {
+      return !win.animate || !window.matchMedia
+        || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+    function stop() {
+      if (moving) { moving.onfinish = null; moving.cancel(); moving = null; }
+    }
+    function heightNow() { return win.hidden ? 0 : win.getBoundingClientRect().height; }
+    function slide(from, to, done) {
+      if (still() || Math.abs(from - to) < 1) { done(); return; }
+      moving = win.animate([{ height: from + "px" }, { height: to + "px" }],
+                           { duration: SLIDE_MS, easing: SLIDE_EASE });
+      moving.onfinish = function () { moving = null; done(); };
+    }
+    function isOpen() { return key.getAttribute("aria-expanded") === "true"; }
+    function open() {
+      if (window.beaconMeetFold) { window.beaconMeetFold(); }
+      var from = heightNow();
+      stop();
+      win.hidden = false;
+      key.setAttribute("aria-expanded", "true");
+      var to = win.getBoundingClientRect().height;
+      slide(from, to, function () {});
+      if (!still() && from < to && body) {
+        body.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }],
+                     { duration: SLIDE_MS, easing: "ease-out" });
+      }
+    }
+    function close() {
+      var from = heightNow();
+      stop();
+      key.setAttribute("aria-expanded", "false");
+      slide(from, 0, function () { win.hidden = true; });
+    }
+    key.addEventListener("click", function () { if (isOpen()) { close(); } else { open(); } });
+    win.querySelector(".memclose").addEventListener("click", close);
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && isOpen()) { close(); }
+    });
+    window.beaconMemFold = function () { if (isOpen()) { close(); } };
+    // The count, on the key and the sheet's bar, after a live swap.
+    window.beaconMemCount = function (n) {
+      if (n === undefined || n === null) { return; }
+      key.dataset.count = n;
+      document.querySelectorAll(".memcount").forEach(function (el) { el.textContent = n; });
+    };
+  })();
+
   // The Meet up window (#meetwin), in any chat a meetup can be posted from.
   // The key in the composer row shows it and folds it; folding with nothing
   // arranged hides it altogether. Its bar names the meetup arranged here --
@@ -1462,7 +1653,16 @@
       form.style.setProperty("--meet-room", cap);
       form.style.setProperty("--meet-screen", Math.max(120, screen - bar.offsetHeight - 2) + "px");
     }
+    // The drawer's foot is the chat's; if that is behind the floating tab
+    // bar, the page scrolls by the overlap and no more.
+    function clearTabBar() {
+      var tabbar = document.querySelector("nav.tabbar");
+      if (!tabbar || getComputedStyle(tabbar).position !== "fixed") { return; }
+      var under = win.getBoundingClientRect().bottom - (tabbar.getBoundingClientRect().top - 8);
+      if (under > 0) { window.scrollBy({ top: under, behavior: still() ? "auto" : "smooth" }); }
+    }
     function show() {
+      if (window.beaconMemFold) { window.beaconMemFold(); }
       var from = heightNow();
       stop();
       win.hidden = false;
@@ -1472,8 +1672,12 @@
       capForm();
       reflect();
       var to = win.getBoundingClientRect().height;
-      // No page scroll and no jump in the messages: the key that opens it
-      // sits right under the chat, so it opens where the reader is looking.
+      // No jump in the messages, and no page scroll -- the key that opens
+      // it sits right under the chat, so it opens where the reader is
+      // looking -- except under a game on a narrow screen, where the chat
+      // can sit partly behind the floating tab bar: then the page moves
+      // just enough to show the whole drawer, smoothly.
+      clearTabBar();
       slide(from, to, function () {});
       // The fields fade in over the last part of the slide, so they don't
       // show before there is room for them.
@@ -1555,6 +1759,8 @@
       reflect();
     }
     window.beaconMeetBar = sync;
+    // For the members sheet: one sheet open in the chat at a time.
+    window.beaconMeetFold = function () { if (win.open && !win.hidden) { fold(); } };
 
     key.addEventListener("click", function () {
       if (win.open && !win.hidden) { fold(); } else { show(); }
@@ -2286,13 +2492,12 @@
       var group = data.group;
       if (group && crowdSlot && group.token !== crowd) {
         crowd = group.token;
-        // Whether the roster was open is the reader's business, not the
-        // server's: carry it across the swap rather than shutting it.
-        var wasOpen = !!crowdSlot.querySelector("details.roster[open]");
+        // The slot is the inside of the members sheet, so whether the sheet
+        // is open is untouched; the key's count follows the new roster.
         var fresh = new DOMParser().parseFromString(group.html, "text/html");
         crowdSlot.replaceChildren.apply(crowdSlot, fresh.body.childNodes);
-        var reopened = crowdSlot.querySelector("details.roster");
-        if (wasOpen && reopened) { reopened.setAttribute("open", ""); }
+        var pane = crowdSlot.querySelector(".group-pane");
+        if (pane && window.beaconMemCount) { window.beaconMemCount(pane.dataset.count); }
       }
 
       var pane = data.game;

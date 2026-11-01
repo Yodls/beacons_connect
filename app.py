@@ -1535,8 +1535,9 @@ def chat_target(kind, target_id):
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
         other = db.session.get(User, other_id)
-        name = other.name if other else "Partner"
-        return pairing, f"{pairing.game} with {name}"
+        # The person, as a friend chat is titled; the game is the line under
+        # it (pairing_subtitle).
+        return pairing, (other.name if other else "Partner")
 
     if kind == "group":
         # Membership is the only key. A join code gets you a ChatMember row;
@@ -1909,14 +1910,33 @@ def post_payload(post, going=None, im_going=None, chats=None, flags=None):
     return data
 
 
-def chat_entry(kind, target_id, title):
-    """One row for the chat list. The wording for a kind lives in one place."""
+def pairing_label(pairing):
+    """The game a pairing is for, in words. An in-person pairing's game is
+    an activity name already; an online one's is a game kind, which would
+    otherwise read "tictactoe"."""
+    if pairing.mode == "online":
+        return rules.LABELS.get(pairing.game, pairing.game)
+    return pairing.game
+
+
+def pairing_subtitle(pairing):
+    """The line under a pair chat's title, which is the other person's name:
+    what brought the two of you together ("Tic-Tac-Toe pairing")."""
+    return f"{pairing_label(pairing)} pairing"
+
+
+def chat_entry(kind, target_id, title, subtitle=None, avatar_id=None):
+    """One row for the chat list. The wording for a kind lives in one place;
+    a pair chat says which game instead (pairing_subtitle). avatar_id is the
+    person whose colours the circle takes, when the row is not keyed on
+    them."""
     return {
         "kind": kind,
         "target_id": target_id,
         "title": title,
-        "subtitle": CHAT_SUBTITLE[kind],
+        "subtitle": subtitle or CHAT_SUBTITLE[kind],
         "tag": CHAT_TAG[kind],
+        "avatar_id": avatar_id or target_id,
     }
 
 
@@ -1935,13 +1955,10 @@ def chat_list():
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
         other = db.session.get(User, other_id)
-        # An in-person pairing's game is an activity name; an online one's is a
-        # game kind, which would otherwise read "tictactoe with Ana".
-        label = (rules.LABELS.get(pairing.game, pairing.game)
-                 if pairing.mode == "online" else pairing.game)
+        # Titled by the person, as a friend chat is, with the game under it.
         entries.append(chat_entry(
-            "pair", pairing.id,
-            f"{label} with {other.name if other else 'Partner'}",
+            "pair", pairing.id, other.name if other else "Partner",
+            subtitle=pairing_subtitle(pairing), avatar_id=other_id,
         ))
 
     for club in joined_clubs(current_user.id):
@@ -2417,7 +2434,7 @@ def chat(kind, target_id):
         meetup=group is not None and group.post_id is not None,
         ended=chat_ended(group),
         invitable=invitable,
-        subtitle=CHAT_SUBTITLE[kind],
+        subtitle=(pairing_subtitle(parent) if kind == "pair" else CHAT_SUBTITLE[kind]),
         game=game,
         seat=game_seat,
         payload=game_payload(game, game_seat) if game is not None else None,

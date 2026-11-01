@@ -6,13 +6,18 @@
   somebody joins or leaves. That is the point of it being a partial -- the
   roster has one source, so a live update cannot drift from a page load.
 
+  It is the inside of the members sheet that slides down from the top of the
+  conversation when the "Who is in here" key on the title bar is pressed
+  (chat.html, #memwin): the code and the invite on one line, then everybody.
+  data-count is what the key's count is refreshed from after a swap.
+
   data-token is how the poller decides whether to swap at all. It only moves
   when membership moves, never when somebody merely talks: this sits on the
   busiest path on the site, and a token that changed per message would wake
   every held request in the chat, every message.
 #}
 {%- import "_ui.html" as ui -%}
-<div class="group-pane" data-token="{{ group_token }}">
+<div class="group-pane" data-token="{{ group_token }}" data-count="{{ members | length }}">
   <div class="groupbar">
     <span class="why">
       {% if meetup %}
@@ -43,9 +48,7 @@
     {% endif %}
   </div>
 
-  <details class="roster">
-    <summary>Who is in here &middot; {{ members | length }}</summary>
-    <div class="roster-body">
+  <div class="roster-body">
       {# The rows live in _roster.html now, with the club space's. What made
          that worth doing is the friend action on each one: four states, and
          two rooms drawing their own rows is two chances to get the fourth
@@ -96,6 +99,5 @@
           </form>
         {% endif %}
       </div>
-    </div>
-  </details>
+  </div>
 </div>
