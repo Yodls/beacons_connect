@@ -62,7 +62,7 @@
     </span>
     <span class="winbtn" aria-hidden="true"></span>
   </summary>
-  <form class="newpost newmeet-menu" method="post" action="{{ url_for('post_new') }}">
+  <form class="newpost newmeet-menu" method="post" action="{{ url_for('post_new') }}" data-step="what">
     <b class="meet-lede">{{ "Another meetup?" if current_meetup else win_lede }}</b>
     {% if kind != "community" %}
       <input type="hidden" name="from_kind" value="{{ kind }}" />
@@ -70,6 +70,16 @@
     {% endif %}
     {# In person, always: the server's default without this is online. #}
     <input type="hidden" name="mode" value="inperson" />
+
+    {# In a narrow drawer (a phone) the form is two steps, one at a time --
+       what and where together, the activity over the map, then when -- and
+       this strip is how you move between them; data-step on the form says
+       which is showing (_pin_picker.css hides the other). A wide drawer
+       shows everything at once and hides the strip. #}
+    <nav class="meet-steps" aria-label="Steps">
+      <button type="button" class="step-tab" data-go="what" aria-current="step">{{ ui.icon("meet") }}What &amp; where</button>
+      <button type="button" class="step-tab" data-go="when">{{ ui.icon("calendar") }}When</button>
+    </nav>
 
     {# What and when: captioned sections, ruled off from one another. #}
     <div class="meet-fields">
@@ -144,12 +154,11 @@
         <textarea name="note" maxlength="300" rows="2" aria-label="Note"
                   placeholder="Bring a ball, meet by the main doors&hellip;"></textarea>
       </div>
-      <button type="submit">{{ "Post" if in_room else "Ask them" }}</button>
     </div>
 
     {# Where: the map, with a pin to drag or tap into place
-       (static/pin-picker.js). The corner key grows the map to fill a narrow
-       drawer. #}
+       (static/pin-picker.js). In the steps it shares the first step with
+       the activity, and takes the height the activity leaves. #}
     <div class="pinbox" data-bounds='{{ map_bounds | tojson }}' data-places='{{ landmarks | tojson }}'>
       <input type="hidden" name="where" value="map" />
       <input type="hidden" name="latitude" />
@@ -157,13 +166,14 @@
       <div class="pin-stage">
         <div class="pin-map" role="application"
              aria-label="Campus map. Tap it, or drag the pin, to say where you'll meet."></div>
-        <button type="button" class="pin-grow" aria-expanded="false" aria-label="Bigger map">&#x2922;</button>
+        {# Where the pin is, in words. Under the map on a wide drawer; over
+           its foot in the steps. #}
+        <p class="pin-line">
+          <span class="pin-dot" aria-hidden="true"></span>
+          <b class="pin-where" aria-live="polite">Near Campus Center</b>
+          <span class="pin-hint">Drag the pin, tap the map, or pick a landmark.</span>
+        </p>
       </div>
-      <p class="pin-line">
-        <span class="pin-dot" aria-hidden="true"></span>
-        <b class="pin-where" aria-live="polite">Near Campus Center</b>
-        <span class="pin-hint">Drag the pin, tap the map, or pick a landmark.</span>
-      </p>
       <div class="pin-chips" role="group" aria-label="Landmarks">
         {% for p in landmarks %}
           <button type="button" class="chip" data-key="{{ p.key }}"
@@ -171,6 +181,16 @@
                   aria-pressed="{{ 'true' if p.key == 'campus-center' else 'false' }}">{{ p.short }}</button>
         {% endfor %}
       </div>
+    </div>
+
+    {# The foot: in the steps, Back and Next, and on the last step what the
+       meetup adds up to (filled by the script) beside the one key that
+       posts it; a wide drawer shows only the key, under the fields. #}
+    <div class="meet-nav">
+      <button type="button" class="step-back" data-go="what">&larr; Back</button>
+      <p class="meet-sum" aria-live="polite"></p>
+      <button type="button" class="step-next" data-go="when">Next: When &rarr;</button>
+      <button type="submit">{{ "Post" if in_room else "Ask them" }}</button>
     </div>
   </form>
 </details>

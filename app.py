@@ -7661,7 +7661,7 @@ APPROVED_MAP_LOCATIONS = {
     },
     "university-hall": {
         "name": "University Hall",
-        "short": "University Hall",
+        "short": "Univ. Hall",
         "latitude": 42.313320,
         "longitude": -71.035550,
     },

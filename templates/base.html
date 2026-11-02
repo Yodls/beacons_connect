@@ -532,6 +532,24 @@
       @media (max-width: 480px) {
         .skybtn { display: none; }
         .who-sky { display: flex; }
+        /* On a phone the menu has the screen's height to use, between the
+           top bar and the floating tab bar, rather than 30rem -- an admin's
+           list is longer than that -- and its rows are a little tighter, so
+           the whole of it is on screen without scrolling. 128px is the top
+           bar and the gap under it, with the dev banner's room to spare. */
+        .who-panel {
+          max-height: calc(100vh - var(--tabbar-h) - 128px);
+          max-height: calc(100dvh - var(--tabbar-h) - 128px);
+        }
+        .who-panel b { height: 40px; font-size: 22px; line-height: 38px; }
+        .who-panel small { padding: 7px 12px 6px; }
+        .who-panel a, .who-sky { min-height: 38px; font-size: .92rem; }
+      }
+      /* A short phone (an older iPhone SE): tighter still, so a student's
+         list fits whole; an admin's two extra rows may scroll. */
+      @media (max-width: 480px) and (max-height: 620px) {
+        .who-panel a, .who-sky { min-height: 34px; }
+        .who-panel small { padding: 5px 12px 4px; }
       }
 
 

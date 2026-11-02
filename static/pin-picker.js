@@ -69,7 +69,6 @@
     var lng = form.querySelector("input[name=longitude]");
     var where = box.querySelector(".pin-where");
     var mapEl = box.querySelector(".pin-map");
-    var grow = box.querySelector(".pin-grow");
     var chips = box.querySelectorAll(".pin-chips .chip");
     var act = form.querySelector(".act");
     var reduced = !!(window.matchMedia
@@ -124,16 +123,6 @@
     form.addEventListener("reset", function () {
       setTimeout(function () { touched = false; place(activityStart(), "start"); }, 0);
     });
-    // Bigger map (a narrow drawer): the form becomes the map until Done.
-    if (grow) {
-      grow.addEventListener("click", function () {
-        var on = form.classList.toggle("mapping");
-        grow.setAttribute("aria-expanded", on ? "true" : "false");
-        grow.setAttribute("aria-label", on ? "Back to the form" : "Bigger map");
-        grow.textContent = on ? "Done" : "⤢";
-        form.scrollTop = 0;
-      });
-    }
     place(activityStart(), "start");
 
     leaflet().then(function () {

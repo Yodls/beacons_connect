@@ -1648,10 +1648,17 @@
       var cap = Math.max(120, room - bar.offsetHeight - 2) + "px";
       form.style.maxHeight = cap;
       // And as variables, for the layouts that fill them: the map beside
-      // the fields on a wide drawer takes the chat's room; the map grown on
-      // a narrow one takes the screen's, rising over the chat's head.
+      // the fields on a wide drawer takes the chat's room (--meet-room);
+      // the steps on a phone take the screen's (--meet-screen), the drawer
+      // rising from the chat's foot to just under the top bar
+      // (--meet-rise, its height then), over the chat's own head.
       form.style.setProperty("--meet-room", cap);
-      form.style.setProperty("--meet-screen", Math.max(120, screen - bar.offsetHeight - 2) + "px");
+      var head = document.querySelector(".topbar, header");
+      var headBottom = head ? head.getBoundingClientRect().bottom : 96;
+      var foot = (wrap || log).getBoundingClientRect().bottom - 2;
+      var rise = Math.max(160, Math.floor(foot - headBottom - 8));
+      win.style.setProperty("--meet-rise", rise + "px");
+      form.style.setProperty("--meet-screen", Math.max(120, rise - bar.offsetHeight - 2) + "px");
     }
     // The drawer's foot is the chat's; if that is behind the floating tab
     // bar, the page scrolls by the overlap and no more.
@@ -1792,6 +1799,106 @@
       sync();
     });
     sync();
+  })();
+
+  // The Meet up form's steps. In a narrow drawer (a phone, or a chat
+  // beside a board) the form is two steps -- what and where together, then
+  // when -- one at a time, moved between by the strip under the bar and the
+  // Back and Next keys
+  // (_meetwin.html; _pin_picker.css shows one step's fields). The last step
+  // sums the meetup up in a line beside the key that posts it. A wide
+  // drawer shows everything at once; this then only keeps the summary.
+  (function () {
+    var form = document.querySelector("#meetwin form");
+    var strip = form && form.querySelector(".meet-steps");
+    if (!form || !strip) { return; }
+    var ORDER = ["what", "when"];
+    var WORDS = { what: "What & where", when: "When" };
+    var back = form.querySelector(".step-back");
+    var next = form.querySelector(".step-next");
+    var sum = form.querySelector(".meet-sum");
+    var act = form.querySelector(".act");
+    var count = form.querySelector("[name=max_players]");
+    var where = form.querySelector(".pin-where");
+    var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    function stepsOn() { return getComputedStyle(strip).display !== "none"; }
+    function current() { return form.dataset.step || "what"; }
+
+    // What the meetup adds up to: the activity (and how many), the spot in
+    // the pin's words, the day and the time if one is set.
+    function summarise() {
+      if (!sum) { return; }
+      var parts = [];
+      var opt = act && act.options[act.selectedIndex];
+      var what = opt && opt.value === "other"
+        ? (form.custom_game && form.custom_game.value.trim()) : (opt && opt.text);
+      if (what) {
+        if (count && count.value) { what += " · " + count.value + " people"; }
+        parts.push(what);
+      }
+      if (where && where.textContent.trim()) { parts.push(where.textContent.trim()); }
+      var on = form.when_on && form.when_on.value;
+      if (on && /^\d{4}-\d{2}-\d{2}$/.test(on)) {
+        var d = new Date(+on.slice(0, 4), +on.slice(5, 7) - 1, +on.slice(8, 10));
+        var day = DAYS[d.getDay()] + " " + d.getDate() + " " + MONTHS[d.getMonth()];
+        var hour = form.when_hour && form.when_hour.value;
+        var ampm = form.when_ampm && form.when_ampm.value;
+        if (hour && ampm) {
+          day += " at " + hour + ":" + ((form.when_minute && form.when_minute.value) || "00") + " " + ampm;
+        }
+        parts.push(day);
+      }
+      sum.textContent = parts.join(" · ");
+    }
+
+    function go(step, focus) {
+      if (ORDER.indexOf(step) < 0) { return; }
+      form.dataset.step = step;
+      strip.querySelectorAll(".step-tab").forEach(function (tab) {
+        if (tab.dataset.go === step) { tab.setAttribute("aria-current", "step"); }
+        else { tab.removeAttribute("aria-current"); }
+      });
+      var at = ORDER.indexOf(step);
+      if (back) {
+        back.hidden = at === 0;
+        // "Back", not the step's name: it shares its row with the key.
+        if (at > 0) { back.dataset.go = ORDER[at - 1]; back.textContent = "← Back"; }
+      }
+      if (next) {
+        next.hidden = at === ORDER.length - 1;
+        if (at < ORDER.length - 1) {
+          next.dataset.go = ORDER[at + 1];
+          next.textContent = "Next: " + WORDS[ORDER[at + 1]] + " →";
+        }
+      }
+      if (step === "when") { summarise(); }
+      form.scrollTop = 0;
+      if (focus && stepsOn()) {
+        var first = step === "what" ? act : step === "when" ? form.when_on : null;
+        if (first) { try { first.focus({ preventScroll: true }); } catch (e) { /* fine */ } }
+      }
+    }
+
+    form.addEventListener("click", function (event) {
+      var key = event.target.closest("[data-go]");
+      if (key && form.contains(key)) { go(key.dataset.go, true); }
+    });
+    // Enter in a field on an early step moves on rather than posting.
+    form.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || !stepsOn() || current() === "when") { return; }
+      var t = event.target;
+      if (t.tagName === "TEXTAREA" || t.tagName === "BUTTON") { return; }
+      event.preventDefault();
+      go(ORDER[ORDER.indexOf(current()) + 1], true);
+    });
+    form.addEventListener("input", summarise);
+    form.addEventListener("change", summarise);
+    // Posted: the enhancer resets the form; the next meetup starts at What.
+    form.addEventListener("reset", function () { setTimeout(function () { go("what"); summarise(); }, 0); });
+    window.beaconMeetStep = go;
+    go("what");
   })();
 </script>
 <script>
