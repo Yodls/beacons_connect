@@ -4718,9 +4718,21 @@ def clubs():
                key=lambda c: (-picks[c.id]["score"], c.name))
         + [c for c in everything if c.id not in picks]
     )
+    # How many are in each club, by the rule a club's own member list
+    # follows (visible_people): an unlisted account counts only for its
+    # friends and itself, so a card never says more than the list inside
+    # would show. One grouped query for the page.
+    seen_anyway = [current_user.id] + [f["user_id"] for f in matching.friend_names(current_user.id)]
+    member_counts = dict(db.session.execute(
+        db.select(ClubMember.club_id, db.func.count())
+        .join(User, User.id == ClubMember.user_id)
+        .where(db.or_(User.discoverable.is_(True), User.id.in_(seen_anyway)))
+        .group_by(ClubMember.club_id)
+    ).all())
     return render_template(
         "clubs.html",
         clubs=ordered,
+        member_counts=member_counts,
         # The same clubs, bucketed into the categories in club_catalog.py
         # (each keeps the order above: suggestions first, then A to Z).
         groups=club_catalog.grouped(ordered),

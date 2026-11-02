@@ -42,9 +42,23 @@
 {% else %}
   {% set win_lede = "Say what, where and when. They'll see it here in the chat." %}
 {% endif %}
+{#- Who is in, said on the strip. In a one-on-one a meetup is for the two of
+    you, so a count ("1 of 2") says nothing: it names who is in instead.
+    The script (chat.html, whoIsIn) says the same from the card when it
+    moves; this is the first paint, so nothing changes on load. -#}
+{%- set other = (title.split(" ")[0] if title else "them") -%}
+{%- macro who_is_in(count, max_players, im_in) -%}
+  {%- if in_room -%}{{ count }} of {{ max_players }} going
+  {%- elif count >= 2 -%}You're both in
+  {%- elif im_in -%}Waiting for {{ other }}
+  {%- elif count -%}{{ other }} is in
+  {%- else -%}Nobody's in yet
+  {%- endif -%}
+{%- endmacro -%}
 <details class="newmeet meetwin" id="meetwin"
          data-title="{{ win_title }}" data-lede="{{ win_lede }}"
-         {% if in_room %}data-mine-only="yes"{% endif %}
+         {% if in_room %}data-mine-only="yes"{% else %}data-other="{{ other }}"{% endif %}
+         data-view="form"
          data-arranged="{{ 'yes' if current_meetup else 'no' }}"
          {% if current_meetup %}data-post="{{ current_meetup.id }}"{% else %}hidden{% endif %}>
   <summary class="meetbar">
@@ -58,7 +72,7 @@
     </span>
     <span class="grip"></span>
     <span class="count meetbar-going" {% if not current_meetup %}hidden{% endif %}>
-      {%- if current_meetup %}{{ current_meetup.count }} of {{ current_meetup.max_players }} going{% endif -%}
+      {%- if current_meetup %}{{ who_is_in(current_meetup.count, current_meetup.max_players, current_meetup.im_going) }}{% endif -%}
     </span>
     <span class="winbtn" aria-hidden="true"></span>
   </summary>
@@ -193,4 +207,13 @@
       <button type="submit">{{ "Post" if in_room else "Ask them" }}</button>
     </div>
   </form>
+
+  {# The meetup the strip names, when the strip is tapped: the body of its
+     card in the log (what, when, where, who is in, and its own keys),
+     copied in by the drawer's script and kept in step with the card, and a
+     way to plan another. The form above is what the Meet up key opens. #}
+  <div class="meet-about">
+    <div class="about-card"></div>
+    <button type="button" class="about-new">{{ ui.icon("plus") }}Plan another meetup</button>
+  </div>
 </details>

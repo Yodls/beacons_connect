@@ -160,18 +160,30 @@
       }
       .going.full { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 
-      /* ---------- layout: map left, everything else right ---------- */
-      .meetcol { min-width: 0; }
+      /* ---------- layout: the map across the page, the rest beneath ----------
+         On a wide screen the map is widescreen, and under it Matchmaking and
+         Your pairings stand side by side, the same height, with the open
+         meetups across both, three cards to a row. Narrower, one column. */
       @media (min-width: 1000px) {
-        .meetgrid {
-          display: grid; gap: 0 24px; align-items: start;
-          grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        /* .campus-map-card too: the map's own stylesheet, included after
+           this, sets 26rem with the id alone. */
+        .campus-map-card #beaconCampusMap { height: clamp(24rem, 54vh, 36rem); }
+        .meetbelow {
+          display: grid; gap: 0 24px; align-items: stretch;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+        .meetbelow > .meetups-sec { grid-column: 1 / -1; }
+        .meetbelow > section:not(.meetups-sec) .grid.two { grid-template-columns: minmax(0, 1fr); }
+        .meetups-sec .grid.two { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+        /* The map window's pane, under the map: posting or dropping a flag on
+           the left, a tapped flag's card and the key on the right. */
+        .campus-map-pane {
+          display: grid; gap: 16px 24px; align-items: start;
+          grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
         }
       }
-      /* the right-hand column is narrow, so its cards stack */
-      @media (min-width: 1000px) {
-        .meetcol .grid.two { grid-template-columns: minmax(0, 1fr); }
-      }
+      /* The pane's two halves keep its own spacing at every width. */
+      .map-pane-act, .map-pane-side { display: grid; gap: 14px; min-width: 0; align-content: start; }
       .actions .maplink { min-height: 40px; padding: 0 12px; font-size: .92rem; }
 
       /* ---------- the campus map ---------- */
@@ -196,17 +208,14 @@
     <p class="lede">Post a meetup on the map, join the queue to be paired, or answer a post.</p>
   </div>
 
-  {# Two columns on wide screens, as in the Beacon OS mockup: the campus map
-     on the left, with Post a meetup inside its window, and matchmaking and
-     the open meetups on the right. One column on phones, map first. The map
-     comes before the Matchmaking heading, so the queue form is still the
-     first <form> after <h2>Matchmaking</h2>. #}
-  <div class="meetgrid">
-  <div class="meetcol">
-    {% set map_meetup = true %}
-    {% include "_community_map.html" %}
-  </div>
-  <div class="meetcol">
+  {# The campus map first, as wide as the page, with Post a meetup inside its
+     window; matchmaking, your pairings and the open meetups beneath it (side
+     by side where there is room). The map comes before the Matchmaking
+     heading, so the queue form is still the first <form> after
+     <h2>Matchmaking</h2>. #}
+  {% set map_meetup = true %}
+  {% include "_community_map.html" %}
+  <div class="meetbelow">
 
   <section class="sec-place" id="matchmaking">
     {{ ui.section("Matchmaking", "place", "meet") }}
@@ -299,9 +308,9 @@
     </div>
   </section>
 
-  {# Post a meetup is in the map window (left column, _meetup_form.html):
-     the form and its pin are one thing there. #}
-  <section class="sec-place">
+  {# Post a meetup is in the map window (_meetup_form.html): the form and
+     its pin are one thing there. Across both columns beneath the map. #}
+  <section class="sec-place meetups-sec">
     {{ ui.section("Open meetups", "place", "star", posts | length) }}
     <div class="grid two" id="meetups" data-cards="{{ card_token }}">
       {% for post in posts %}
@@ -311,7 +320,6 @@
       {% endfor %}
     </div>
   </section>
-  </div>
   </div>
 {% endblock %}
 

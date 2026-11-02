@@ -10,12 +10,18 @@
   render_template was given, so a forgotten one would silently render blank
   rather than fail.
 #}
-{% macro clubcard(club, joined_ids, picks) -%}
+{% macro clubcard(club, joined_ids, picks, member_counts) -%}
       <div class="card" id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
         <div class="card-top">
           {{ ui.club_badge(club.name, club.description) }}
           <div class="grow">
             <h3>{{ club.name }}</h3>
+            {# How big it is, before you join. Counted by the rule the club's
+               own member list follows (app.clubs). #}
+            {% set n = member_counts.get(club.id, 0) %}
+            <span class="members">{{ ui.icon("people") }}
+              {%- if n %}{{ n }} member{{ "" if n == 1 else "s" }}{% else %}No members yet{% endif -%}
+            </span>
             {% if club.id in joined_ids %}
               <span class="joined">Joined</span>
             {% elif club.id in picks %}
@@ -155,6 +161,12 @@
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         font: 700 .76rem/1 var(--sans);
       }
+      /* how many are in it, on its own line under the name */
+      .clubgrid .members {
+        display: flex; align-items: center; gap: 5px; margin-top: 3px;
+        color: var(--muted); font: 700 .82rem/1.2 var(--sans);
+      }
+      .clubgrid .members .icon { width: 14px; height: 14px; flex: none; }
       .joined { background: var(--beacon); color: #fff; }
       .joined::before { content: "\2713"; }
       .pick { background: var(--sky); color: var(--navy); }
@@ -217,7 +229,7 @@
       <p class="cathome">Picked from what you told us you like.</p>
       <div class="clubgrid">
         {% for club in recommended %}
-          {{ clubcard(club, joined_ids, picks) }}
+          {{ clubcard(club, joined_ids, picks, member_counts) }}
         {% endfor %}
       </div>
     </section>
@@ -235,7 +247,7 @@
       <p class="cathome">{{ cat.home }}</p>
       <div class="clubgrid">
         {% for club in members %}
-          {{ clubcard(club, joined_ids, picks) }}
+          {{ clubcard(club, joined_ids, picks, member_counts) }}
         {% endfor %}
       </div>
     </section>

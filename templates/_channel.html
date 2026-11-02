@@ -127,6 +127,13 @@
           badge.textContent = n > 99 ? "99+" : String(n);
           badge.setAttribute("aria-label", n + " unread");
           badge.hidden = !n;
+          // Newly unread: the row's mark pops in once (base.html,
+          // .chatrow::before). Not named by its shape here: see the word
+          // list at the top of shell.html, which this page shares.
+          if (n && !row.classList.contains("has-unread")) {
+            row.classList.add("pop");
+            setTimeout(function () { row.classList.remove("pop"); }, 400);
+          }
           row.classList.toggle("has-unread", !!n);
         });
       }

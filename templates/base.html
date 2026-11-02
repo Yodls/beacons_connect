@@ -1493,6 +1493,26 @@
       /* the display above would beat the browser's own [hidden] rule */
       .chatrow .unread[hidden] { display: none; }
       .chatrow.has-unread .last { color: var(--navy); font-weight: 700; }
+      /* Something new in here: a navy mark on the row's left edge, as a
+         chat app marks an unread channel. It grows when the row is
+         pointed at, and pops in once when a message arrives while the list
+         is on screen (the live channel adds .pop, _channel.html). */
+      .chatrow { position: relative; }
+      .chatrow::before {
+        content: ""; position: absolute; left: 0; top: 50%;
+        width: 5px; height: 0;
+        background: var(--navy); border-radius: 0 4px 4px 0;
+        transform: translateY(-50%);
+        transition: height .15s ease-out;
+      }
+      .chatrow.has-unread::before { height: 10px; }
+      .chatrow.has-unread:hover::before, .chatrow.has-unread:focus-visible::before { height: 22px; }
+      .chatrow.has-unread.pop::before { animation: mark-pop .25s ease-out; }
+      @keyframes mark-pop { 0% { height: 0; } 60% { height: 16px; } 100% { height: 10px; } }
+      @media (prefers-reduced-motion: reduce) {
+        .chatrow::before { transition: none; }
+        .chatrow.has-unread.pop::before { animation: none; }
+      }
       /* each kind of chat wears its own colour */
       .tag.community { background: var(--beacon); color: #fff; }
       .tag.match     { background: var(--sky);    color: var(--navy); }

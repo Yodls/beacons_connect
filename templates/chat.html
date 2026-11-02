@@ -543,6 +543,29 @@
         border-radius: 0 0 6px 6px;
       }
       .meetwin[hidden] { display: none; }
+      /* Two views under the bar: the form (the Meet up key) and the
+         arranged meetup itself (its strip, tapped). */
+      .meetwin[data-view="about"] > form, .meetwin[data-view="form"] > .meet-about { display: none; }
+      .meetwin > .meet-about {
+        flex: 1 1 auto; min-height: 0; overflow: auto;
+        display: grid; gap: 10px; align-content: start;
+        padding: 12px; background: var(--paper);
+      }
+      /* The card, as it is in the conversation, less its title bar: the
+         gold bar above already names the meetup. */
+      .meet-about .post { margin: 0; max-width: none; }
+      .meet-about .cardbar { display: none; }
+      /* Planning another: a quiet key under the card, not a second call
+         to action beside the card's own. */
+      .meet-about .about-new {
+        justify-self: start; display: inline-flex; align-items: center; gap: 6px;
+        min-height: 38px; margin: 0; padding: 0 12px;
+        background: #fff; color: var(--navy);
+        border: 2px dashed var(--navy); border-radius: var(--r);
+        box-shadow: none; font-size: .9rem; font-weight: 700; cursor: pointer;
+      }
+      .meet-about .about-new .icon { width: 14px; height: 14px; }
+      .meet-about .about-new:hover { background: var(--gold); border-style: solid; }
       /* The title bar, in the site's gold: the meet pin, the title in the
          pixel face, the grip, how many are going, and the minimise key. */
       .meetbar {
@@ -1587,7 +1610,7 @@
     function arranged() { return win.dataset.arranged === "yes"; }
     function reflect() {
       var showing = win.open && !win.hidden;
-      key.setAttribute("aria-expanded", showing ? "true" : "false");
+      key.setAttribute("aria-expanded", showing && win.dataset.view !== "about" ? "true" : "false");
       // The open drawer is a sheet over the foot of the conversation: the
       // messages under it stay where they are. Only the gold strip -- a
       // meetup arranged, or one just posted -- keeps room for itself under
@@ -1653,6 +1676,8 @@
       // rising from the chat's foot to just under the top bar
       // (--meet-rise, its height then), over the chat's own head.
       form.style.setProperty("--meet-room", cap);
+      // The meetup's own view is capped the same way.
+      if (about) { about.style.maxHeight = cap; }
       var head = document.querySelector(".topbar, header");
       var headBottom = head ? head.getBoundingClientRect().bottom : 96;
       var foot = (wrap || log).getBoundingClientRect().bottom - 2;
@@ -1668,14 +1693,19 @@
       var under = win.getBoundingClientRect().bottom - (tabbar.getBoundingClientRect().top - 8);
       if (under > 0) { window.scrollBy({ top: under, behavior: still() ? "auto" : "smooth" }); }
     }
-    function show() {
+    // `view`: "form" (plan a meetup, what the Meet up key opens) or "about"
+    // (the arranged meetup, what tapping its strip opens). Called while
+    // already open, it changes the view and slides to the new height.
+    function show(view) {
+      view = view === "about" && fillAbout() ? "about" : "form";
       if (window.beaconMemFold) { window.beaconMemFold(); }
       var from = heightNow();
       stop();
+      win.dataset.view = view;
       win.hidden = false;
       win.open = true;
       // The map in the form, the first time; the chips work before it is up.
-      if (window.BeaconPin) { BeaconPin.mount(form.querySelector(".pinbox")); }
+      if (view === "form" && window.BeaconPin) { BeaconPin.mount(form.querySelector(".pinbox")); }
       capForm();
       reflect();
       var to = win.getBoundingClientRect().height;
@@ -1686,13 +1716,14 @@
       // just enough to show the whole drawer, smoothly.
       clearTabBar();
       slide(from, to, function () {});
-      // The fields fade in over the last part of the slide, so they don't
-      // show before there is room for them.
-      if (!still() && from < to) {
-        form.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }],
-                     { duration: SLIDE_MS, easing: "ease-out" });
+      // The view fades in over the last part of the slide, so it doesn't
+      // show before there is room for it.
+      var shown = view === "about" ? about : form;
+      if (!still() && shown && shown.animate) {
+        shown.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }],
+                      { duration: SLIDE_MS, easing: "ease-out" });
       }
-      var first = win.querySelector(".act");
+      var first = view === "form" ? win.querySelector(".act") : null;
       if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
     }
     function fold() {
@@ -1708,20 +1739,56 @@
       win.open = true;   // stays open while it sinks; closed once it lands
       slide(from, to, function () {
         win.open = false;
+        // Folded, it opens on the form next unless its strip is tapped.
+        win.dataset.view = "form";
         if (!arranged() && !expecting) { win.hidden = true; }
       });
     }
     function cardOpen(card) {
       return card && card.dataset.status === "open";
     }
+    // Who is in, for the strip. In a one-on-one (data-other names the
+    // other person) a meetup is for the two of you, so a count says
+    // nothing: it names who is in. A room counts. _meetwin.html says the
+    // same on first paint.
+    var other = win.dataset.other || "";
+    function whoIsIn(card) {
+      var count = parseInt(card.dataset.count, 10) || 0;
+      var max = parseInt(card.dataset.max, 10) || 0;
+      if (!other) { return count + " of " + max + " going"; }
+      if (count >= 2) { return "You're both in"; }
+      if (card.dataset.in === "yes") { return "Waiting for " + other; }
+      if (count) { return other + " is in"; }
+      return "Nobody's in yet";
+    }
+    // The meetup the strip names, shown in the drawer when the strip is
+    // tapped: a copy of its card from the log, refreshed whenever that card
+    // moves (sync). Its forms are sent by the enhancer like the card's own.
+    var about = win.querySelector(".meet-about");
+    var aboutCard = about ? about.querySelector(".about-card") : null;
+    function fillAbout() {
+      var card = win.dataset.post
+        ? log.querySelector('.post[data-post="' + win.dataset.post + '"]') : null;
+      if (!card || !aboutCard) { return false; }
+      // An "are you sure" the reader has open stays open across a refresh.
+      var asking = !!aboutCard.querySelector("details.confirm[open]");
+      var copy = card.cloneNode(true);
+      copy.removeAttribute("data-post");
+      aboutCard.replaceChildren(copy);
+      if (asking) {
+        var again = copy.querySelector("details.confirm");
+        if (again) { again.setAttribute("open", ""); }
+      }
+      return true;
+    }
     function adopt(card) {
       win.dataset.arranged = "yes";
       win.dataset.post = card.dataset.post;
       title.textContent = card.dataset.game
         + (card.dataset.when ? " · " + card.dataset.when : "");
-      var count = card.querySelector(".going");
-      going.textContent = count ? count.textContent.split(":")[0].trim() : "";
-      going.hidden = !count;
+      going.textContent = whoIsIn(card);
+      going.hidden = false;
+      if (win.open && win.dataset.view === "about") { fillAbout(); }
       if (lede) { lede.textContent = "Another meetup?"; }
       // A strip that was not there rises out of the bottom edge.
       if (win.hidden) {
@@ -1737,6 +1804,9 @@
       title.textContent = DEFAULT;
       going.hidden = true;
       if (lede) { lede.textContent = LEDE; }
+      // Cancelled (or over) while its own view was open: nothing left to
+      // show there, so the drawer folds away.
+      if (win.open && !win.hidden && win.dataset.view === "about") { fold(); return; }
       // A folded strip with nothing left to name sinks away.
       if (!win.open && !win.hidden && !expecting) {
         var from = heightNow();
@@ -1769,15 +1839,21 @@
     // For the members sheet: one sheet open in the chat at a time.
     window.beaconMeetFold = function () { if (win.open && !win.hidden) { fold(); } };
 
+    // The Meet up key plans a meetup: it opens the form, folds it again, and
+    // from the meetup's own view goes to the form.
     key.addEventListener("click", function () {
-      if (win.open && !win.hidden) { fold(); } else { show(); }
+      if (win.open && !win.hidden && win.dataset.view === "form") { fold(); } else { show("form"); }
     });
     // The bar is the <summary>. Left to the browser it would snap open and
-    // shut; it slides the same way the key does instead.
+    // shut; it slides the same way the key does instead. Folded to a strip
+    // naming a meetup, it opens that meetup; otherwise the form.
     win.querySelector(".meetbar").addEventListener("click", function (event) {
       event.preventDefault();
-      if (win.open) { fold(); } else { show(); }
+      if (win.open) { fold(); } else { show(arranged() ? "about" : "form"); }
     });
+    if (about) {
+      about.querySelector(".about-new").addEventListener("click", function () { show("form"); });
+    }
     // Anything else that closes the <details> (keyboard, the browser):
     // a folded window with nothing to name goes away. Not mid-slide, when
     // the slide decides.
@@ -1791,7 +1867,7 @@
     // down to a strip that sync() names from the card when it lands.
     // Refused: nothing changes, as typed.
     form.addEventListener("beacon:done", function (event) {
-      if (event.detail && event.detail.refused) { show(); return; }
+      if (event.detail && event.detail.refused) { show("form"); return; }
       expecting = true;
       win.hidden = false;
       win.open = true;

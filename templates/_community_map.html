@@ -52,6 +52,10 @@
   </div>
 
   <div class="campus-map-pane">
+    {# Two halves, side by side on a wide screen (find.html's styles): what
+       you do here on the left, what you are looking at on the right. Plain
+       blocks, one under the other, on a narrower one. #}
+    <div class="map-pane-act">
     {# What you can do here, first, right under the map: post a meetup (the
        form opens below with its pin on the map) or drop a flag. Both keys
        go away while either form is open. #}
@@ -132,7 +136,9 @@
         <button type="button" class="map-button" id="mapFlagCancel">Discard</button>
       </div>
     </form>
+    </div>
 
+    <div class="map-pane-side">
     {# The flag you tapped: what, where, who, and what you can do with it. #}
     <div id="mapFlagDetail" aria-live="polite"></div>
 
@@ -142,5 +148,6 @@
     <p class="map-privacy">
       Your GPS position stays in this browser. Only the flag position you choose is saved.
     </p>
+    </div>
   </div>
 </section>
