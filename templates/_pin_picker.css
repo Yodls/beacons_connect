@@ -205,10 +205,10 @@
 
       /* ---------- narrow: two steps ----------
          The form is a column as tall as the drawer may be, and shows one
-         step's fields: What & where (the activity and how many, then the
-         map taking the rest of the height), and When (the day, the time,
-         the note, the summary and the key). The strip and the Back and
-         Next keys move between them. */
+         step's fields: What & when (the activity and how many, the day,
+         the time, the note), then Where (the map with the whole height,
+         the landmarks, the summary and the key). The strip and the Back
+         and Next keys move between them. */
       @container meetwin (width < 40rem) {
         .meetwin > .newmeet-menu {
           display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
@@ -219,9 +219,8 @@
         .meetwin .meet-steps { order: -1; }
         .meetwin .meet-lede { display: none; }
         .meetwin .meet-sec { border-top: 0; padding-top: 2px; }
-        /* When: the day on one row and the time on the next, each at full
-           width and readable; the summary is a plain line and the note a
-           line's height, so the step fits a phone without scrolling. */
+        /* What & when: the activity, the day on one row and the time on
+           the next, each at full width and readable, then the note. */
         .meetwin .meet-sec { padding-bottom: 6px; }
         .meetwin .meet-sum:not(:empty) { padding: 2px 0 0; background: none; border: 0; }
         /* The foot: the summary first, then Back and the key on one row. */
@@ -234,13 +233,15 @@
         .meetwin .meet-nav button[type="submit"] { display: none; }
         .meetwin .pin-hint { display: none; }
         /* one step's fields */
-        .newmeet-menu[data-step="what"] .meet-when, .newmeet-menu[data-step="what"] .meet-note,
-        .newmeet-menu[data-step="when"] .meet-what, .newmeet-menu[data-step="when"] .pinbox { display: none; }
-        /* What & where: the activity keeps its own height, the map the rest.
-           No caption over the activity: the strip says "What & where". */
-        .meetwin .newmeet-menu[data-step="what"] .meet-what { flex: none; padding: 0; }
-        .meetwin .newmeet-menu[data-step="what"] .meet-what .meet-cap { display: none; }
-        .meetwin .newmeet-menu[data-step="what"] .pin-stage { min-height: 108px; }
+        .newmeet-menu[data-step="what"] .pinbox,
+        .newmeet-menu[data-step="where"] .meet-what, .newmeet-menu[data-step="where"] .meet-when,
+        .newmeet-menu[data-step="where"] .meet-note { display: none; }
+        .meetwin .newmeet-menu[data-step="what"] .meet-what,
+        .meetwin .newmeet-menu[data-step="what"] .meet-when { flex: none; }
+        /* No What or When caption: the strip says "What & when", and the
+           room goes to the note. The note keeps its caption ("optional"). */
+        .meetwin .meet-what .meet-cap, .meetwin .meet-when .meet-cap { display: none; }
+        .meetwin .newmeet-menu[data-step="what"] .meet-sec { padding-bottom: 2px; }
         /* The foot is always in reach: if a short screen makes the step
            scroll, Back, Next and the key stay at the drawer's foot. */
         .meetwin .meet-nav {
@@ -248,8 +249,8 @@
           margin-bottom: -2px; padding-bottom: 2px;
           background: var(--paper);
         }
-        .meetwin .newmeet-menu[data-step="when"] .meet-sum { display: block; }
-        .meetwin .newmeet-menu[data-step="when"] .meet-nav button[type="submit"] { display: inline-flex; }
+        .meetwin .newmeet-menu[data-step="where"] .meet-sum { display: block; }
+        .meetwin .newmeet-menu[data-step="where"] .meet-nav button[type="submit"] { display: inline-flex; }
         /* Where: the map takes what the chips leave; the spot's words float
            over its foot, as the big map's status line does, above the
            tiles and the zoom keys. */
@@ -263,8 +264,8 @@
           font-size: .85rem;
         }
         .meetwin .pin-line .pin-where { font-size: .85rem; }
-        /* When: the note takes what the day and the foot leave, and is
-           never squeezed below its own size: the form scrolls instead. */
+        /* The note takes what the activity, the day and the foot leave, and
+           is never squeezed below its own size: the form scrolls instead. */
         .meetwin .meet-note { flex: 1 1 auto; min-height: max-content; padding-bottom: 2px; }
         .meetwin .meet-note textarea { flex: 1 1 48px; min-height: 48px; }
       }

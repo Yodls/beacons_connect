@@ -72,13 +72,13 @@
     <input type="hidden" name="mode" value="inperson" />
 
     {# In a narrow drawer (a phone) the form is two steps, one at a time --
-       what and where together, the activity over the map, then when -- and
-       this strip is how you move between them; data-step on the form says
-       which is showing (_pin_picker.css hides the other). A wide drawer
-       shows everything at once and hides the strip. #}
+       what and when together, then where, the map with the whole height --
+       and this strip is how you move between them; data-step on the form
+       says which is showing (_pin_picker.css hides the other). A wide
+       drawer shows everything at once and hides the strip. #}
     <nav class="meet-steps" aria-label="Steps">
-      <button type="button" class="step-tab" data-go="what" aria-current="step">{{ ui.icon("meet") }}What &amp; where</button>
-      <button type="button" class="step-tab" data-go="when">{{ ui.icon("calendar") }}When</button>
+      <button type="button" class="step-tab" data-go="what" aria-current="step">{{ ui.icon("calendar") }}What &amp; when</button>
+      <button type="button" class="step-tab" data-go="where">{{ ui.icon("meet") }}Where</button>
     </nav>
 
     {# What and when: captioned sections, ruled off from one another. #}
@@ -157,8 +157,8 @@
     </div>
 
     {# Where: the map, with a pin to drag or tap into place
-       (static/pin-picker.js). In the steps it shares the first step with
-       the activity, and takes the height the activity leaves. #}
+       (static/pin-picker.js). In the steps it is the last step, with the
+       whole height, the summary and the key under it. #}
     <div class="pinbox" data-bounds='{{ map_bounds | tojson }}' data-places='{{ landmarks | tojson }}'>
       <input type="hidden" name="where" value="map" />
       <input type="hidden" name="latitude" />
@@ -189,7 +189,7 @@
     <div class="meet-nav">
       <button type="button" class="step-back" data-go="what">&larr; Back</button>
       <p class="meet-sum" aria-live="polite"></p>
-      <button type="button" class="step-next" data-go="when">Next: When &rarr;</button>
+      <button type="button" class="step-next" data-go="where">Next: Where &rarr;</button>
       <button type="submit">{{ "Post" if in_room else "Ask them" }}</button>
     </div>
   </form>

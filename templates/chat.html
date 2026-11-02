@@ -1802,8 +1802,8 @@
   })();
 
   // The Meet up form's steps. In a narrow drawer (a phone, or a chat
-  // beside a board) the form is two steps -- what and where together, then
-  // when -- one at a time, moved between by the strip under the bar and the
+  // beside a board) the form is two steps -- what and when together, then
+  // where -- one at a time, moved between by the strip under the bar and the
   // Back and Next keys
   // (_meetwin.html; _pin_picker.css shows one step's fields). The last step
   // sums the meetup up in a line beside the key that posts it. A wide
@@ -1812,22 +1812,22 @@
     var form = document.querySelector("#meetwin form");
     var strip = form && form.querySelector(".meet-steps");
     if (!form || !strip) { return; }
-    var ORDER = ["what", "when"];
-    var WORDS = { what: "What & where", when: "When" };
+    var ORDER = ["what", "where"];
+    var WORDS = { what: "What & when", where: "Where" };
     var back = form.querySelector(".step-back");
     var next = form.querySelector(".step-next");
     var sum = form.querySelector(".meet-sum");
     var act = form.querySelector(".act");
     var count = form.querySelector("[name=max_players]");
-    var where = form.querySelector(".pin-where");
     var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     function stepsOn() { return getComputedStyle(strip).display !== "none"; }
     function current() { return form.dataset.step || "what"; }
 
-    // What the meetup adds up to: the activity (and how many), the spot in
-    // the pin's words, the day and the time if one is set.
+    // What the first step said, under the map on the last: the activity
+    // (and how many), the day and the time if one is set. Not the spot: the
+    // map's own line says that, just above.
     function summarise() {
       if (!sum) { return; }
       var parts = [];
@@ -1838,7 +1838,6 @@
         if (count && count.value) { what += " · " + count.value + " people"; }
         parts.push(what);
       }
-      if (where && where.textContent.trim()) { parts.push(where.textContent.trim()); }
       var on = form.when_on && form.when_on.value;
       if (on && /^\d{4}-\d{2}-\d{2}$/.test(on)) {
         var d = new Date(+on.slice(0, 4), +on.slice(5, 7) - 1, +on.slice(8, 10));
@@ -1873,10 +1872,10 @@
           next.textContent = "Next: " + WORDS[ORDER[at + 1]] + " →";
         }
       }
-      if (step === "when") { summarise(); }
+      if (step === "where") { summarise(); }
       form.scrollTop = 0;
       if (focus && stepsOn()) {
-        var first = step === "what" ? act : step === "when" ? form.when_on : null;
+        var first = step === "what" ? act : null;
         if (first) { try { first.focus({ preventScroll: true }); } catch (e) { /* fine */ } }
       }
     }
@@ -1887,7 +1886,7 @@
     });
     // Enter in a field on an early step moves on rather than posting.
     form.addEventListener("keydown", function (event) {
-      if (event.key !== "Enter" || !stepsOn() || current() === "when") { return; }
+      if (event.key !== "Enter" || !stepsOn() || current() === ORDER[ORDER.length - 1]) { return; }
       var t = event.target;
       if (t.tagName === "TEXTAREA" || t.tagName === "BUTTON") { return; }
       event.preventDefault();
