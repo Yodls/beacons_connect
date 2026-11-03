@@ -7926,12 +7926,21 @@ def map_flag_payloads(rows):
     flags = [flag for flag, _, _ in rows]
     post_ids = [f.post_id for f in flags if f.post_id]
     posts = {}
-    going, mine = {}, set()
+    people, mine = {}, set()
     rooms = {}
     if post_ids:
         posts = {p.id: p for p in db.session.scalars(
             db.select(GamePost).where(GamePost.id.in_(post_ids)))}
-        going, mine = rsvps_for(post_ids)
+        _, mine = rsvps_for(post_ids)
+        # Who is going, with their ids: the flag's card draws each of them
+        # as the same coloured avatar they have everywhere else.
+        for post_id, user_id, name in db.session.execute(
+            db.select(GamePostRsvp.post_id, User.id, User.name)
+            .join(User, User.id == GamePostRsvp.user_id)
+            .where(GamePostRsvp.post_id.in_(post_ids))
+            .order_by(User.name)
+        ):
+            people.setdefault(post_id, []).append({"id": user_id, "name": name})
         rooms = chats_for(post_ids)
 
     # The friends each of *my* "My friend(s)" flags is shared with, so the
@@ -7954,12 +7963,16 @@ def map_flag_payloads(rows):
         event = None
         post = posts.get(flag.post_id)
         if post is not None:
-            names = going.get(post.id, [])
+            names = people.get(post.id, [])
             im_going = post.id in mine
             event = {
                 "post_id": post.id,
                 "when": post.when_text,
+                # The moment itself, when one was picked, so the card can say
+                # "Today" or "Tomorrow" beside the date.
+                "starts_at": post.starts_at.isoformat() + "Z" if post.starts_at else None,
                 "going": len(names),
+                "people": names,
                 "max": post.max_players,
                 "full": len(names) >= post.max_players,
                 "im_going": im_going,
@@ -7982,6 +7995,8 @@ def map_flag_payloads(rows):
             "latitude": float(flag.latitude),
             "longitude": float(flag.longitude),
             "owner_name": owner_name,
+            # For the owner's avatar on the card (its colour is the id's).
+            "owner_id": flag.owner_id,
             "mine": is_mine,
             "event": event,
             "created_at": flag.created_at.isoformat() + "Z",

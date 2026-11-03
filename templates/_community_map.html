@@ -2,8 +2,10 @@
   The campus map (Leaflet + OpenStreetMap), drawn as a Beacon OS window.
 
   How it works (static/community-map.js does all of this by id):
-    - Flags come from data-flags-url. Tap one to see it in the card under the
-      map (#mapFlagDetail).
+    - Flags come from data-flags-url. Tap one and its card opens in a callout
+      standing on the flag (a Leaflet popup); on a phone the card rises as a
+      sheet over the foot of the map instead. #mapFlagDetail under the map
+      only carries the "tap the map" hint while a flag is being placed.
     - "Drop a flag" starts placing: tap the map and a dashed draft flag
       appears with the editor (#mapFlagForm). Nothing is saved until "Submit
       flag". The draft can be dragged, or moved by tapping somewhere else.

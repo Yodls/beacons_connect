@@ -91,39 +91,131 @@
         clip-path: path("M0 1.5C3 0 5 0 8.5 1.5S14 3 17 1.5V10.5C14 12 11.5 12 8.5 10.5S3 9 0 10.5Z");
       }
 
-      /* the flag you tapped */
+      /* ---------- the flag you tapped ----------
+         One card, built by the script: a title bar in the flag's colour,
+         who put it there and what it is, a line each for when, where and
+         who, the note, the keys. It is shown in a callout standing on the
+         flag (a Leaflet popup, below) or, on a phone, in a sheet over the
+         foot of the map (further below). */
       .flag-detail {
-        display: grid; gap: 10px; padding: 12px;
-        background: var(--paper);
-        border: 2px solid var(--navy); border-radius: var(--r);
+        display: grid; min-width: 0;
+        font: 400 1rem/1.35 var(--sans); color: var(--navy);
       }
-      .fd-top { display: flex; align-items: flex-start; gap: 10px; }
-      .fd-top .grow { flex: 1 1 auto; min-width: 0; }
-      .fd-title { display: block; font-size: 1.05rem; font-weight: 700; }
-      .fd-sub { display: block; margin-top: 2px; color: var(--muted); font-size: .9rem; }
-      .fd-note { color: var(--navy); font-size: .95rem; }
+      .flag-detail a { color: var(--navy); }
+      /* The bar stays put while a long card scrolls under it (the callout
+         scrolls inside Leaflet's content box, the sheet in itself). */
+      .fd-bar {
+        position: sticky; top: 0; z-index: 1;
+        display: flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 0 6px 0 12px;
+        background: var(--flag-color); color: var(--flag-ink, #fff);
+        border-bottom: 2px solid var(--navy);
+      }
+      .fd-bar > .icon { width: 18px; height: 18px; flex: none; }
+      .fd-kind { flex: 1 1 auto; font: 400 20px/1.08 var(--title); letter-spacing: .02em; }
+      .fd-grip { display: none; }
       .fd-close, .fd-close:hover, .fd-close:active {
-        flex: none; width: 36px; height: 36px; min-height: 0; padding: 0;
+        flex: none; width: 30px; height: 30px; min-height: 0; padding: 0;
         display: grid; place-items: center;
         background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: none; transform: none;
       }
-      .fd-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-      .fd-tags .tag { background: #fff; color: var(--navy); }
-      .fd-tags .tag.kind { background: var(--flag-color); color: var(--flag-ink, #fff); }
-      .fd-event {
-        display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-        padding: 8px 10px; background: #fff;
-        border: 2px dashed var(--line-2); border-radius: var(--r-sm);
-        font-size: .92rem; font-weight: 700;
+      .fd-close .icon { width: 12px; height: 12px; }
+      .fd-body { display: grid; gap: 9px; padding: 11px 12px 12px; }
+      /* who put it there, and what it is */
+      .fd-head { display: flex; align-items: center; gap: 10px; }
+      .fd-head .grow { flex: 1 1 auto; min-width: 0; }
+      .fd-head .avatar { width: 36px; height: 36px; font-size: 16px; }
+      .fd-title { display: block; font: 700 1.1rem/1.25 var(--sans); overflow-wrap: anywhere; }
+      .fd-sub { display: block; margin-top: 1px; color: var(--muted); font-size: .88rem; }
+      /* when, where, who: a line each, with its icon */
+      .fd-lines { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+      .fd-line { display: flex; align-items: flex-start; gap: 8px; font-size: .92rem; }
+      .fd-line > .icon { width: 16px; height: 16px; flex: none; margin-top: 3px; color: var(--beacon); }
+      .fd-text { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+      .fd-text b { font-size: .98rem; }
+      .flag-detail .tag { height: 22px; padding: 0 6px; font-size: .72rem; }
+      .flag-detail .tag.soon { background: var(--gold); color: var(--navy); }
+      .flag-detail .tag.in { background: var(--beacon); color: #fff; }
+      /* who's in: their faces, overlapping, then their names */
+      .fd-faces { display: inline-flex; flex: none; }
+      .fd-faces .avatar { width: 24px; height: 24px; font-size: 11px; box-shadow: 0 0 0 2px #fff; }
+      .fd-faces .avatar + .avatar { margin-left: -7px; }
+      /* the note, as a quote in the flag's colour */
+      .flag-detail .fd-note {
+        margin: 0; padding: 8px 10px;
+        background: var(--paper); color: var(--navy);
+        border-left: 4px solid var(--flag-color); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+        font-size: .92rem; font-style: italic; overflow-wrap: anywhere;
       }
+      /* the keys: "I'm in" gold across the card, the rest in a row */
       .fd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
       .fd-actions form { margin: 0; }
-      .fd-actions button, .fd-actions .key {
-        min-height: 40px; padding: 0 12px; font-size: .92rem;
+      .fd-actions form:has(> .fd-join) { flex: 1 1 100%; }
+      .fd-actions .fd-join, .fd-actions .fd-join:hover {
+        display: flex; align-items: center; justify-content: center;
+        width: 100%; min-height: 44px; margin: 0;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 4px 0 var(--navy);
+        font: 700 1rem/1 var(--sans); cursor: pointer;
       }
-      .fd-hint { color: var(--muted); font-size: .85rem; }
+      .fd-actions .fd-join:hover { background: #fff2a8; }
+      .fd-actions .fd-join:active { transform: translateY(4px); box-shadow: none; }
+      .fd-actions .fd-join[disabled], .fd-actions .fd-join[disabled]:hover {
+        opacity: .6; cursor: not-allowed; transform: none; box-shadow: none;
+      }
+      .fd-actions .map-button, .fd-actions .key { min-height: 40px; padding: 0 12px; font-size: .9rem; }
+      .fd-actions .quiet { color: var(--muted); border-color: var(--line-2); box-shadow: 0 3px 0 var(--line-2); }
+      /* your own flag's keys: a smaller row of their own */
+      .fd-own { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+      .fd-actions .small { min-height: 34px; padding: 0 10px; font-size: .82rem; box-shadow: 0 2px 0 var(--navy); }
+      .fd-actions .small.warn { box-shadow: 0 2px 0 var(--danger); }
+      .fd-actions .small:active { transform: translateY(2px); box-shadow: none; }
+      /* "Tap the map where you want people to find you", under the map
+         while a flag is being placed */
+      #mapFlagDetail .fd-hint {
+        margin: 0; padding: 10px 12px; color: var(--muted); font-size: .9rem;
+        background: var(--paper); border: 2px dashed var(--line-2); border-radius: var(--r);
+      }
+
+      /* the callout: a Beacon OS window standing on the flag, its tail
+         pointing at the flag's pole */
+      .beacon-callout { margin-bottom: 12px; }
+      .beacon-callout .leaflet-popup-content-wrapper {
+        padding: 0; overflow: hidden;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
+      }
+      .beacon-callout .leaflet-popup-content { margin: 0; font-size: 1rem; line-height: 1.35; }
+      .beacon-callout .leaflet-popup-scrolled { border: 0; }
+      /* The tail: a white square turned on its corner, its lower two sides
+         navy, drawn over the window's bottom edge so the outline runs down
+         the tail unbroken. */
+      .beacon-callout .leaflet-popup-tip-container { margin-top: -3px; }
+      .beacon-callout .leaflet-popup-tip {
+        width: 16px; height: 16px; padding: 0; margin: -10px auto 0;
+        background: #fff; box-shadow: none;
+        border: 2px solid var(--navy); border-top-color: transparent; border-left-color: transparent;
+      }
+
+      /* the sheet: on a phone the card rises over the foot of the map */
+      .map-sheet {
+        position: absolute; z-index: 1001; left: 0; right: 0; bottom: 0;
+        max-height: calc(100% - 56px); overflow: auto; overscroll-behavior: contain;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-bottom: 0;
+        border-radius: var(--r) var(--r) 0 0;
+        box-shadow: 0 -4px 0 rgba(19, 34, 69, .18);
+      }
+      /* a grip in its bar, to say it can be drawn down */
+      .map-sheet .fd-grip {
+        display: block; position: absolute; left: 50%; top: 5px;
+        width: 36px; height: 4px; transform: translateX(-50%);
+        background: var(--flag-ink, #fff); opacity: .65; border-radius: 2px;
+      }
       /* a link drawn as a white key */
       .key {
         display: inline-flex; align-items: center; justify-content: center;
@@ -312,6 +404,7 @@
       .approved-place-icon.place-on > span { transform: translate(-25%, -50%); opacity: 1; }
       @media (prefers-reduced-motion: reduce) {
         .approved-place-icon > span { transition: none; }
+        #beaconCampusMap { transition: none; }
       }
       /* you are here: an orange pixel with a white rim */
       .user-position-dot {
@@ -344,7 +437,10 @@
       }
       @media (max-width: 560px) {
         #beaconCampusMap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
-        .map-status { bottom: 26px; }
+        /* The map grows to fit a flag's sheet (the script sets its height
+           and --sheet-h), and the status line moves up out of the way. */
+        #beaconCampusMap { transition: height .25s ease; }
+        .map-status { bottom: calc(var(--sheet-h, 0px) + 26px); }
         .map-pickbar { bottom: 26px; }
         .campus-map-card.picking .map-status { bottom: 82px; }
         /* 16px keeps iOS from zooming the page when a field is focused */

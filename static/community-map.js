@@ -173,10 +173,11 @@
   function whoLine(flag) {
     var names = (flag.friends || []).map(function (f) { return firstName(f.name); });
     if (flag.mine) {
+      // A meetup's card says who may see it on its own line.
+      if (flag.event) { return "Your meetup"; }
       if (flag.visibility === "club") { return "You, for " + flag.club_name + " members"; }
       if (flag.visibility === "friends") { return "You, for " + (names.length ? listNames(names) : "your friends"); }
-      if (flag.visibility === "going") { return "Your meetup. Only people who are in can see it."; }
-      return (flag.event ? "Your meetup." : "Posted by you.") + " Everyone can see it.";
+      return "Posted by you. Everyone can see it.";
     }
     if (flag.visibility === "club") { return flag.club_name + " members. Posted by " + flag.owner_name; }
     if (flag.visibility === "friends") { return "Shared with you by " + flag.owner_name; }
@@ -270,7 +271,11 @@
   function initMap() {
     map = L.map("beaconCampusMap", {
       zoomControl: true, minZoom: 15, maxZoom: 19,
-      maxBounds: CAMPUS_BOUNDS, maxBoundsViscosity: 0.85
+      // The map may be panned half a campus past the dashed area on every
+      // side (flags still have to go inside it): a flag's callout stands
+      // on the flag, and one on the north edge needs the map to pan that
+      // far to show it.
+      maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(0.5), maxBoundsViscosity: 0.85
     }).setView(CAMPUS_CENTER, 17);
     lockUntilTap(document.getElementById("beaconCampusMap"));
 
@@ -298,8 +303,20 @@
     flagLayer = L.layerGroup().addTo(map);
     userLayer = L.layerGroup().addTo(map);
 
+    // The map's box changes size when a flag's sheet grows it on a phone.
+    // Leaflet only watches the window, so it is told here. While a sheet
+    // is up the map keeps its top edge still (the flag stays where it was
+    // tapped) rather than its centre.
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () {
+        map.invalidateSize({ pan: !root.classList.contains("showing"), animate: false });
+      }).observe(map.getContainer());
+    }
+
     map.on("click", function (event) {
-      if (mode === "idle") { pickPlace(null); return; }
+      // A tap on the map puts a landmark back, and on a phone puts the
+      // flag's sheet away (Leaflet shuts the callout itself).
+      if (mode === "idle") { pickPlace(null); if (phone() && selected) { select(null); } return; }
       if (mode === "pick") { movePick(event.latlng); return; }
       if (!campusContains(event.latlng)) {
         announce("Flags have to go inside the dashed campus area.", "error");
@@ -500,18 +517,66 @@
   }
 
   // ---------- 5. the flag card ----------
+  // The flag you tapped opens in a callout on the map: a Beacon OS window
+  // standing on the flag with a tail pointing at it (a Leaflet popup,
+  // dressed by _community_map.css). On a phone, where a callout would not
+  // fit over 300px of tiles, the same card rises as a sheet over the foot
+  // of the map instead, and the map grows a little to keep the flag in
+  // view above it. One card is built either way; only its home differs.
+  var PHONE = window.matchMedia("(max-width: 560px)");
+  var CALLOUT_LIFT = 68;  // px from the flag's point up to the callout's foot
+  var CALLOUT_FOOT = 12;  // the callout's own margin under that, holding its tail
+  var SHEET_MS = 220;
+  var callout = null;     // the Leaflet popup, made the first time it is needed
+  var shutting = false;   // the callout is being closed from here, not by a tap
+  var sheet = null;       // the phone's sheet, made the first time it is needed
+  var sheetMoving = null; // its slide, so a second tap doesn't fight the first
+  var sheetHeight = 0;    // how tall the sheet stands (its card may scroll inside)
+  var sheetBand = 0;      // the band of map left above it
+  var mapBase = 0;        // the map's height before a sheet grew it
+  var mapTall = 0;        // and once it has
+  var flying = false;     // select() is flying to the flag: no other nudges
+  var stage = root.querySelector(".campus-map-stage");
+
+  function phone() { return PHONE.matches; }
+  function still() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+
   function select(id, fly, quiet) {
     selected = id;
     confirmDown = null;
+    // Flying there puts the card in view itself, so the callout's own
+    // nudge to fit on opening is not wanted on top of it.
+    flying = !!fly;
+    if (callout) { callout.options.autoPan = !fly; }
     renderDetail();
+    flying = false;
+    if (callout) { callout.options.autoPan = true; }
     if (!quiet) { renderMarkers(); }
     var flag = findFlag(id);
-    if (flag && fly && map) { map.flyTo([flag.latitude, flag.longitude], 18, { duration: 0.45 }); }
-    // The card is drawn under the map, which on a phone is under the fold.
-    if (flag && !quiet) {
-      var card = document.querySelector(".flag-detail");
-      if (card && card.scrollIntoView) { card.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    if (flag && fly && map) { flyToFlag(flag); }
+    // Your own flag can be dragged: said in the status line, where there
+    // is room for it (not over the phone's band of map).
+    if (flag && flag.mine && !phone()) { announce("Drag your flag on the map to move it."); }
+  }
+
+  // Fly to a flag so that its card lands in the middle of the map: the
+  // point flown to is the flag's, moved by half the card's height (up for a
+  // callout standing on the flag, down for a sheet under it).
+  function flyToFlag(flag) {
+    var zoom = 18;
+    var at = L.latLng(flag.latitude, flag.longitude);
+    var lift = 0;
+    if (phone()) {
+      // The flag's foot near the bottom of the band above the sheet.
+      if (sheetHeight) { lift = Math.max(60, sheetBand - 14) - mapTall / 2; }
+    } else if (callout && callout.isOpen()) {
+      lift = callout.getElement().offsetHeight / 2 + CALLOUT_LIFT + CALLOUT_FOOT;
+      // Once there, let the callout nudge the map if any of it is still
+      // off the edge.
+      map.once("moveend", function () { if (callout.isOpen()) { callout.update(); } });
     }
+    var centre = lift ? map.unproject(map.project(at, zoom).subtract([0, lift]), zoom) : at;
+    map.flyTo(centre, zoom, { duration: 0.45 });
   }
 
   function tag(text, extra) { return node("span", "tag" + (extra ? " " + extra : ""), text); }
@@ -523,84 +588,116 @@
     return b;
   }
 
-  function renderDetail() {
-    // Rebuild only when something on the card changed, so a refresh never
-    // pulls a button out from under somebody about to press it.
-    var current = selected && mode === "idle" ? findFlag(selected) : null;
-    var key = mode + "|" + confirmDown + "|" + JSON.stringify(current) +
-      (current ? expiresText(current.expires_at) : "");
-    if (key === shownCard) { return; }
-    shownCard = key;
-    el.detail.replaceChildren();
-    if (mode === "placing") {
-      el.detail.appendChild(node("p", "flag-detail fd-hint",
-        "Tap the map where you want people to find you."));
-      return;
-    }
-    var flag = selected && mode === "idle" ? findFlag(selected) : null;
-    if (!flag) { return; }
+  // Somebody's avatar: their initials on the colour their id gives them,
+  // the same as _ui.html's macro draws everywhere else.
+  function avatar(name, id) {
+    var parts = String(name || "").split(" ").filter(Boolean);
+    var initials = (parts.length ? parts[0][0] : "") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+    var a = node("span", "avatar sm av-" + (Math.abs(parseInt(id, 10) || 0) % 6), initials.toUpperCase());
+    a.setAttribute("aria-hidden", "true");
+    a.title = name || "";
+    return a;
+  }
+
+  // "Ira", "Ira and Mo", "Ira, Mo and Sam", "Ira, Mo and 3 more".
+  function peopleText(names) {
+    if (names.length <= 1) { return names.join(""); }
+    if (names.length <= 3) { return names.slice(0, -1).join(", ") + " and " + names[names.length - 1]; }
+    return names.slice(0, 2).join(", ") + " and " + (names.length - 2) + " more";
+  }
+
+  // "Today", "Tomorrow" or "In 3 days", by the campus's own calendar; and
+  // "Happening now" for the first hours after it starts.
+  function dayKey(date) {
+    return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  }
+  function soonText(ev) {
+    if (!ev || !ev.starts_at) { return ""; }
+    var at = new Date(ev.starts_at);
+    if (isNaN(at.getTime())) { return ""; }
+    var gone = Date.now() - at.getTime();
+    if (gone >= 0) { return gone < 3 * 3600000 ? "Happening now" : ""; }
+    var days = Math.round((Date.parse(dayKey(at)) - Date.parse(dayKey(new Date()))) / 86400000);
+    if (days === 0) { return "Today"; }
+    if (days === 1) { return "Tomorrow"; }
+    if (days > 1 && days < 14) { return "In " + days + " days"; }
+    return "";
+  }
+
+  // One line of the card: an icon, then whatever is put in the text span.
+  function line(list, icon) {
+    var li = node("li", "fd-line");
+    li.appendChild(spriteNode(icon));
+    var text = node("span", "fd-text");
+    li.appendChild(text);
+    list.appendChild(li);
+    return text;
+  }
+
+  // The card itself: a title bar in the flag's colour, who put it there and
+  // what it is, a line each for when, where and who, the note, the keys.
+  function buildCard(flag) {
     var look = kindOf(flag.category);
-    var card = node("div", "flag-detail");
+    var ev = flag.event;
+    var card = node("div", "flag-detail" + (ev ? " is-event" : ""));
     card.style.setProperty("--flag-color", look.color);
     card.style.setProperty("--flag-ink", look.ink);
 
-    var top = node("div", "fd-top");
-    var text = node("div", "grow");
-    text.appendChild(node("b", "fd-title", flag.title));
-    text.appendChild(node("span", "fd-sub", flag.location_name));
-    text.appendChild(node("span", "fd-sub", whoLine(flag)));
-    top.appendChild(text);
+    var bar = node("div", "fd-bar");
+    bar.appendChild(spriteNode(look.icon));
+    bar.appendChild(node("span", "fd-kind", ev ? "Meetup" : labelOf(flag.category)));
+    bar.appendChild(node("span", "fd-grip"));
     var close = node("button", "fd-close");
     close.type = "button";
     close.setAttribute("aria-label", "Close this flag's details");
     close.appendChild(spriteNode("close"));
     close.addEventListener("click", function () { select(null); });
-    top.appendChild(close);
-    card.appendChild(top);
+    bar.appendChild(close);
+    card.appendChild(bar);
 
-    if (flag.description) { card.appendChild(node("p", "fd-note", flag.description)); }
+    var body = node("div", "fd-body");
+    var head = node("div", "fd-head");
+    head.appendChild(avatar(flag.owner_name, flag.owner_id));
+    var text = node("div", "grow");
+    text.appendChild(node("b", "fd-title", flag.title));
+    text.appendChild(node("span", "fd-sub", whoLine(flag)));
+    head.appendChild(text);
+    body.appendChild(head);
 
-    var tags = node("div", "fd-tags");
-    tags.appendChild(tag(labelOf(flag.category), "kind"));
-    if (!flag.event) { tags.appendChild(tag(expiresText(flag.expires_at))); }
-    if (flag.mine || flag.visibility === "going") { tags.appendChild(tag(AUDIENCE[flag.visibility])); }
-    card.appendChild(tags);
-
-    // A meetup's flag: when it is, how many are in, and the way in.
-    var ev = flag.event;
+    var lines = node("ul", "fd-lines");
     if (ev) {
-      var line = node("div", "fd-event");
-      if (ev.when) { line.appendChild(node("span", "", ev.when)); }
-      line.appendChild(node("span", "", ev.going + " of " + ev.max + " going"));
-      if (ev.im_going && !flag.mine) { line.appendChild(node("span", "", "You're in")); }
-      card.appendChild(line);
+      var when = line(lines, "calendar");
+      var soon = soonText(ev);
+      if (ev.when) { when.appendChild(node("b", "", ev.when)); }
+      if (soon) { when.appendChild(tag(soon, "soon")); }
+      if (!ev.when && !soon) { when.appendChild(node("span", "", "Time to be arranged")); }
+    } else {
+      line(lines, "calendar").appendChild(node("span", "", expiresText(flag.expires_at)));
     }
+    line(lines, "meet").appendChild(node("span", "", flag.location_name));
+    if (ev) {
+      var who = line(lines, "people");
+      var people = ev.people || [];
+      if (people.length) {
+        var faces = node("span", "fd-faces");
+        people.slice(0, 5).forEach(function (p) { faces.appendChild(avatar(p.name, p.id)); });
+        who.appendChild(faces);
+      }
+      var names = people.map(function (p) { return firstName(p.name); });
+      who.appendChild(node("span", "", (names.length ? peopleText(names) + " · " : "") +
+        ev.going + " of " + ev.max + " going"));
+      // Your own meetup needs neither: "Your meetup" says you're in, and
+      // the Lock meetup key says everyone can see it.
+      if (ev.im_going && !flag.mine) { who.appendChild(tag("You're in", "in")); }
+      if (flag.visibility === "going") {
+        line(lines, "lock").appendChild(node("span", "", "Locked: only people who are in can see it"));
+      }
+    }
+    body.appendChild(lines);
+
+    if (flag.description) { body.appendChild(node("p", "fd-note", flag.description)); }
 
     var actions = node("div", "fd-actions");
-    if (flag.mine) {
-      actions.appendChild(button("Edit", "map-button", function () { startEdit(flag); }));
-      if (ev) {
-        var nextAudience = flag.visibility === "public" ? "going" : "public";
-        actions.appendChild(button(
-          flag.visibility === "public" ? "Lock meetup" : "Make public",
-          "map-button", function () { saveAudience(flag, nextAudience); }));
-      }
-      actions.appendChild(button(confirmDown === flag.id ? "Tap again to take down" : "Take down",
-        "map-button warn", function () {
-          if (confirmDown !== flag.id) { confirmDown = flag.id; renderDetail(); return; }
-          takeDown(flag);
-        }));
-    }
-    if (!flag.mine) {
-      // Reporting somebody else's pin. An <a> rather than a button: it
-      // opens a page to write on, and the server re-checks that this pin is
-      // one you were allowed to see before it quotes it back to anybody.
-      // flag.id is the public_id -- row ids stay internal, and /report
-      // takes the same public one the delete endpoint does.
-      var tell = node("a", "map-button quiet", "Report");
-      tell.href = "/report?kind=abuse&flag=" + encodeURIComponent(flag.id);
-      actions.appendChild(tell);
-    }
     if (ev && !flag.mine && !ev.im_going && ev.open) {
       // A real form, so "I'm in" works the same as on the meetup's card.
       var form = node("form");
@@ -608,7 +705,7 @@
       form.action = urls.rsvp.replace("/0/", "/" + ev.post_id + "/");
       var back = node("input"); back.type = "hidden"; back.name = "back"; back.value = "find";
       form.appendChild(back);
-      var join = node("button", "", ev.full ? "It's full" : "I'm in");
+      var join = node("button", "fd-join", ev.full ? "It's full" : "I'm in");
       join.type = "submit"; join.disabled = ev.full;
       form.appendChild(join);
       actions.appendChild(form);
@@ -621,10 +718,201 @@
     // Anyone who can see a flag can share it: pasted into a chat, the link
     // shows as the flag's card, but only to people allowed to see the flag.
     actions.appendChild(button("Copy link", "map-button", function () { copyLink(flag); }));
-    if (actions.children.length) { card.appendChild(actions); }
-    if (flag.mine) { card.appendChild(node("p", "fd-hint", "Drag your flag on the map to move it.")); }
-    el.detail.appendChild(card);
+    if (flag.mine) {
+      // Your own flag's keys, smaller, on a row of their own.
+      var own = node("div", "fd-own");
+      own.appendChild(button("Edit", "map-button small", function () { startEdit(flag); }));
+      if (ev) {
+        var nextAudience = flag.visibility === "public" ? "going" : "public";
+        own.appendChild(button(
+          flag.visibility === "public" ? "Lock meetup" : "Make public",
+          "map-button small", function () { saveAudience(flag, nextAudience); }));
+      }
+      own.appendChild(button(confirmDown === flag.id ? "Tap again to take down" : "Take down",
+        "map-button small warn", function () {
+          if (confirmDown !== flag.id) { confirmDown = flag.id; renderDetail(); return; }
+          takeDown(flag);
+        }));
+      actions.appendChild(own);
+    }
+    if (!flag.mine) {
+      // Reporting somebody else's pin. An <a> rather than a button: it
+      // opens a page to write on, and the server re-checks that this pin is
+      // one you were allowed to see before it quotes it back to anybody.
+      // flag.id is the public_id -- row ids stay internal, and /report
+      // takes the same public one the delete endpoint does.
+      var tell = node("a", "map-button quiet", "Report");
+      tell.href = "/report?kind=abuse&flag=" + encodeURIComponent(flag.id);
+      actions.appendChild(tell);
+    }
+    body.appendChild(actions);
+    card.appendChild(body);
+    return card;
   }
+
+  function renderDetail() {
+    // Rebuild only when something on the card changed, so a refresh never
+    // pulls a button out from under somebody about to press it.
+    var current = selected && mode === "idle" ? findFlag(selected) : null;
+    var key = mode + "|" + confirmDown + "|" + (phone() ? "sheet" : "callout") + "|" +
+      JSON.stringify(current) +
+      (current ? expiresText(current.expires_at) + soonText(current.event) : "");
+    if (key === shownCard) { return; }
+    shownCard = key;
+    el.detail.replaceChildren();
+    if (mode === "placing") {
+      el.detail.appendChild(node("p", "fd-hint", "Tap the map where you want people to find you."));
+    }
+    if (!current || !map) { closeCallout(); closeSheet(); return; }
+    var card = buildCard(current);
+    if (phone()) { closeCallout(); showSheet(card, current); }
+    else { closeSheet(); showCallout(card, current); }
+  }
+
+  // ---------- 5a. the callout ----------
+  function showCallout(card, flag) {
+    if (!callout) {
+      callout = L.popup({
+        className: "beacon-callout", closeButton: false,
+        minWidth: 280, maxWidth: 320, offset: [0, -CALLOUT_LIFT],
+        autoPan: true, autoPanPaddingTopLeft: [16, 12], autoPanPaddingBottomRight: [64, 12]
+      });
+      // Leaflet shuts the callout on a tap on the map or Escape: the flag
+      // is then no longer the selected one, and its pin stands down.
+      map.on("popupclose", function (event) {
+        if (event.popup !== callout || shutting || !selected) { return; }
+        selected = null;
+        shownCard = "";
+        renderMarkers();
+      });
+    }
+    // A long card scrolls inside the callout rather than growing it past
+    // what fits over the flag: the flag and the tail stay in view.
+    callout.options.maxHeight = Math.max(160, map.getSize().y - CALLOUT_LIFT - CALLOUT_FOOT - 28);
+    callout.setLatLng([flag.latitude, flag.longitude]);
+    callout.setContent(card);
+    if (!callout.isOpen()) { callout.openOn(map); }
+  }
+  function closeCallout() {
+    if (!callout || !callout.isOpen()) { return; }
+    shutting = true;
+    map.closePopup(callout);
+    shutting = false;
+  }
+
+  // ---------- 5b. the sheet (phones) ----------
+  function showSheet(card, flag) {
+    if (!sheet) {
+      sheet = node("div", "map-sheet");
+      sheet.hidden = true;
+      stage.appendChild(sheet);
+      swipeToClose(sheet);
+    }
+    var was = !sheet.hidden;
+    if (sheetMoving) { sheetMoving.cancel(); sheetMoving = null; }
+    sheet.replaceChildren(card);
+    sheet.hidden = false;
+    var band = sizeSheet();
+    if (!was && !still()) {
+      sheetMoving = sheet.animate([{ transform: "translateY(100%)" }, { transform: "translateY(0)" }],
+                                  { duration: SHEET_MS, easing: "ease-out" });
+      sheetMoving.onfinish = function () { sheetMoving = null; };
+    }
+    // The flag into the band of map left above the sheet, its foot near
+    // the band's bottom so the whole pin shows (the map keeps its top edge
+    // still while it grows, so this holds once it has).
+    if (!was && !flying) {
+      var want = L.point(map.getSize().x / 2, Math.max(60, band - 14));
+      var by = map.latLngToContainerPoint([flag.latitude, flag.longitude]).subtract(want);
+      if (Math.abs(by.x) > 2 || Math.abs(by.y) > 2) { map.panBy(by, { animate: !still() }); }
+    }
+    // The page scrolls so the sheet's foot is clear of the tab bar.
+    if (!was) { window.requestAnimationFrame(clearTabBar); }
+  }
+  function clearTabBar() {
+    var bar = document.querySelector("nav.tabbar");
+    var floor = bar && getComputedStyle(bar).position === "fixed"
+      ? bar.getBoundingClientRect().top : window.innerHeight;
+    // The map's height as it will be once it has grown, not as it is
+    // mid-growth.
+    var box = map.getContainer();
+    var tall = parseFloat(box.style.height) || box.getBoundingClientRect().height;
+    var foot = stage.getBoundingClientRect().top + tall;
+    if (foot + 8 > floor) { window.scrollBy({ top: foot + 8 - floor, behavior: still() ? "auto" : "smooth" }); }
+  }
+  function closeSheet() {
+    if (!sheet || sheet.hidden) { return; }
+    if (sheetMoving) { sheetMoving.cancel(); sheetMoving = null; }
+    var done = function () { sheet.hidden = true; sheet.replaceChildren(); sizeSheet(); };
+    if (still()) { done(); return; }
+    sheetMoving = sheet.animate([{ transform: "translateY(0)" }, { transform: "translateY(100%)" }],
+                                { duration: SHEET_MS, easing: "ease-in" });
+    sheetMoving.onfinish = function () { sheetMoving = null; done(); };
+  }
+  // Sizes the map to its sheet: tall enough to show the whole card with a
+  // band of map above it, up to most of the screen (the card scrolls past
+  // that). Tells the stage how tall the sheet is (--sheet-h: the status
+  // line moves up out of its way) and gives back the band's height.
+  function sizeSheet() {
+    var box = map.getContainer();
+    var natural = 0;
+    if (sheet && !sheet.hidden) {
+      sheet.style.maxHeight = "none";
+      natural = sheet.offsetHeight;
+      sheet.style.maxHeight = "";
+    }
+    if (!natural) {
+      sheetHeight = sheetBand = mapBase = mapTall = 0;
+      stage.style.removeProperty("--sheet-h");
+      box.style.height = "";
+      root.classList.remove("showing");
+      return 0;
+    }
+    if (!mapBase) { mapBase = box.getBoundingClientRect().height; }
+    // 96px of map above the sheet: room for the whole pin and a little
+    // around it.
+    mapTall = Math.max(mapBase, Math.min(natural + 96, window.innerHeight * 0.7));
+    sheetHeight = Math.min(natural, mapTall - 56);
+    sheetBand = mapTall - sheetHeight;
+    stage.style.setProperty("--sheet-h", sheetHeight + "px");
+    root.classList.add("showing");
+    box.style.height = mapTall + "px";
+    return sheetBand;
+  }
+  // A finger drawn down the sheet's title bar puts it away.
+  function swipeToClose(box) {
+    var startY = null;
+    box.addEventListener("touchstart", function (event) {
+      var bar = event.target.closest ? event.target.closest(".fd-bar") : null;
+      startY = bar && event.touches.length === 1 ? event.touches[0].clientY : null;
+    }, { passive: true });
+    box.addEventListener("touchend", function (event) {
+      if (startY === null) { return; }
+      var dy = event.changedTouches[0].clientY - startY;
+      startY = null;
+      if (dy > 50) { select(null); }
+    }, { passive: true });
+  }
+  // Escape puts the card away. Leaflet does this for its popup only while
+  // the map itself has focus, which a tap inside the callout never gives
+  // it, so it is done here for both homes.
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape" || !selected) { return; }
+    if ((sheet && !sheet.hidden) || (callout && callout.isOpen())) { select(null); }
+  });
+  // Crossing the phone width moves the card from one home to the other.
+  // (addListener: Safari before 14 has no addEventListener here.)
+  (PHONE.addEventListener ? PHONE.addEventListener.bind(PHONE, "change") : PHONE.addListener.bind(PHONE))(
+    function () {
+      shownCard = "";
+      if (mode === "idle") { renderDetail(); }
+    });
+  // "I'm in" pressed on the card: the page's enhancer sends the form and
+  // stays here, and the card is redrawn from fresh flags.
+  root.addEventListener("beacon:done", function (event) {
+    var from = event.target && event.target.closest ? event.target.closest(".flag-detail") : null;
+    if (from) { loadFlags(true); }
+  });
 
   // The flag's own address, copied for pasting into a chat.
   function copyLink(flag) {
@@ -1004,10 +1292,14 @@
       if (focus) { selected = focus.id; focusId = ""; }
       renderCount();
       if (!dragging) { renderMarkers(); }
+      // The flag first, then its card, which nudges the map to fit it. Not
+      // animated: a zoom still playing would end by putting the map back
+      // where it was aiming, undoing the card's nudge.
+      if (focus) { map.setView([focus.latitude, focus.longitude], 18, { animate: false }); }
       if (mode === "idle") { renderDetail(); }
-      if (focus) { map.setView([focus.latitude, focus.longitude], 18); }
       if (!quiet) {
-        announce(info.flags.length ? "Tap a flag to see what's happening." : "No flags yet. Drop the first one.");
+        announce(focus ? "" : info.flags.length
+          ? "Tap a flag to see what's happening." : "No flags yet. Drop the first one.");
       }
     }).catch(function (error) {
       announce(error.message, "error");
