@@ -3627,6 +3627,10 @@ def finish_game(game, outcome, winner_id=None, ended_by=None):
     game.turn_id = None
 
 
+# How many students the Scoreboard on /games lists.
+SCOREBOARD_SIZE = 10
+
+
 @app.route("/games")
 @login_required
 def game_lobby():
@@ -3684,8 +3688,29 @@ def game_lobby():
         })
 
     waiting = seek_row()
+    # The Scoreboard: who has won the most finished games, every kind
+    # together. Names follow the rule every list of people here does
+    # (visible_people): an unlisted account shows only to its friends and
+    # to itself. One grouped query for the board, one count for your own.
+    seen_anyway = ([current_user.id]
+                   + [f["user_id"] for f in matching.friend_names(current_user.id)])
+    won = db.func.count(Game.id).label("wins")
+    leaders = db.session.execute(
+        db.select(User.id, User.name, won)
+        .join(Game, Game.winner_id == User.id)
+        .where(Game.status == "finished",
+               db.or_(User.discoverable.is_(True), User.id.in_(seen_anyway)))
+        .group_by(User.id, User.name)
+        .order_by(won.desc(), User.name)
+        .limit(SCOREBOARD_SIZE)
+    ).all()
+    my_wins = db.session.scalar(
+        db.select(db.func.count(Game.id))
+        .where(Game.status == "finished", Game.winner_id == current_user.id)) or 0
     return render_template(
         "games.html",
+        leaders=leaders,
+        my_wins=my_wins,
         rows=rows,
         resumable=[r for r in rows if r["resumable"]],
         done=[r for r in rows if not r["resumable"]],
@@ -3795,6 +3820,15 @@ def start_random_game(kind, partner_id):
     notices.paired(partner_id, current_user, their_url, label)
     db.session.commit()
     return game, where, partner
+
+
+@app.route("/games/t-party")
+@login_required
+def t_party():
+    """The T Party (templates/t_party.html, static/t-party.js). Practice
+    with bots for now: party rooms need a room server at /api/t-party,
+    which is not built yet."""
+    return render_template("t_party.html")
 
 
 @app.route("/games/seek", methods=["POST"])
@@ -4729,9 +4763,16 @@ def clubs():
         .where(db.or_(User.discoverable.is_(True), User.id.in_(seen_anyway)))
         .group_by(ClubMember.club_id)
     ).all())
+    # What is new in the chat of each club you are in, for the small count
+    # beside its name: one grouped query, the same numbers the chat list's
+    # badges use (notices.unread_by_url).
+    waiting = notices.unread_by_url(current_user.id)
+    club_new = {club.id: waiting.get(notices.chat_url("club", club.id), 0)
+                for club in joined}
     return render_template(
         "clubs.html",
         clubs=ordered,
+        club_new=club_new,
         member_counts=member_counts,
         # The same clubs, bucketed into the categories in club_catalog.py
         # (each keeps the order above: suggestions first, then A to Z).
@@ -5915,7 +5956,7 @@ def admin_set_poster(user_id):
     db.session.commit()
     flash(f"{person.name} "
           f"{'can now post' if person.can_post_fixtures else 'can no longer post'}"
-          " home games.")
+          " campus-wide meetups.")
     return redirect(url_for("admin", q=request.args.get("q", "")))
 
 
@@ -7616,7 +7657,7 @@ MAP_FLAG_CATEGORIES = {
     "social": "Social",
     "club": "Club",
     "event": "Event",
-    "home": "Home game",
+    "home": "Campus-Wide",   # a campus-wide meetup (a fixture)
 }
 assert tuple(MAP_FLAG_CATEGORIES) == MAP_FLAG_KINDS
 

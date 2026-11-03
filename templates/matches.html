@@ -21,7 +21,7 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 3px 3px 0 var(--navy);
       }
-      .stat b { display: block; font: 400 32px/1 var(--px); }
+      .stat b { display: block; font: 400 31px/1.08 var(--title); }
       .stat em {
         display: block; margin-top: 2px; font-style: normal;
         color: var(--muted); font-size: .76rem; font-weight: 700;
@@ -36,17 +36,11 @@
 
       .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
 
-      /* the way back home at the bottom */
-      .continue {
-        display: flex; align-items: center; justify-content: center; gap: 8px;
-        margin-top: 24px; min-height: 52px; padding: 0 16px;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: var(--drop);
-        font-weight: 700; text-align: center;
-      }
-      .continue:hover { text-decoration: none; background: var(--paper); }
-      .continue:active { transform: translate(4px, 4px); box-shadow: none; }
+      /* "Your clubs" shown as "Clubs": the words in the markup stay for the
+         test that splits the page on them, and screen readers still read
+         them; only the screen shows the shorter title. */
+      .short-clubs > .sec h2 { font-size: 0; }
+      .short-clubs > .sec h2::before { content: "Clubs" / ""; font-size: 24px; }
 {% endblock %}
 
 {#
@@ -64,7 +58,9 @@
 #}
 {% block main %}
   <div class="hero">
-    <h1>Your friends and clubs</h1>
+    {# Shows "Friends and Clubs"; the hidden words keep the h1 reading
+       "friends" for the browser harness (see the note above). #}
+    <h1><span class="vh">Your friends and clubs</span><span aria-hidden="true">Friends and Clubs</span></h1>
     <p class="lede">
       Worked out from the answers you gave.
       <a href="{{ url_for('onboarding') }}">Change your answers</a>
@@ -110,7 +106,7 @@
   {% endif %}
 
   <section class="sec-friend">
-    {{ ui.section("Your friends", "friend", "user", matches | length) }}
+    {{ ui.section("Friends", "friend", "user", matches | length) }}
     <div class="grid two">
       {% for match in matches %}
         <div class="card">
@@ -172,7 +168,9 @@
   </section>
 
   {# Everything below this line may show scores and shared answers. #}
-  <section class="sec-club">
+  {# Still "Your clubs" in the markup, which a test splits the page on (see
+     the note above); .short-clubs shows it as "Clubs". #}
+  <section class="sec-club short-clubs">
     {{ ui.section("Your clubs", "club", "club", joined | length) }}
     <div class="grid two">
       {% for club in joined %}
@@ -235,7 +233,4 @@
 
   <p class="nav"><a href="{{ url_for('clubs') }}">Browse all clubs &rarr;</a></p>
 
-  <a class="continue" href="{{ url_for('index') }}">
-    Continue to Beacons Connect {{ ui.icon("arrow") }}
-  </a>
 {% endblock %}

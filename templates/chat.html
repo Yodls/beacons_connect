@@ -27,7 +27,7 @@
       .chathead .grow { flex: 1 1 6rem; min-width: 0; }
       .chathead .headbreak { display: none; }
       .chathead h1 {
-        margin: 0; color: #fff; font: 400 30px/1 var(--px);
+        margin: 0; color: #fff; font: 400 29px/1.08 var(--title);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       /* text-align and margin spelled out: the game's .status rule further
@@ -140,7 +140,7 @@
         border-bottom: 2px solid var(--navy);
       }
       .membar .icon { flex: none; }
-      .membar-title { font: 400 24px/1 var(--px); letter-spacing: .01em; }
+      .membar-title { font: 400 23px/1.08 var(--title); letter-spacing: .01em; }
       .membar .grip { order: 1; }
       .membar .count {
         order: 2; flex: none; min-width: 32px; height: 28px; padding: 0 8px;
@@ -395,7 +395,7 @@
         min-height: 40px; padding: 0 10px;
         background: var(--bar, var(--navy)); color: var(--bar-ink, #fff);
         border-bottom: 2px solid var(--navy); border-radius: 6px 6px 0 0;
-        font: 400 22px/1 var(--px); letter-spacing: .01em;
+        font: 400 21px/1.08 var(--title); letter-spacing: .01em;
       }
       .cardbar::after {
         content: ""; flex: 1 1 auto; min-width: 16px; height: 10px;
@@ -579,7 +579,7 @@
       .meetbar .icon { flex: none; }
       .meetbar-title {
         min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        font: 400 24px/1 var(--px); letter-spacing: .01em;
+        font: 400 23px/1.08 var(--title); letter-spacing: .01em;
       }
       .meetbar .grip { order: 1; }
       .meetbar .count {
@@ -833,7 +833,7 @@
       /* Narrow enough that Resign stays beside the title on a phone; Claim
          and Resign together still drop under it, since they need the room. */
       .gamehead .grow { flex: 1 1 8rem; min-width: 0; }
-      .gamehead h3 { margin: 0; font: 400 24px/1 var(--px); }
+      .gamehead h3 { margin: 0; font: 400 23px/1.08 var(--title); }
       .gamehead .vs {
         display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
         color: var(--navy); font-size: .85rem; font-weight: 700;
@@ -1016,6 +1016,8 @@
 {% endblock %}
 
 {% block main %}
+  {# Nothing on this page folds on a phone (see _fold.html). #}
+  <i hidden data-fold-none></i>
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='chess-board.css') }}">
   <div class="chathead">

@@ -10,8 +10,8 @@
   render_template was given, so a forgotten one would silently render blank
   rather than fail.
 #}
-{% macro clubcard(club, joined_ids, picks, member_counts) -%}
-      <div class="card" id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
+{% macro clubcard(club, joined_ids, picks, member_counts, club_new={}) -%}
+      <div class="card" data-fold-row id="clubno-{{ club.id }}" data-find="{{ (club.name ~ ' ' ~ club.description) | lower }}">
         <div class="card-top">
           {{ ui.club_badge(club.name, club.description) }}
           <div class="grow">
@@ -24,6 +24,9 @@
             </span>
             {% if club.id in joined_ids %}
               <span class="joined">Joined</span>
+              {%- if club_new.get(club.id) %}
+              <span class="clubnew" title="New in the club chat">{{ club_new[club.id] }} new</span>
+              {%- endif %}
             {% elif club.id in picks %}
               <span class="pick">Suggested for you</span>
             {% endif %}
@@ -59,7 +62,7 @@
       </div>
 {%- endmacro %}
 
-{% block title %}All clubs{% endblock %}
+{% block title %}My Clubs{% endblock %}
 
 {#
   Clubs, by category.
@@ -170,6 +173,15 @@
       .joined { background: var(--beacon); color: #fff; }
       .joined::before { content: "\2713"; }
       .pick { background: var(--sky); color: var(--navy); }
+      /* the quiet hint beside the page heading */
+      .titleline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+      .titlehint { color: var(--muted); font: 400 .9rem/1.3 var(--sans); }
+      /* new in the club's chat: the alert red the palette keeps for unread counts */
+      .clubnew {
+        display: inline-flex; align-items: center; height: 20px; margin: 6px 0 0 4px; padding: 0 6px;
+        background: #D62828; color: #fff; border-radius: 999px;
+        font: 700 .72rem/1 var(--sans); vertical-align: top;
+      }
 
       /* Why a club is suggested. The same chips /matches and the welcome
          page use, so a reason reads the same wherever it is given. */
@@ -185,10 +197,10 @@
 
 {% block main %}
   <div class="pagehead">
-    <h1>All clubs</h1>
+    {# The hint sits beside the heading, outside the h1, so the heading
+       stays exactly "My Clubs". #}
+    <div class="titleline"><h1>My Clubs</h1><span class="titlehint">- (find &amp; join clubs below!)</span></div>
     <p class="lede">
-      Every club on campus, grouped by subject the way UMass Boston groups its
-      colleges, with the ones your answers point at first.
       <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
     </p>
   </div>
@@ -220,7 +232,8 @@
      number of clubs plus the number recommended, which two suites assert --
      they were changed to match rather than loosened. #}
   {% if recommended %}
-    <section class="sec-club clubcat" id="cat-recommended" data-cat="recommended">
+    {# Open on a phone, cards and all; the categories below fold (_fold.html). #}
+    <section class="sec-club clubcat" id="cat-recommended" data-cat="recommended" data-fold="open">
       <div class="sec sec-club">
         <span class="tag-dot"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="{{ club_icon_href('star') }}" /></svg></span>
         <h2>Recommended</h2>
@@ -229,7 +242,7 @@
       <p class="cathome">Picked from what you told us you like.</p>
       <div class="clubgrid">
         {% for club in recommended %}
-          {{ clubcard(club, joined_ids, picks, member_counts) }}
+          {{ clubcard(club, joined_ids, picks, member_counts, club_new) }}
         {% endfor %}
       </div>
     </section>
@@ -247,7 +260,7 @@
       <p class="cathome">{{ cat.home }}</p>
       <div class="clubgrid">
         {% for club in members %}
-          {{ clubcard(club, joined_ids, picks, member_counts) }}
+          {{ clubcard(club, joined_ids, picks, member_counts, club_new) }}
         {% endfor %}
       </div>
     </section>

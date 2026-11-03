@@ -13,7 +13,7 @@
       }
       .beacon-map .leaflet-bar a {
         width: 40px; height: 40px; color: var(--navy);
-        font: 400 28px/38px var(--px); border-bottom: 2px solid var(--navy);
+        font: 400 27px/38px var(--title); border-bottom: 2px solid var(--navy);
       }
       .beacon-map .leaflet-bar a:last-child { border-bottom: 0; }
       .beacon-map .leaflet-control-attribution {
@@ -31,27 +31,46 @@
       /* the pins (built by the scripts) */
       .beacon-flag-icon, .approved-place-icon, .user-position-icon,
       .draft-position-icon { background: transparent; border: 0; }
-      /* a flag: a square pixel head on a pole */
+      /* A flag: a navy pole with a gold knob, and a cloth in the flag's
+         colour waving to the right with the kind's icon on it. One navy
+         outline is drawn round the whole shape by the stacked shadows, so
+         the cloth keeps it even though it is cut to a wave. The foot of
+         the pole is the point on the map (36 by 52, anchored 18, 52). */
       .beacon-flag-pin {
-        display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-        width: 36px; height: 52px;
+        position: relative; display: block; width: 36px; height: 52px;
+        filter: drop-shadow(1.5px 0 0 var(--navy)) drop-shadow(-1.5px 0 0 var(--navy))
+                drop-shadow(0 1.5px 0 var(--navy)) drop-shadow(0 -1.5px 0 var(--navy))
+                drop-shadow(2px 2px 0 rgba(19, 34, 69, .4));
+        transform-origin: 18px 52px; transition: transform .15s ease;
+      }
+      .flag-pole {
+        position: absolute; left: 16.5px; top: 3px; bottom: 0; width: 3px;
+        background: var(--navy);
+      }
+      .flag-pole::before {
+        content: ""; position: absolute; left: -2px; top: -4px;
+        width: 7px; height: 7px; border-radius: 50%; background: var(--gold);
       }
       .flag-head {
-        min-width: 32px; height: 32px; padding: 0 2px;
+        position: absolute; left: 19.5px; top: 4px;
+        width: 32px; height: 25px; padding: 0 3px 1px 0;
         display: grid; place-items: center;
         background: var(--flag-color); color: var(--flag-ink, #fff);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        box-shadow: 2px 2px 0 var(--navy);
+        clip-path: path("M0 3C6 0 10 0 16 3S26 6 32 3V22C26 25 22 25 16 22S6 19 0 22Z");
       }
-      .flag-head .icon { width: 24px; height: 24px; }
-      .flag-head img { display: block; width: 60px; height: 16px; margin: 0 4px; }
-      .flag-pole { width: 4px; height: 16px; background: var(--navy); }
+      .flag-head .icon { width: 17px; height: 17px; }
+      .flag-head img { display: block; width: 26px; height: auto; }
       /* the selected flag */
-      .beacon-flag-pin.on .flag-head { outline: 3px solid #fff; box-shadow: 0 0 0 5px var(--navy); }
+      .beacon-flag-pin.on {
+        transform: scale(1.22);
+        filter: drop-shadow(1.5px 0 0 var(--navy)) drop-shadow(-1.5px 0 0 var(--navy))
+                drop-shadow(0 1.5px 0 var(--navy)) drop-shadow(0 -1.5px 0 var(--navy))
+                drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px #fff);
+      }
       /* your own flags, and a meetup's pin, can be dragged */
       .beacon-flag-icon.leaflet-marker-draggable { cursor: grab; }
       /* the draft flag: dashed and bobbing until it is submitted */
-      .beacon-flag-pin.draft .flag-head { border-style: dashed; animation: flag-bob 1.2s steps(2) infinite; }
+      .beacon-flag-pin.draft .flag-head { animation: flag-bob 1.2s steps(2) infinite; }
       @keyframes flag-bob { 50% { transform: translateY(-3px); } }
       @media (prefers-reduced-motion: reduce) {
         .beacon-flag-pin.draft .flag-head { animation: none; }

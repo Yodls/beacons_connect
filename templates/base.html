@@ -9,7 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     {# Beacon OS type: Atkinson Hyperlegible Next for reading (designed for
-       low-vision legibility), Jersey 15 for pixel titles. #}
+       low-vision legibility), Jersey 15 for pixel titles, sized to take
+       the room a bold Atkinson title would. #}
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700&family=Jersey+15&display=swap" />
     {#
@@ -94,7 +95,8 @@
         --danger: #a3281f;     --danger-bg: #fdecea;
 
         /* type: a pixel face for titles, a highly legible face for reading */
-        --px: "Jersey 15", "Arial Narrow", sans-serif;
+        --title: "Jersey 15", "Arial Narrow", sans-serif;
+        --px: var(--title);   /* the old name, kept so var(--px) still works */
         --sans: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible",
                 system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -132,8 +134,8 @@
       h1, h2, h3, h4 { margin: 0; line-height: 1.2; }
       /* Titles use the pixel face. It has a single weight, so it is never
          bolded; size does the work instead. */
-      h1 { font: 400 46px/.95 var(--px); letter-spacing: .01em; }
-      h2 { font: 400 26px/1 var(--px); letter-spacing: .01em; }
+      h1 { font: 400 45px/1.08 var(--title); letter-spacing: .01em; }
+      h2 { font: 400 26px/1.08 var(--title); letter-spacing: .01em; }
       h3 { font-size: 1.02rem; font-weight: 700; }
       p { margin: 0; }
       a { color: var(--beacon); text-decoration: none; font-weight: 700; }
@@ -161,9 +163,18 @@
          sun's glitter, the far shore, granite posts and chains, the walkway
          with a bench or two, the grass bank, and a saucer lamp. */
       body:has(.harborwalk) { background: #4A8EDE; }
+      /* Sized to the tallest the screen gets (100lvh, the height with the
+         browser's own bars tucked away) rather than pinned to all four edges:
+         on a phone those bars slide in and out while you scroll, and a
+         backdrop pinned to the edges was resized with them, so the horizon
+         and the walkway slid about behind the page. At a fixed height it
+         never moves, and its own layer keeps it from shimmering. */
       .harborwalk {
-        position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+        position: fixed; left: 0; top: 0; z-index: -1; overflow: hidden; pointer-events: none;
+        width: 100%; height: 100vh; height: 100lvh;
         background: #4A8EDE; shape-rendering: crispEdges;
+        transform: translateZ(0); contain: strict;
+        transition: opacity .6s ease, visibility 0s;
       }
       .hw-art {
         --k: 2;
@@ -403,7 +414,7 @@
         filter: drop-shadow(2px 2px 0 var(--navy));
       }
       .brand-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-      .brand-name { display: block; font: 400 28px/.85 var(--px); white-space: nowrap; }
+      .brand-name { display: block; font: 400 27px/1.08 var(--title); white-space: nowrap; }
       /* "Connect on Campus @" and the UMass Boston logo, under the name and
          lined up with its left edge, in navy */
       .brand-sub {
@@ -488,7 +499,7 @@
         display: block; height: 44px; padding: 0 12px;
         background: var(--beacon); color: #fff;
         border-bottom: 2px solid var(--navy);
-        font: 400 24px/42px var(--px);
+        font: 400 23px/42px var(--title);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .who-panel small {
@@ -598,7 +609,7 @@
         background: var(--sky); color: var(--navy);
         border-bottom: 2px solid var(--navy);
       }
-      .bell-head b { font: 400 24px/1 var(--px); }
+      .bell-head b { font: 400 23px/1.08 var(--title); }
       .bell-tools { margin-left: auto; display: flex; gap: .8rem; }
       .bell-tools form { margin: 0; }
       /* Qualified with `button` and spelled out for every state, because
@@ -750,7 +761,7 @@
       }
       .sec h2, .bar h1, .bar h2, .bar-title {
         min-width: 0; margin: 0;
-        color: inherit; font: 400 25px/1 var(--px); letter-spacing: .01em;
+        color: inherit; font: 400 24px/1.08 var(--title); letter-spacing: .01em;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       /* Grip stripes after the title, like a window you could drag. On .sec
@@ -777,6 +788,42 @@
       .sec-game   { --kind: var(--game);   --kind-ink: var(--game-ink);   --kind-bg: var(--game-bg); }
       .sec-place  { --kind: var(--place);  --kind-ink: var(--place-ink);  --kind-bg: var(--place-bg); }
       .sec-club   { --kind: var(--club);   --kind-ink: var(--club-ink);   --kind-bg: var(--club-bg); }
+
+      /* Windows that fold, on phones (the script in _fold.html). The title
+         bar gets a key laid over it, with a chevron at the right, and a
+         folded window keeps only its title bar, so a long page opens as a
+         short list of titles. A window marked data-fold="open" never folds;
+         neither does anything on a page that carries a data-fold-none
+         marker, or the only window on a page. On /clubs the categories fold
+         and each club card folds to its name row. */
+      .fold-key { display: none; }
+      @media (max-width: 700px) {
+        .fold > .fold-head { position: relative; padding-right: 46px; }
+        .fold-key {
+          display: flex; align-items: center; justify-content: flex-end;
+          position: absolute; inset: 0; z-index: 1;
+          width: 100%; min-height: 0; margin: 0; padding: 0 9px 0 0;
+          background: none; border: 0; border-radius: inherit; box-shadow: none;
+          color: inherit; cursor: pointer;
+        }
+        .fold-key:hover, .fold-key:active { background: none; transform: none; box-shadow: none; }
+        .fold-key:focus-visible { outline: 3px solid var(--orange); outline-offset: -4px; }
+        .fold-head :is(a, button:not(.fold-key), input, select, label, summary) { position: relative; z-index: 2; }
+        .fold-chev { width: 28px; height: 28px; flex: none; transform: rotate(90deg); transition: transform .2s ease; }
+        .fold.is-folded > .fold-head .fold-chev { transform: none; }
+        .fold.is-folded > :not(.fold-head) { display: none !important; }
+        .fold.is-folded > .fold-head:is(.sec, .bar) { border-bottom: 0; border-radius: 6px; }
+        .card.fold > .fold-head { padding-right: 38px; }
+        .card.fold.is-folded { padding-block: 10px; }
+      }
+      @media (prefers-reduced-motion: reduce) { .fold-chev { transition: none; } }
+      /* Phones scroll the page without a visible bar, so opening a window
+         that makes the page taller (Start a chat, say) never pushes the
+         content sideways in a browser that draws a classic scrollbar. */
+      @media (max-width: 700px) {
+        html { scrollbar-width: none; }
+        html::-webkit-scrollbar { display: none; }
+      }
 
       /* ---------- 7. cards ---------- */
       /* A card on its own on the desk (the clubs page) is a small window. */
@@ -857,10 +904,10 @@
         display: grid; place-items: center;
         color: var(--navy);
         border: 2px solid var(--navy); border-radius: 50%;
-        font: 400 20px/1 var(--px); letter-spacing: .02em;
+        font: 400 19px/1.08 var(--title); letter-spacing: .02em;
       }
       .avatar.sq { border-radius: var(--r); }
-      .avatar.sm { width: 30px; height: 30px; font-size: 15px; }
+      .avatar.sm { width: 30px; height: 30px; font-size: 14px; }
       .av-0 { background: var(--beacon); color: #fff; }
       .av-1 { background: var(--sky); }
       .av-2 { background: var(--gold); }
@@ -963,6 +1010,9 @@
       }
       .tab-new:hover { color: #fff; text-decoration: none; }
       .tab-new:hover .icon { background: #fff; }
+      /* Outline icons, and the one for the page you are on filled in, the way
+         phone apps mark their current tab. */
+      .tab.on .icon, .dock[open] > summary .icon { --ic-line: 0; --ic-fill: 1; }
 
       /* ---------- the friends panel ---------- */
       /* It is slot 2 of the taskbar, so it is an ordinary grid item.
@@ -1010,7 +1060,7 @@
         min-height: 42px; margin: 0 -12px 12px; padding: 0 12px;
         background: var(--sky); color: var(--navy);
         border-bottom: 2px solid var(--navy);
-        font: 400 24px/1 var(--px);
+        font: 400 23px/1.08 var(--title);
       }
       .dock-find { display: flex; gap: 8px; }
       .dock-find input { min-height: 44px; padding: .4rem .65rem; font-size: 1rem; }
@@ -1140,7 +1190,7 @@
       }
       .plaque-main .brandpanel-name {
         padding: 2px 2px 4px;
-        font: 400 clamp(30px, calc(10.5vw - 2px), 40px)/1 var(--px);
+        font: 400 clamp(29px, calc(10.5vw - 3px), 38px)/1.08 var(--title);
         color: #111827;
         filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .9)) drop-shadow(0 -1px 0 rgba(20, 26, 40, .25));
       }
@@ -1184,10 +1234,10 @@
       .brandpanel.compact { gap: 10px; padding: 24px 14px 16px; }
       .brandpanel.compact .plaque-main { flex-direction: row; gap: 16px; padding: 12px 22px; }
       .brandpanel.compact .brandpanel-logo { width: 64px; height: 64px; }
-      .brandpanel.compact .brandpanel-name { font-size: 36px; }
+      .brandpanel.compact .brandpanel-name { font-size: 35px; }
       @media (max-width: 400px) {
         .brandpanel.compact .plaque-main { flex-direction: column; gap: 8px; }
-        .brandpanel.compact .brandpanel-name { font-size: 30px; }
+        .brandpanel.compact .brandpanel-name { font-size: 29px; }
       }
       /* Two birds on the panel's top: a gull on the left end, a pigeon standing
          in its flat twig nest on the right. Drawn frames swap (standing,
@@ -1312,7 +1362,7 @@
       .code {
         padding: .5rem;
         text-align: center; text-indent: .45em;
-        font: 400 clamp(28px, 11vw, 40px)/1 var(--px); letter-spacing: .45em;
+        font: 400 clamp(27px, calc(11vw - 1.5px), 38px)/1.08 var(--title); letter-spacing: .45em;
         font-variant-numeric: tabular-nums;
       }
       /* the address the code went to */
@@ -1352,7 +1402,7 @@
         display: grid; place-items: center;
         background: var(--gold); color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font: 400 19px/1 var(--px);
+        font: 400 18px/1.08 var(--title);
       }
       .opts { display: grid; gap: 6px; margin-top: 10px; }
       .opts label, .chips label {
@@ -1388,7 +1438,7 @@
       @media (max-width: 700px) {
         .topbar-inner { gap: 8px; min-height: 64px; padding: 8px 12px; }
         .brand-mark { width: 42px; height: 42px; }
-        .brand-name { font-size: 25px; }
+        .brand-name { font-size: 24px; }
         /* The subtitle is right-aligned under the name on wide screens. On a
            phone the column is only as wide as "BeaconsConnect", and a nowrap
            line a few pixels wider than that, aligned flex-end, spills off the
@@ -1402,7 +1452,7 @@
         .find { display: none; }
         .findlink { display: grid; }
         .page { padding-top: 16px; }
-        h1 { font-size: 40px; }
+        h1 { font-size: 38px; }
         section:is(.sec-chat, .sec-friend, .sec-game, .sec-place, .sec-club) > :not(.sec):not(.bar) {
           margin: 12px;
         }
@@ -1430,7 +1480,7 @@
         }
       }
       @media (max-width: 400px) {
-        .brand-name { font-size: 23px; }
+        .brand-name { font-size: 22px; }
         /* Sized so "Connect on Campus @" and the UMass mark fit under the name
            at 320 and 375, where the bar is tightest -- measured, not guessed:
            at 10px with a 20px mark the line was ~15px wider than its column. */
@@ -1448,7 +1498,7 @@
       }
       @media (min-width: 900px) {
         .grid.two { grid-template-columns: 1fr 1fr; }
-        h1 { font-size: 58px; }
+        h1 { font-size: 56px; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
@@ -1488,7 +1538,7 @@
         background: var(--alert); color: #fff;
         border: 2px solid var(--navy); border-radius: var(--r-sm);
         box-shadow: 2px 2px 0 var(--navy);
-        font: 400 17px/1 var(--px);
+        font: 400 17px/1.08 var(--title);
       }
       /* the display above would beat the browser's own [hidden] rule */
       .chatrow .unread[hidden] { display: none; }
@@ -1532,6 +1582,7 @@
        #live so a navigation never rebuilds it, and carrying no style element
        of its own, so the head stylesheet stays byte-identical. #}
     {% include "_harborwalk.html" %}
+    {% include "_fold.html" %}
     {# Where toasts land. Outside #live so a navigation while one is on screen
        does not take it away, and carrying no <style> of its own -- like the
        sprite above -- so the head stylesheet stays byte-identical. #}

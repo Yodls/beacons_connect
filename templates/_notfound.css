@@ -5,7 +5,7 @@
          title bars' keys carry. */
       .lost-code {
         margin: 0; color: var(--navy);
-        font: 400 clamp(64px, 22vw, 96px)/1 var(--px); letter-spacing: .06em;
+        font: 400 clamp(63px, calc(22vw - 1.5px), 95px)/1.08 var(--title); letter-spacing: .06em;
         text-shadow: 4px 4px 0 var(--orange);
       }
       .lost-say { margin: 14px 0 4px; color: var(--navy); font-size: 1.15rem; font-weight: 700; }

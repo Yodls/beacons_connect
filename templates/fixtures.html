@@ -1,6 +1,6 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}What's happening around campus{% endblock %}
+{% block title %}Campus Events{% endblock %}
 
 {#
   Campus-wide meetups, soonest first.
@@ -19,6 +19,7 @@
 #}
 
 {% block appstyle %}
+      .upnext { color: var(--navy); font-weight: 700; white-space: nowrap; }
       .fix { margin-top: 18px; }
       .fix-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
       .fix-top h3 { margin: 0; font-size: 1.1rem; }
@@ -40,10 +41,10 @@
 
 {% block main %}
   <div class="pagehead">
-    <h1>What's happening around campus</h1>
+    <h1>Campus Events</h1>
     <p class="lede">
-      What the university is putting on, and where to find it.
-      <span class="counter">{{ fixtures | length }} coming up</span>
+      Events happening around campus.
+      <b class="upnext">{{ fixtures | length }} coming up.</b>
     </p>
   </div>
 

@@ -1,0 +1,122 @@
+{#
+  Windows that fold, on phones. Included by base.html outside #live, like
+  _harborwalk.html, so it lives through every page swap; it arms no
+  pollers and fetches nothing. Styles are in base.html, section 6.
+
+  What folds: every window (a section or .win whose first child is its
+  .sec or .bar title bar) inside the page, starting folded, except
+    - a window marked data-fold="open" (Home's welcome and My chats, the
+      campus map, Your chats),
+    - every window on a page that has a data-fold-none marker (Games and
+      a chat),
+    - the only window on a page.
+  On /clubs each category folds, and each club (data-fold-row in
+  clubs.html) folds to its name row, except in the Recommended band. A window with a flash, an error or the
+  address's #anchor in it starts open, and what you open stays open while
+  you are on that page (this tab only). Wider than 700px nothing folds.
+#}
+<script>
+  /* Folding windows, on phones: see the note above. */
+  (function () {
+    var phone = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
+    function each(list, fn) { Array.prototype.forEach.call(list, fn); }
+    function key() { return "bc-open:" + location.pathname; }
+    function opened() {
+      try { return JSON.parse(window.sessionStorage.getItem(key()) || "[]"); } catch (e) { return []; }
+    }
+    function remember(name, open) {
+      var list = opened().filter(function (n) { return n !== name; });
+      if (open) { list.push(name); }
+      try { window.sessionStorage.setItem(key(), JSON.stringify(list)); } catch (e) {}
+    }
+    function titleOf(head) {
+      var t = head.querySelector("h2, h3, .bar-title");
+      return (t ? t.textContent : head.textContent).replace(/\s+/g, " ").trim();
+    }
+    function show(w, open) {
+      w.classList.toggle("is-folded", !open);
+      var k = w.firstElementChild && w.firstElementChild.querySelector(".fold-key");
+      if (k) { k.setAttribute("aria-expanded", open ? "true" : "false"); }
+    }
+    function arm(w, head, saved) {
+      if (w.hasAttribute("data-folds")) { return; }
+      var name = titleOf(head);
+      w.setAttribute("data-folds", name);
+      w.classList.add("fold");
+      head.classList.add("fold-head");
+      var k = document.createElement("button");
+      k.type = "button";
+      k.className = "fold-key";
+      k.setAttribute("aria-label", name);
+      k.innerHTML = '<svg class="icon fold-chev" aria-hidden="true" focusable="false"><use href="#icon-chevron"></use></svg>';
+      head.appendChild(k);
+      var hash = location.hash && location.hash.length > 1 ? document.getElementById(location.hash.slice(1)) : null;
+      var open = saved.indexOf(name) >= 0
+        || !!w.querySelector(".flash, .error, [aria-invalid='true']")
+        || (hash && w.contains(hash));
+      show(w, open);
+    }
+    function disarm() {
+      each(document.querySelectorAll("[data-folds]"), function (w) {
+        w.removeAttribute("data-folds");
+        w.classList.remove("fold", "is-folded");
+        var head = w.firstElementChild;
+        if (head) {
+          head.classList.remove("fold-head");
+          each(head.querySelectorAll(":scope > .fold-key"), function (k) { k.remove(); });
+        }
+      });
+    }
+    function scan() {
+      var page = document.querySelector("main.page");
+      if (!page || !phone || !phone.matches) { disarm(); return; }
+      if (page.querySelector("[data-fold-none]")) { return; }
+      var wins = [];
+      each(page.querySelectorAll("section, .win"), function (w) {
+        var head = w.firstElementChild;
+        if (head && head.matches(".sec, .bar")) { wins.push([w, head]); }
+      });
+      if (wins.length < 2) { return; }
+      var saved = opened();
+      wins.forEach(function (pair) {
+        if (pair[0].getAttribute("data-fold") !== "open") { arm(pair[0], pair[1], saved); }
+      });
+      each(page.querySelectorAll(".clubcat:not(#cat-recommended) [data-fold-row]"), function (row) {
+        if (row.firstElementChild) { arm(row, row.firstElementChild, saved); }
+      });
+    }
+    document.addEventListener("click", function (e) {
+      var k = e.target && e.target.closest ? e.target.closest(".fold-key") : null;
+      if (k) {
+        var w = k.parentNode.parentNode, open = w.classList.contains("is-folded");
+        show(w, open);
+        remember(w.getAttribute("data-folds"), open);
+        return;
+      }
+      /* a jump link to a window (Profile's chips, an #anchor) opens it */
+      var jump = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      var to = jump && jump.getAttribute("href").length > 1 ? document.getElementById(jump.getAttribute("href").slice(1)) : null;
+      var fold = to && to.closest ? to.closest(".fold") : null;
+      if (fold) { show(fold, true); remember(fold.getAttribute("data-folds"), true); }
+      /* /clubs: picking a category opens it */
+      var cat = e.target && e.target.closest ? e.target.closest(".catkey[data-cat]") : null;
+      var box = cat ? document.getElementById("cat-" + cat.getAttribute("data-cat")) : null;
+      if (box && box.classList.contains("fold")) { show(box, true); }
+    });
+    /* /clubs: searching opens every category, so the matches can be seen */
+    document.addEventListener("input", function (e) {
+      if (!e.target || e.target.id !== "clubq" || !e.target.value.trim()) { return; }
+      each(document.querySelectorAll(".clubcat.fold"), function (c) { show(c, true); });
+    });
+    function watch() {
+      scan();
+      var live = document.getElementById("live");
+      if (live && window.MutationObserver) { new MutationObserver(scan).observe(live, { childList: true }); }
+      if (phone) {
+        if (phone.addEventListener) { phone.addEventListener("change", scan); }
+        else if (phone.addListener) { phone.addListener(scan); }
+      }
+    }
+    if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", watch); } else { watch(); }
+  })();
+</script>
