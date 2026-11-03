@@ -28,7 +28,7 @@
   are in _community_map.css, included by find.html's page style.
 #}
 {% import "_ui.html" as ui %}
-<section class="campus-map-card" id="campusMapCard"
+<section class="campus-map-card" id="campusMapCard" data-fold="open"
          data-flags-url="{{ url_for('map_flags_list') }}"
          data-umb-logo="{{ url_for('static', filename='bc-umb-logo.svg') }}"
          data-healey-logo="{{ url_for('static', filename='landmark-healey.png') }}"
@@ -36,10 +36,11 @@
          data-chat-url="{{ url_for('chat', kind='group', target_id=0) }}"
          data-rsvp-url="{{ url_for('post_rsvp', post_id=0) }}"
          data-focus="{{ request.args.get('flag', '') }}">
-  {# Title bar, coloured for meet ups (navy), with how many flags you can see. #}
+  {# Title bar, coloured for meet ups (navy), with how many of your flags
+     are up out of how many you may have (1/3); meetup flags don't count. #}
   <div class="bar campus-map-bar">
     {{ ui.icon("meet") }}<h2>Campus map</h2><span class="grip"></span>
-    <span class="count" id="mapFlagTotal" title="Flags you can see">0</span>
+    <span class="count" id="mapFlagTotal" title="Your flags up, of the most you can have">0/3</span>
   </div>
 
   {# The map itself, with the locate button and status line floating on it. #}
@@ -48,6 +49,9 @@
          aria-label="Interactive map of UMass Boston with meetup flags"></div>
     <button class="iconbtn map-locate" id="mapLocate" type="button"
             aria-label="Show where I am" title="Show where I am">{{ ui.icon("locate") }}</button>
+    {# Smaller than the locate key above it, so neither is pressed by mistake. #}
+    <button class="iconbtn map-fit" id="mapFit" type="button"
+            aria-label="Fit the whole campus on the map" title="Fit the campus to the screen">{{ ui.icon("fit") }}</button>
     <p class="map-status" id="mapStatus" aria-live="polite">Loading the campus map&hellip;</p>
   </div>
 
@@ -64,7 +68,6 @@
         <button class="map-drop" id="mapMeet" type="button" hidden>{{ ui.icon("plus") }}<span>Post a meetup</span></button>
       {% endif %}
       <button class="map-drop" id="mapDrop" type="button">{{ ui.icon("club") }}<span>Drop a flag</span></button>
-      <p class="flag-count" id="mapFlagCount">Loading flags&hellip;</p>
     </div>
 
     {% if map_meetup %}{% include "_meetup_form.html" %}{% endif %}
@@ -145,9 +148,6 @@
     {# Key to the pin colours; filled in from the flag types the API sends. #}
     <ul class="map-legend" id="mapLegend" aria-label="Map key"></ul>
 
-    <p class="map-privacy">
-      Your GPS position stays in this browser. Only the flag position you choose is saved.
-    </p>
     </div>
   </div>
 </section>

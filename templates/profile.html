@@ -1,6 +1,6 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}Your profile{% endblock %}
+{% block title %}Profile Settings{% endblock %}
 
 {#
   profile.html  -  "Your profile"   (profile settings, Oct 26)
@@ -137,7 +137,7 @@
       .pf-pic img { border: 2px solid var(--navy); }
       .pf-pic .avatar { font-size: 44px; }
       .pf-small img, .pf-small .avatar { width: 34px; height: 34px; font-size: 17px; }
-      .pf-mid img, .pf-mid .avatar { width: 64px; height: 64px; font-size: 32px; }
+      .pf-mid img, .pf-mid .avatar { width: 64px; height: 64px; font-size: 31px; }
 
       /* ---------- usernames: the site's address in front of the box ---------- */
       .pf-handle { display: flex; align-items: stretch; max-width: 26rem; margin-top: 4px; }
@@ -189,7 +189,7 @@
       .pf-dialog { width: min(26rem, calc(100vw - 2rem)); padding: 16px; color: var(--navy); background: #fff;
         border: 2px solid var(--navy); border-radius: var(--r); box-shadow: var(--drop); font-family: var(--sans); }
       .pf-dialog::backdrop { background: rgba(13, 27, 56, .45); }
-      .pf-dialog h3 { margin: 0; font: 400 26px/1 var(--px); }
+      .pf-dialog h3 { margin: 0; font: 400 26px/1.08 var(--title); }
       .pf-dialog p { margin: 8px 0 0; font-size: .92rem; }
       .pf-dialog ul { margin: 10px 0 0; padding: 8px 12px 8px 28px; background: var(--paper);
         border-radius: var(--r-sm); font-size: .9rem; font-weight: 700; }
@@ -239,19 +239,19 @@
 {%- endmacro -%}
 
   <div class="pagehead">
-    <h1>Your profile</h1>
-    <p class="lede">Everything about you in one place: how you come across, your clubs and interests, and your account.</p>
+    <h1>Profile Settings</h1>
+    <p class="lede">Manage your profile settings here, click the tiles.</p>
   </div>
 
   <nav class="pf-jump" aria-label="On this page">
-    <a href="#profile">Your profile</a>
+    <a href="#profile">Edit profile</a>
     <a href="#clubs">Clubs and interests</a>
     <a href="#safety">Account and safety</a>
   </nav>
 
   {# ======================= 1. your profile ======================= #}
   <section class="win sec-place" id="profile">
-    <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Your profile</span><span class="grip"></span></div>
+    <div class="bar">{{ ui.icon("user") }}<span class="bar-title">Edit profile</span><span class="grip"></span></div>
 
     {# RELOCATION: name and pronouns, moved from Your account. The same fields as
        account.html's first form (section=who, name, pronouns), saved by your

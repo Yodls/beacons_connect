@@ -32,7 +32,7 @@
         position: absolute; z-index: 3; left: 16px; top: 22px; right: 104px;
         display: flex; flex-direction: column; gap: 8px;
       }
-      .scene-copy h1 { color: #fff; font-size: clamp(34px, 13vw, 54px); line-height: .9; }
+      .scene-copy h1 { color: #fff; font-size: clamp(33px, calc(13vw - 1.5px), 53px); line-height: .9; }
       .scene-copy .lede { margin: 0; color: var(--on-navy); font-size: 1rem; }
       /* ---------- the harbour scene ----------
          Decoration only, drawn in pixels and animated by CSS alone, so this page
@@ -331,7 +331,7 @@
       @media (min-width: 900px) {
         .scene { height: 240px; }
         .scene-copy { left: 24px; top: 30px; }
-        .scene-copy h1 { font-size: 72px; }
+        .scene-copy h1 { font-size: 71px; }
         .scene-copy .lede { font-size: 1.1rem; }
       }
 
@@ -393,7 +393,7 @@
 <div class="home">
   {# The welcome window. The harbour scene is decoration only (aria-hidden);
      the <h1> stays bare and is still the first and only one on the page. #}
-  <div class="win hello sec-chat">
+  <div class="win hello sec-chat" data-fold="open">
     <div class="bar">{{ ui.icon("home") }}<span class="bar-title">Welcome back</span>
       {# Day or night for this window: see "day or night" in the style above. #}
       <button class="dayswitch" type="button" role="switch" aria-checked="false"
@@ -451,7 +451,9 @@
     </a>
   </div>
 
-  <section class="sec-chat">
+  {# data-fold="open": on a phone the other windows fold to their title
+     bars (_fold.html); the greeting and My chats stay open. #}
+  <section class="sec-chat" data-fold="open">
     {# The count is the real total, not the number of rows below it: this
        page draws the most recent handful, and an account with seventy
        conversations learns nothing from a band that says 5. #}

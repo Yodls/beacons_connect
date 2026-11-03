@@ -16,7 +16,7 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
-      .campus-map-bar h2 { font: 400 25px/1 var(--px); }
+      .campus-map-bar h2 { font: 400 24px/1.08 var(--title); }
 
       /* ---------- the map ---------- */
       .campus-map-stage {
@@ -45,6 +45,14 @@
          Beacon Blue on white like the map's own zoom buttons */
       .map-locate { position: absolute; z-index: 1000; top: 10px; right: 10px; color: var(--beacon); }
       .map-locate .icon { width: 26px; height: 26px; }
+      /* fit the campus to the map: under the locate key, a size smaller */
+      .map-fit {
+        position: absolute; z-index: 1000; top: 67px; right: 14px;
+        width: 36px; height: 36px; color: var(--navy);
+      }
+      .map-fit .icon { width: 22px; height: 22px; }
+      /* the header's flag count turns orange when all of yours are up */
+      .campus-map-bar .count.full { background: var(--orange); }
       /* the status line floating bottom left */
       .map-status {
         position: absolute; z-index: 1000; left: 10px; bottom: 10px;
@@ -67,10 +75,20 @@
       }
       .map-legend:empty { display: none; }
       .map-key { display: inline-flex; align-items: center; gap: 7px; font: 700 .88rem/1 var(--sans); }
-      .map-key-swatch {
-        width: 20px; height: 20px; flex: none;
+      /* the key's swatches, and the kind chips in the flag form: small
+         flags in the same colours as the pins */
+      .map-key-swatch, .kind-chip i {
+        position: relative; width: 22px; height: 20px; flex: none;
+        filter: drop-shadow(1px 0 0 var(--navy)) drop-shadow(-1px 0 0 var(--navy))
+                drop-shadow(0 1px 0 var(--navy)) drop-shadow(0 -1px 0 var(--navy));
+      }
+      .map-key-swatch::before, .kind-chip i::before {
+        content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 2px; background: var(--navy);
+      }
+      .map-key-swatch::after, .kind-chip i::after {
+        content: ""; position: absolute; left: 4px; top: 1px; width: 17px; height: 12px;
         background: var(--flag-color);
-        border: 2px solid var(--navy); border-radius: 4px;
+        clip-path: path("M0 1.5C3 0 5 0 8.5 1.5S14 3 17 1.5V10.5C14 12 11.5 12 8.5 10.5S3 9 0 10.5Z");
       }
 
       /* the flag you tapped */
@@ -137,7 +155,7 @@
         border: 2px dashed var(--navy); border-radius: var(--r);
       }
       .draft-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-      .draft-head h3 { font: 400 26px/1 var(--px); }
+      .draft-head h3 { font: 400 26px/1.08 var(--title); }
       .draft-head .tag { background: #fff; color: var(--navy); }
       .draft-note { margin-top: -4px; color: var(--muted); font-size: .9rem; }
       .draftbox label { color: var(--navy); font-size: .92rem; }
@@ -156,13 +174,10 @@
         box-shadow: 0 3px 0 var(--navy);
         font: 700 .92rem/1 var(--sans); cursor: pointer;
       }
-      .kind-chip i {
-        width: 16px; height: 16px; flex: none;
-        background: var(--flag-color); border: 2px solid var(--navy); border-radius: 4px;
-      }
+
       .kind-chip img { display: block; height: 15px; width: auto; padding: 3px 5px; box-sizing: content-box; background: #0b3159; border-radius: 3px; }
       .kind-chip input:checked + span { background: var(--navy); color: #fff; box-shadow: none; transform: translateY(3px); }
-      .kind-chip input:checked + span i { border-color: #fff; }
+      .kind-chip input:checked + span i::before { background: #fff; }
       .kind-chip input:focus-visible + span { outline: 3px solid var(--orange); outline-offset: 2px; }
       .kind-chip input:disabled + span { opacity: .45; cursor: not-allowed; }
       .flag-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -209,7 +224,7 @@
       .cbox .icon { width: 12px; height: 12px; }
       .pickrow input:checked + .cbox { background: var(--beacon); color: #fff; box-shadow: none; }
       .pickrow input:focus-visible + .cbox { outline: 3px solid var(--orange); outline-offset: 2px; }
-      .pickrow .avatar { width: 30px; height: 30px; font-size: 15px; }
+      .pickrow .avatar { width: 30px; height: 30px; font-size: 14px; }
       .fmore { color: var(--muted); font-size: .86rem; }
 
       .safe {
@@ -223,14 +238,12 @@
 
       /* "Post a meetup" and "Drop a flag": yellow keys centred under the
          map, side by side where the pane is wide enough for two and each
-         across the pane on a phone, with the flag count on a line of its
-         own under them. */
+         across the pane on a phone. */
       .map-drop-row {
         display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px;
       }
       .map-drop-row .map-drop { flex: 1 1 11rem; width: auto; }
       @media (min-width: 560px) { .map-drop-row .map-drop { max-width: 18rem; } }
-      .map-drop-row .flag-count { flex: 1 1 100%; }
       /* The meetup form (_meetup_form.html) in the draft box: its own
          fields wrap as they do anywhere, and the Post / Cancel row takes a
          full line. */
@@ -247,8 +260,6 @@
       .map-drop:active { transform: translateY(4px); box-shadow: none; }
       .map-drop.cancel { background: #fff; }
       .map-drop[disabled] { opacity: .6; cursor: not-allowed; transform: none; box-shadow: none; }
-      .flag-count { color: var(--muted); font-size: .86rem; text-align: center; }
-      .map-privacy { color: var(--muted); font-size: .8rem; line-height: 1.45; }
 
       /* ---------- the landmark pins (built in community-map.js); the flag
          pins are in _map_chrome.css ---------- */
@@ -266,7 +277,7 @@
         width: 44px; height: 50px;
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
       }
-      .pin-tag { display: block; color: var(--navy); font: 400 14px/1 var(--px); letter-spacing: .03em; }
+      .pin-tag { display: block; color: var(--navy); font: 400 13px/1.08 var(--title); letter-spacing: 0; }
       /* the Healey Library's sign and the UMass Boston Recreation mark */
       .campus-logo-pin {
         display: block; overflow: hidden; background: #fff;
@@ -286,6 +297,22 @@
         box-shadow: 2px 2px 0 var(--navy);
       }
       .campus-umb-pin img { display: block; width: 46px; height: auto; }
+      /* Landmarks sit back: half size and see-through until tapped. Each pin
+         is laid out at full size and scaled from its top left corner into
+         the half-size box the script gives Leaflet; picked, it moves up and
+         left by a quarter and half of itself as it grows, which keeps its
+         foot on the same spot all the way through. */
+      .approved-place-icon > span {
+        transform: scale(.5); transform-origin: 0 0;
+        opacity: .45;
+        transition: transform .22s ease, opacity .22s ease;
+      }
+      .approved-place-icon > .campus-logo-pin { width: max-content; }
+      .approved-place-icon:hover > span { opacity: .85; }
+      .approved-place-icon.place-on > span { transform: translate(-25%, -50%); opacity: 1; }
+      @media (prefers-reduced-motion: reduce) {
+        .approved-place-icon > span { transition: none; }
+      }
       /* you are here: an orange pixel with a white rim */
       .user-position-dot {
         display: block; width: 18px; height: 18px;

@@ -47,8 +47,9 @@
     social: { color: "#78afe9", ink: "#132245", icon: "talk" },
     club:   { color: "#fede42", ink: "#132245", icon: "club" },
     event:  { color: "#132245", ink: "#ffffff", icon: "star" },
-    // A home fixture. Gold, because it is the one pin the university put
-    // there rather than a student, and nothing else on the map is.
+    // A campus-wide meetup (a fixture; "Campus-Wide" on the map). Gold,
+    // because it is the one pin the university put there rather than a
+    // student, and nothing else on the map is.
     home:   { color: "#fede42", ink: "#132245", icon: "stadium" }
   };
   // Who can see a flag, in the words the editor uses.
@@ -64,7 +65,7 @@
   // ---------- 2. page elements ----------
   function $(id) { return document.getElementById(id); }
   var el = {
-    status: $("mapStatus"), total: $("mapFlagTotal"), count: $("mapFlagCount"),
+    status: $("mapStatus"), total: $("mapFlagTotal"), fit: $("mapFit"),
     legend: $("mapLegend"), detail: $("mapFlagDetail"), drop: $("mapDrop"),
     locate: $("mapLocate"), form: $("mapFlagForm"), formTitle: $("flagFormTitle"),
     draftTag: $("mapDraftTag"), draftNote: $("mapDraftNote"), kinds: $("mapKinds"),
@@ -298,7 +299,7 @@
     userLayer = L.layerGroup().addTo(map);
 
     map.on("click", function (event) {
-      if (mode === "idle") { return; }
+      if (mode === "idle") { pickPlace(null); return; }
       if (mode === "pick") { movePick(event.latlng); return; }
       if (!campusContains(event.latlng)) {
         announce("Flags have to go inside the dashed campus area.", "error");
@@ -318,6 +319,19 @@
   // Library its own sign and the Clark Athletic Center the UMass Boston
   // Recreation mark; every other landmark is a pixel lighthouse on a yellow
   // tile with the building's short name under it.
+  //
+  // They sit back so the flags stand out: shown at half size and
+  // see-through (the stylesheet does both, scaling the full-size pin from
+  // its top left corner into the half-size box Leaflet is given here). Tap
+  // one and it comes forward at full size with its name over it; tap it
+  // again, or the map, to put it back.
+  function halfIcon(options) {
+    var w = options.iconSize[0], h = options.iconSize[1];
+    options.fullHeight = h;
+    options.iconSize = [w / 2, h / 2];
+    options.iconAnchor = [w / 4, h / 2];
+    return L.divIcon(options);
+  }
   var PLACE_LOGOS = {
     "healey-library": { url: "healey", look: "healey", size: [48, 48] },
     "clark-athletic-center": { url: "rec", look: "rec", size: [66, 51] }
@@ -329,7 +343,7 @@
   function placeIcon(place) {
     var logo = PLACE_LOGOS[place.key];
     if (logo && urls[logo.url]) {
-      return L.divIcon({
+      return halfIcon({
         className: "approved-place-icon",
         html: '<span class="campus-logo-pin ' + logo.look + '" aria-hidden="true"><img src="' + urls[logo.url] +
           '" alt="" /></span>',
@@ -338,7 +352,7 @@
     }
     var tag = PLACE_TAGS[place.key];
     if (tag) {
-      return L.divIcon({
+      return halfIcon({
         className: "approved-place-icon",
         html: '<span class="campus-lighthouse-pin tagged" aria-hidden="true">' + spriteMarkup("lighthouse") +
           '<b class="pin-tag">' + tag + "</b></span>",
@@ -346,22 +360,41 @@
       });
     }
     if (place.key === CAMPUS_CENTER_KEY && urls.umb) {
-      return L.divIcon({
+      return halfIcon({
         className: "approved-place-icon",
         html: '<span class="campus-umb-pin" aria-hidden="true"><img src="' + urls.umb +
           '" alt="" width="46" height="22" /></span>',
         iconSize: [58, 34], iconAnchor: [29, 34]
       });
     }
-    return L.divIcon({
+    return halfIcon({
       className: "approved-place-icon",
       html: '<span class="campus-lighthouse-pin" aria-hidden="true">' + spriteMarkup("lighthouse") + "</span>",
       iconSize: [28, 38], iconAnchor: [14, 38]
     });
   }
 
+  var pickedPlace = null;
+  function dressPlace(marker, on) {
+    var el = marker.getElement(), o = marker.options.icon.options;
+    if (el) { el.classList.toggle("place-on", on); }
+    marker.setZIndexOffset(on ? 900 : -100);
+    marker.unbindTooltip();
+    marker.bindTooltip(marker.options.title, {
+      direction: "top", permanent: on, offset: [0, 2 - (on ? o.fullHeight : o.iconSize[1])]
+    });
+    if (on) { marker.openTooltip(); }
+  }
+  function pickPlace(marker) {
+    var next = marker && marker !== pickedPlace ? marker : null;
+    if (pickedPlace) { dressPlace(pickedPlace, false); }
+    pickedPlace = next;
+    if (next) { dressPlace(next, true); }
+  }
+
   function renderPlaces() {
     placeLayer.clearLayers();
+    pickedPlace = null;
     info.places.forEach(function (place) {
       var marker = L.marker([place.latitude, place.longitude], {
         icon: placeIcon(place), title: place.name, keyboard: false, zIndexOffset: -100
@@ -373,11 +406,13 @@
         if (mode === "placing") { startDraft(marker.getLatLng()); }
         else if (mode === "draft") { moveDraft(marker.getLatLng()); }
         else if (mode === "pick") { movePick(marker.getLatLng()); }
+        else { pickPlace(marker); }
       });
     });
   }
 
-  // A flag pin: a square pixel head on a pole.
+  // A flag pin: a navy pole with a waving cloth in the kind's colour and
+  // its icon on it (drawn by _map_chrome.css).
   function flagIcon(category, options) {
     var look = kindOf(category);
     var classes = "beacon-flag-pin" +
@@ -454,11 +489,13 @@
   }
 
   function renderCount() {
-    el.total.textContent = info.flags.length;
+    // Your flags up, of the most you can have, in the map's title bar.
     var full = info.mine >= info.limit;
-    el.count.textContent = full
-      ? "You have " + info.limit + " flags up, the most at once. Take one down to drop another."
-      : "You have " + info.mine + " of " + info.limit + " flags up. Meetup flags don't count.";
+    el.total.textContent = info.mine + "/" + info.limit;
+    el.total.classList.toggle("full", full);
+    el.total.title = full
+      ? "All " + info.limit + " of your flags are up. Take one down to drop another."
+      : info.mine + " of your " + info.limit + " flags are up. Meetup flags don't count.";
     el.drop.disabled = full && mode === "idle";
   }
 
@@ -1033,6 +1070,12 @@
   el.friendSearch.addEventListener("keydown", function (event) {
     if (event.key === "Enter") { event.preventDefault(); }
   });
+  // Back to the whole campus, wherever the map has been dragged or zoomed.
+  if (el.fit) {
+    el.fit.addEventListener("click", function () {
+      if (map) { map.fitBounds(CAMPUS_BOUNDS, { padding: [6, 6] }); }
+    });
+  }
   el.locate.addEventListener("click", function () {
     if (!map) { return; }
     if (!navigator.geolocation) {
@@ -1120,7 +1163,8 @@
     }
   }).catch(function () {
     announce("The map library couldn't load. Check your internet connection.", "error");
-    el.count.textContent = "Map unavailable";
+    el.total.textContent = "\u2013";
+    if (el.fit) { el.fit.disabled = true; }
     el.drop.disabled = true;
     // No map to put a pin on: the meetup form is shown as it would be
     // without JavaScript, and the server pins the meetup on its place.

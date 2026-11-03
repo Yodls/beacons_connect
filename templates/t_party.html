@@ -1,0 +1,375 @@
+{% extends "shell.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}The T Party{% endblock %}
+
+{#
+  The T Party: a side-scrolling party race through a double-decker train.
+  Lifted from the standalone build (the-t-party.html): the game's own
+  stylesheet below, its markup, the train layout (tp-world-data) and
+  static/t-party.js, which boots on #t-party and hands its cleanup to
+  Beacon.live so a page swap stops it.
+
+  data-standalone="true" keeps the game to practice with bots. Party rooms
+  need the room server at /api/t-party (create, join, start, sync, leave,
+  current), which the app does not have yet; when it does, drop the
+  attribute and the room keys turn on.
+#}
+
+{% block appstyle %}{% raw %}
+/* =====================================================================
+   THE T PARTY: the games page
+   Everything here is scoped to the game (#t-party, .tp-*) and reads the
+   Beacon OS tokens in base.html (var(--px) is the title face).
+   ===================================================================== */
+.tp-crumbs {margin:0 0 12px}
+.tp-crumbs a {display:inline-flex;align-items:center;min-height:38px;padding:0 12px;background:#fff;color:var(--navy);border:2px solid var(--navy);border-radius:var(--r);box-shadow:0 3px 0 var(--navy);font-size:.92rem}
+.tp-crumbs a:hover {background:var(--paper);text-decoration:none}
+.tp-crumbs a:active {transform:translateY(3px);box-shadow:none}
+.tp-pagehead {display:flex;align-items:flex-end;justify-content:space-between;gap:18px}
+.tp-eyebrow {display:block;font-size:11px;font-weight:700;letter-spacing:.14em;margin-bottom:8px;color:var(--beacon)}
+.tp-pagehead h1 {font-size:64px;line-height:.9}
+.tp-pagehead .lede {margin-top:8px}
+.tp-facts {display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.tp-facts li {padding:6px 10px;background:var(--game-bg);border:2px solid var(--navy);border-radius:var(--r-sm);font-size:.82rem;white-space:nowrap}
+.tp-facts b {font:400 20px/1 var(--px);margin-right:2px}
+
+#t-party {--tp-purple:#8b4381;--tp-green:#237b55;isolation:isolate;margin-top:24px}
+#t-party button {border:2px solid var(--navy);border-radius:6px;background:var(--beacon);color:#fff;box-shadow:0 3px 0 var(--navy);font:700 13px/1.3 var(--sans);padding:8px 12px;cursor:pointer}
+#t-party button.ghost {background:#fff;color:var(--navy)}
+#t-party button:hover:not(:disabled) {filter:brightness(1.07)}
+#t-party button:active:not(:disabled) {transform:translateY(2px);box-shadow:none}
+#t-party button:disabled {opacity:.48;cursor:default}
+#t-party [hidden] {display:none!important}
+#t-party .tp-grid {display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:22px;align-items:start}
+#t-party section {margin-top:0}
+#t-party .tp-window {overflow:hidden}
+#t-party .tp-window > :not(.sec),#t-party .tp-manifest > :not(.sec) {margin:0}
+#t-party .tp-titlebar {gap:9px;min-height:40px}
+#t-party .tp-titlebar h2 {font-size:25px}
+.tp-trainmark {width:23px;height:23px;display:grid;place-items:center;border:2px solid var(--navy);border-radius:50%;background:#fff;font:bold 17px/1 var(--sans)}
+.tp-windowdots {font:bold 18px/1 monospace;order:4;letter-spacing:2px}
+
+/* ---------- the HUD ---------- */
+#t-party .tp-hud {display:flex;gap:18px;align-items:center;min-height:64px;padding:9px 12px;background:var(--paper);border-bottom:2px solid var(--navy)}
+.tp-label {display:block;font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--muted);line-height:1.4}
+.tp-hud b {display:block;font:400 26px/1.1 var(--px);white-space:nowrap}
+.tp-hud-time b {color:var(--navy)}
+.tp-health {display:flex;gap:3px;margin-top:5px}
+.tp-heart {display:block;width:18px;height:16px}
+.tp-heart svg {display:block;width:100%;height:100%;shape-rendering:crispEdges}
+.tp-heart .o {fill:var(--navy)}
+.tp-heart .f {fill:#ff5a3c}
+.tp-heart .h {fill:#ffd0b0}
+.tp-heart.empty .f {fill:#c9dcf1}
+.tp-heart.empty .h {fill:#c9dcf1}
+.tp-hud-tools {margin-left:auto;display:flex;gap:6px}
+#t-party .tp-tool {display:grid;place-items:center;width:40px;height:40px;padding:0;background:#fff;color:var(--navy);border-radius:var(--r);box-shadow:0 3px 0 var(--navy)}
+#t-party .tp-tool svg {width:20px;height:20px;fill:currentColor;shape-rendering:crispEdges}
+#t-party .tp-tool.is-on {background:var(--gold)}
+
+/* ---------- the picture ---------- */
+#t-party .tp-viewport {position:relative;overflow:hidden;background:#0c1631;line-height:0}
+#tp-canvas {display:block;margin:0 auto;image-rendering:crisp-edges;image-rendering:pixelated;touch-action:none;-webkit-user-select:none;user-select:none}
+#tp-canvas:focus {outline:none}
+#tp-canvas:focus-visible {outline:2px solid rgba(255,121,31,.6);outline-offset:-2px}
+.tp-canvas-tag {position:absolute;top:10px;left:10px;background:var(--navy);color:#fff;border:2px solid #fff;padding:3px 7px;font:700 10px/1.4 var(--sans);letter-spacing:.08em;pointer-events:none}
+.tp-overlay {position:absolute;inset:0;display:grid;place-items:center;padding:18px;background:rgba(19,34,69,.32);z-index:5;text-align:center;line-height:1.4}
+.tp-dialog {max-width:380px;padding:20px 22px;background:#fff;border:2px solid var(--navy);box-shadow:5px 5px 0 var(--navy);border-radius:6px}
+.tp-dialog h3 {font:400 38px/1 var(--px);margin:8px 0}
+.tp-dialog p {font-size:14px;margin:10px 0 16px;line-height:1.45}
+.tp-dialog .tp-countdown {font:400 100px/1 var(--px);color:var(--orange)}
+.tp-warning {position:absolute;top:10px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 20px);text-align:center;background:var(--gold);border:2px solid var(--navy);box-shadow:3px 3px 0 var(--navy);padding:6px 12px;font:700 14px/1.3 var(--sans);z-index:6}
+#t-party .tp-watch {position:absolute;left:10px;right:10px;bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;background:#fff6c7;border:2px solid var(--navy);border-radius:6px;box-shadow:3px 3px 0 var(--navy);font:700 12px/1.35 var(--sans);z-index:4}
+#t-party .tp-message {padding:9px 12px;display:flex;align-items:center;gap:9px;border-top:2px solid var(--navy);background:#fff;min-height:42px;font-size:12px;font-weight:700}
+.tp-led {width:8px;height:8px;background:var(--tp-green);box-shadow:0 0 0 2px var(--navy);flex:none}
+.tp-led.warn {background:var(--gold);animation:tp-blink .5s steps(2) infinite}
+.tp-led.paused {background:var(--orange)}
+#t-party .tp-controls {display:flex;flex-wrap:wrap;gap:7px 15px;align-items:center;padding:10px 12px;background:var(--paper);border-top:2px solid var(--line);font-size:11px;color:var(--muted)}
+.tp-controls span {display:flex;align-items:center;gap:4px}
+.tp-controls kbd {background:#fff;border:1px solid var(--navy);box-shadow:0 2px 0 #9fbde0;border-radius:3px;padding:0 4px;font:700 10px/18px var(--sans);color:var(--navy)}
+#t-party button.tp-small {min-height:32px;padding:4px 9px;font-size:12px;border-radius:4px;box-shadow:0 2px 0 var(--navy);white-space:nowrap}
+
+/* ---------- the thumb pad ----------
+   A d-pad for the left thumb (walk, and stairs on up and down) and A/B
+   for the right, the way every handheld has done it. It lights up when
+   something is in reach: B goes green by a free seat, up or down glows
+   at a stairwell. */
+.tp-pad {display:none}
+.tp-touch-only {display:none}
+.tp-touchmode .tp-touch-only {display:inline}
+.tp-touchmode .tp-kbd-only {display:none}
+#t-party.tp-touchmode .tp-controls {display:none}
+#t-party.tp-touchmode .tp-pad {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left));background:linear-gradient(#1b2b57,#132245);border-top:2px solid var(--navy);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.tp-pad-l {display:flex;flex-direction:column;align-items:center;gap:6px}
+.tp-pad-hint {font:700 9px/1 var(--sans);letter-spacing:.12em;color:#9fbde0;text-transform:uppercase}
+.tp-dpad {position:relative;width:138px;height:138px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);touch-action:none;cursor:pointer}
+.tp-dpad::before {content:"";position:absolute;inset:-6px;border-radius:50%;background:#0c1631;box-shadow:inset 0 0 0 2px #2c3f6c}
+.tp-dpad .arm,.tp-dpad .hub {position:relative;display:grid;place-items:center;background:#e9eef5;color:var(--navy)}
+.tp-dpad .arm {border:2px solid #0c1631;box-shadow:0 4px 0 #0c1631;transition:background .08s}
+.tp-dpad .up {grid-area:1/2;border-bottom:0;border-radius:8px 8px 0 0;box-shadow:none}
+.tp-dpad .down {grid-area:3/2;border-top:0;border-radius:0 0 8px 8px}
+.tp-dpad .left {grid-area:2/1;border-right:0;border-radius:8px 0 0 8px}
+.tp-dpad .right {grid-area:2/3;border-left:0;border-radius:0 8px 8px 0}
+.tp-dpad .hub {grid-area:2/2;box-shadow:0 4px 0 #0c1631}
+.tp-dpad .hub::after {content:"";width:12px;height:12px;border-radius:50%;background:#c9d4e3}
+.tp-dpad svg {width:20px;height:20px;fill:currentColor;shape-rendering:crispEdges;transition:transform .08s}
+.tp-dpad .left svg {transform:rotate(-90deg)}
+.tp-dpad .right svg {transform:rotate(90deg)}
+.tp-dpad .down svg {transform:rotate(180deg)}
+.tp-dpad[data-dir*="up"] .up,.tp-dpad[data-dir*="down"] .down,.tp-dpad[data-dir*="left"] .left,.tp-dpad[data-dir*="right"] .right {background:var(--orange)}
+.tp-pad.can-up .tp-dpad .up,.tp-pad.can-down .tp-dpad .down {background:var(--sky);animation:tp-glow 1s ease-in-out infinite}
+.tp-pad-r {position:relative;display:flex;align-items:flex-end;gap:14px;padding-top:26px}
+#t-party .tp-btn {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:74px;height:74px;padding:0;border:3px solid #0c1631;border-radius:50%;box-shadow:0 5px 0 #0c1631;color:var(--navy);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#t-party .tp-btn b {font:400 34px/.9 var(--px)}
+#t-party .tp-btn small {font:700 9px/1 var(--sans);letter-spacing:.1em}
+#t-party .tp-btn.a {background:var(--orange)}
+#t-party .tp-btn.b {background:var(--gold);transform:translateY(-26px)}
+#t-party .tp-btn.is-down {box-shadow:0 0 0 #0c1631;transform:translateY(5px);filter:brightness(.92)}
+#t-party .tp-btn.b.is-down {transform:translateY(-21px)}
+#t-party .tp-pad.can-act .tp-btn.b {background:#51d67c;animation:tp-glow 1s ease-in-out infinite}
+.tp-pad.is-paused .tp-dpad,.tp-pad.is-paused .tp-btn {opacity:.4}
+@keyframes tp-glow {50% {filter:brightness(1.18)}}
+@keyframes tp-blink {50% {opacity:.35}}
+
+/* ---------- on a phone, the ride takes the whole screen ---------- */
+html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavior:none}
+#t-party #tp-stage.is-immersive {position:fixed;inset:0;z-index:95;margin:0;display:flex;flex-direction:column;background:#0c1631;border:0;border-radius:0;box-shadow:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#tp-stage.is-immersive .tp-titlebar {display:none}
+#t-party #tp-stage.is-immersive .tp-hud {min-height:0;gap:14px;padding:7px 12px;background:#132245;color:#fff;border-bottom:2px solid #000}
+#tp-stage.is-immersive .tp-hud b {color:#fff;font-size:22px}
+#tp-stage.is-immersive .tp-label {color:#9fbde0}
+#tp-stage.is-immersive .tp-play {flex:1 1 0;min-height:0;display:flex;flex-direction:column}
+#t-party #tp-stage.is-immersive .tp-viewport {flex:1 1 0;min-height:0;display:grid;place-items:center}
+#t-party #tp-stage.is-immersive .tp-message {background:#132245;color:#fff;border-top-color:#000;min-height:36px}
+#t-party #tp-stage.is-immersive .tp-controls {background:#132245;border-top-color:#000;color:#9fbde0;justify-content:center}
+#tp-stage:fullscreen {width:100vw;height:100vh}
+@media (orientation:landscape) and (max-height:600px) {
+  #tp-stage.is-immersive .tp-hud-loc {display:none}
+  #t-party #tp-stage.is-immersive .tp-hud {padding:4px 12px}
+  #tp-stage.is-immersive .tp-hud b {font-size:19px}
+  #tp-stage.is-immersive .tp-label {display:none}
+  #tp-stage.is-immersive .tp-health {margin-top:0}
+  #tp-stage.is-immersive .tp-play {display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"l v r" "l m r"}
+  #t-party #tp-stage.is-immersive .tp-viewport {grid-area:v;min-width:0}
+  #t-party #tp-stage.is-immersive .tp-message {grid-area:m;min-height:30px;padding:5px 10px}
+  #t-party.tp-touchmode #tp-stage.is-immersive .tp-pad {display:contents}
+  #tp-stage.is-immersive .tp-pad-l {grid-area:l;align-self:end;padding:0 14px 18px}
+  #tp-stage.is-immersive .tp-pad-r {grid-area:r;align-self:end;padding:0 14px 18px;flex-direction:column;align-items:center;gap:12px}
+  #t-party #tp-stage.is-immersive .tp-btn.b {transform:none}
+  #t-party #tp-stage.is-immersive .tp-btn.b.is-down {transform:translateY(5px)}
+  #tp-stage.is-immersive .tp-dpad {width:128px;height:128px}
+}
+
+/* ---------- the side windows ---------- */
+.tp-side {display:grid;gap:20px}
+#t-party .tp-board-body {margin:14px}
+.tp-stamp {display:inline-block;font-size:9px;letter-spacing:.12em;font-weight:700;color:#904011;background:#ffe9d9;padding:3px 6px;border:1px solid #eead80}
+.tp-boarding-copy {font-size:14px;line-height:1.45;margin:12px 0 16px}
+.tp-boarding-copy b {display:block;margin-top:5px}
+#t-party label {font-size:12px;margin:0 0 5px;display:block;font-weight:700}
+#t-party select {font-size:1rem;min-height:44px;padding:6px 2.4rem 6px 9px;border:2px solid var(--navy);width:100%;border-radius:5px;margin-bottom:12px}
+#t-party .tp-primary {width:100%;background:var(--orange);color:var(--navy);min-height:46px;font-size:14px}
+.tp-join {margin-top:18px}
+.tp-join > div {display:flex;gap:7px}
+#t-party .tp-join input {min-width:0;width:100%;font:700 17px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;border:2px solid var(--navy);min-height:44px;padding:6px 9px;border-radius:4px}
+#t-party .tp-join button {font-size:13px;padding:6px 14px}
+.tp-or {display:flex;align-items:center;gap:9px;margin:17px 0 10px;font-size:11px;color:var(--muted)}
+.tp-or::before,.tp-or::after {content:"";height:1px;background:var(--line);flex:1}
+#t-party .tp-practice {width:100%;min-height:44px;font-size:13px}
+.tp-fine {font-size:11px;line-height:1.5;color:var(--muted);margin:12px 0 0}
+/* the boarding code reads like the departure board at South Station */
+.tp-code-row {display:flex;align-items:center;justify-content:space-between;gap:10px;margin:5px 0 10px}
+.tp-code-row strong {flex:1;padding:8px 10px;background:#0c1631;border:2px solid var(--navy);border-radius:6px;color:#ffb000;font:400 38px/1 var(--px);letter-spacing:.14em;text-align:center;text-shadow:0 0 8px rgba(255,176,0,.45)}
+#t-party #tp-start {margin-top:15px}
+#t-party .tp-leave {font-size:12px;width:100%;margin-top:12px;min-height:40px}
+.tp-error {background:#fdecea;color:#a3281f;border:1px solid #a3281f;padding:8px;font-size:12px;margin-top:12px}
+.tp-empty {padding:14px;color:var(--muted);font-size:12px;line-height:1.5}
+.tp-count {margin-left:auto;font-size:11px;font-weight:700;order:3;white-space:nowrap}
+.tp-rider {display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px dashed var(--line);font-size:12px}
+.tp-rider:last-child {border:0}
+.tp-rider.is-you {background:var(--game-bg)}
+.tp-rider.is-out {opacity:.5}
+.tp-rider-art {display:block;width:20px;height:36px;image-rendering:crisp-edges;image-rendering:pixelated}
+.tp-rider-mid {display:flex;flex-direction:column;gap:4px;min-width:0}
+.tp-rider-name {font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 3px 0 0 var(--rider);padding-left:6px}
+.tp-pips {display:flex;gap:2px;padding-left:6px}
+.tp-pips i {width:7px;height:7px;background:#ff5a3c;box-shadow:inset 0 0 0 1px var(--navy)}
+.tp-pips i.gone {background:#dfe8f3}
+.tp-rider small {font-size:10px;color:var(--muted);white-space:nowrap;font-weight:700}
+/* the line map: eight stops on a purple line, car 08 to car 01 */
+.tp-rules {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:24px}
+.tp-rules > div {background:#fffdf3;border:2px solid var(--navy);border-radius:6px;box-shadow:3px 3px 0 var(--navy);padding:16px 16px 15px;position:relative}
+.tp-rule-num {font:400 30px/1 var(--px);color:#005a8b;display:block;margin-bottom:8px}
+.tp-rules h3 {font-size:15px;margin-bottom:5px}
+.tp-rules p {font-size:12px;line-height:1.5;color:var(--muted)}
+.tp-foot {margin-top:24px;background:rgba(255,255,255,.75);border:2px solid var(--navy);border-radius:5px;padding:10px 14px;font-size:11px;display:flex;justify-content:space-between;gap:12px}
+
+/* ---------- smaller screens ---------- */
+@media (max-width:1050px) {#t-party .tp-grid {grid-template-columns:minmax(0,1fr) 262px;gap:16px} #t-party .tp-hud {gap:12px} .tp-hud b {font-size:23px}}
+@media (max-width:860px) {
+  #t-party .tp-grid {grid-template-columns:minmax(0,1fr)}
+  .tp-side {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .tp-boarding {grid-row:span 2}
+  .tp-pagehead h1 {font-size:54px}
+  .tp-rules {gap:14px}
+}
+@media (max-width:600px) {
+  .tp-pagehead {display:block}
+  .tp-pagehead h1 {font-size:48px}
+  .tp-pagehead .lede {font-size:14px}
+  .tp-facts {margin-top:12px}
+  .tp-side {grid-template-columns:minmax(0,1fr)}
+  .tp-boarding {grid-row:auto}
+  .tp-rules {grid-template-columns:1fr;gap:12px}
+  .tp-rules > div {padding:12px 14px 12px 54px}
+  .tp-rule-num {position:absolute;left:14px;top:13px}
+  #t-party .tp-hud {gap:10px;padding:8px 10px;min-height:0}
+  .tp-hud b {font-size:20px}
+  .tp-hud-loc {display:none}
+  .tp-heart {width:14px;height:13px}
+  .tp-health {gap:2px}
+  .tp-warning {font-size:11px}
+  .tp-canvas-tag {font-size:8px;top:8px;left:8px}
+  .tp-windowdots {font-size:14px}
+  .tp-dialog {padding:16px}
+  .tp-dialog h3 {font-size:32px}
+  .tp-dialog .tp-countdown {font-size:84px}
+  .tp-foot {flex-direction:column}
+}
+@media (max-width:370px) {
+  .tp-dpad {width:124px!important;height:124px!important}
+  #t-party .tp-btn {width:64px;height:64px}
+}
+@media (prefers-reduced-motion:reduce) {
+  #t-party .tp-pad.can-act .tp-btn.b,.tp-pad.can-up .tp-dpad .up,.tp-pad.can-down .tp-dpad .down,.tp-led.warn {animation:none}
+}
+{% endraw %}{% endblock %}
+
+{% block main %}
+  {# Nothing on this page folds on a phone (see _fold.html). #}
+  <i hidden data-fold-none></i>
+<nav class="tp-crumbs" aria-label="Breadcrumb"><a href="{{ url_for('game_lobby') }}">&#8592; Games</a></nav>
+<div class="pagehead tp-pagehead">
+  <div>
+    <span class="tp-eyebrow">BEACON GAMES / COMMUTER CHAOS</span>
+    <h1>The T Party</h1>
+    <p class="lede">Will you arrive to JFK on time?</p>
+  </div>
+  <ul class="tp-facts" aria-label="At a glance">
+    <li><b>2&ndash;8</b> riders</li><li><b>5 min</b> or 90 s</li>
+  </ul>
+</div>
+<div id="t-party" data-standalone="true" data-api="/api/t-party" data-name="{{ current_user.name.split(' ')[0] }}"><div class="tp-grid">
+  <section class="sec-game tp-window" id="tp-stage" aria-label="The T Party game">
+    <div class="sec sec-game tp-titlebar">
+      <span class="tp-trainmark" aria-hidden="true">T</span>
+      <h2>the_t_party.exe</h2>
+      <span class="tp-windowdots" aria-hidden="true">&#9472; &#9633; &#215;</span>
+    </div>
+    <div class="tp-hud">
+      <div class="tp-hud-time"><span class="tp-label">TIME LEFT</span><b id="tp-time">05:00</b></div>
+      <div class="tp-hud-hp"><span class="tp-label">STILL IN ONE PIECE</span><span id="tp-health" class="tp-health" role="img" aria-label="6 of 6 hearts left"></span></div>
+      <div class="tp-hud-loc"><span class="tp-label">YOUR LOCATION</span><b id="tp-location">CAR 08 · LOWER</b></div>
+      <div class="tp-hud-tools">
+        <button type="button" id="tp-sound" class="tp-tool" aria-pressed="false" aria-label="Turn game sound on" title="Sound">
+          <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M1 4h3V3h1V2h2v8H5V9H4V8H1zM8 4h1v4H8zm2-2h1v8h-1z"/></svg>
+        </button>
+        <button type="button" id="tp-fullscreen" class="tp-tool" aria-label="Play full screen" title="Full screen">
+          <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M0 0h5v2H2v3H0zm7 0h5v5h-2V2H7zM0 7h2v3h3v2H0zm10 0h2v5H7v-2h3z"/></svg>
+        </button>
+        <button type="button" id="tp-exit" class="tp-tool" aria-label="Leave full screen" title="Back to the page" hidden>
+          <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M1 1h2v2H1zm2 2h2v2H3zm2 2h2v2H5zm2 2h2v2H7zm2 2h2v2H9zm0-8h2v2H9zM7 3h2v2H7zM3 7h2v2H3zM1 9h2v2H1z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="tp-play">
+      <div class="tp-viewport" id="tp-viewport">
+        <canvas id="tp-canvas" width="240" height="156" tabindex="0" aria-label="Side view of a double-decker train."></canvas>
+        <div id="tp-overlay" class="tp-overlay" hidden></div>
+        <div class="tp-warning" id="tp-warning" role="status" aria-live="polite" hidden></div>
+        <div class="tp-canvas-tag" id="tp-scene-tag">BOSTON BOUND. PROBABLY.</div>
+        <div class="tp-watch" id="tp-watch" hidden><span>You're a shooting star. Spectating the riders still aboard.</span><button type="button" id="tp-next-rider" class="ghost tp-small">Next rider &#8594;</button></div>
+      </div>
+      <div class="tp-message"><span class="tp-led" id="tp-led"></span><span id="tp-message" role="status">Eight cars. One green button. A deeply questionable commute.</span></div>
+      <!-- The thumb pad. Shown once the page knows it is being touched. -->
+      <div class="tp-pad" id="tp-pad" aria-label="Touch controls">
+        <div class="tp-pad-l">
+          <div class="tp-dpad" id="tp-dpad" data-dir="" aria-hidden="true">
+            <span class="arm up"><svg viewBox="0 0 7 7"><path d="M3 0h1v1h1v1h1v1h1v1H5v3H2V4H0V3h1V2h1V1h1z"/></svg></span>
+            <span class="arm left"><svg viewBox="0 0 7 7"><path d="M3 0h1v1h1v1h1v1h1v1H5v3H2V4H0V3h1V2h1V1h1z"/></svg></span>
+            <span class="hub"></span>
+            <span class="arm right"><svg viewBox="0 0 7 7"><path d="M3 0h1v1h1v1h1v1h1v1H5v3H2V4H0V3h1V2h1V1h1z"/></svg></span>
+            <span class="arm down"><svg viewBox="0 0 7 7"><path d="M3 0h1v1h1v1h1v1h1v1H5v3H2V4H0V3h1V2h1V1h1z"/></svg></span>
+          </div>
+          <span class="tp-pad-hint">walk &#183; stairs</span>
+        </div>
+        <div class="tp-pad-r">
+          <button type="button" class="tp-btn b" data-btn="act" aria-label="Sit, stand or press the stop button"><b>B</b><small id="tp-b-label">USE</small></button>
+          <button type="button" class="tp-btn a" data-btn="jump" aria-label="Jump"><b>A</b><small>JUMP</small></button>
+        </div>
+      </div>
+    </div>
+    <div class="tp-controls" aria-label="Keyboard controls">
+      <span><kbd>A</kbd><kbd>D</kbd> move</span><span><kbd>SPACE</kbd> jump</span>
+      <span><kbd>W</kbd><kbd>S</kbd> stairs at car ends</span><span><kbd>E</kbd> sit / stand / stop</span>
+    </div>
+  </section>
+
+  <aside class="tp-side">
+    <section class="sec-game tp-boarding">
+      <div class="sec sec-game"><h2>All aboard</h2></div>
+      <div class="tp-board-body">
+        <span class="tp-stamp" id="tp-mode">PARTY SURVIVAL RACE</span>
+        <p class="tp-boarding-copy">Reach the front. Grab a seat when the train loses its mind. <b>Hit the green button first.</b></p>
+        <div id="tp-menu">
+          <label for="tp-duration">Multiplayer ride</label>
+          <select id="tp-duration"><option value="300">5 minutes · the full commute</option><option value="90">90 seconds · quick ride</option></select>
+          <button type="button" id="tp-create" class="tp-primary">Create a party room &#8594;</button>
+          <form id="tp-join-form" class="tp-join" data-full>
+            <label for="tp-code">Have a room code?</label>
+            <div><input id="tp-code" placeholder="ABC234" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Six-character room code" required pattern="[A-Za-z0-9]{6}"><button type="submit" class="ghost">Join</button></div>
+          </form>
+          <div class="tp-or">or ride solo</div>
+          <button type="button" id="tp-practice" class="ghost tp-practice">Quick practice + 3 bots</button>
+          <p class="tp-fine" id="tp-network-note">2&ndash;8 signed-in riders. Share a room code to board together.</p>
+        </div>
+        <div id="tp-room" hidden>
+          <span class="tp-label">YOUR BOARDING CODE</span>
+          <div class="tp-code-row"><strong id="tp-room-code"></strong><button type="button" id="tp-copy" class="ghost tp-small">Copy</button></div>
+          <p class="tp-fine" id="tp-room-status">Waiting at the platform.</p>
+          <button type="button" id="tp-start" class="tp-primary">Depart together &#8594;</button>
+          <button type="button" id="tp-leave" class="ghost tp-leave">Leave this train</button>
+        </div>
+        <p id="tp-error" class="tp-error" role="alert" hidden></p>
+      </div>
+    </section>
+    <section class="sec-friend tp-manifest">
+      <div class="sec sec-friend"><h2>Passenger manifest</h2><span id="tp-count" class="tp-count">0 / 8</span></div>
+      <div id="tp-roster"><p class="tp-empty">Your fellow commuters will appear here. Personal space is optional.</p></div>
+    </section>
+  </aside>
+</div>
+<div class="tp-rules" id="tp-rules">
+  <div><span class="tp-rule-num">01</span><h3>Mind the aisle.</h3><p>Barking dogs, cats in carriers and very touchy wild turkeys guard the aisle, while e-bikes, scooters and loose furniture roll back at you. <span class="tp-kbd-only">Jump with Space</span><span class="tp-touch-only">Jump with A</span> or take the other deck.</p></div>
+  <div><span class="tp-rule-num">02</span><h3>Find your seat.</h3><p>When the warning goes up, empty seats wear a green arrow. <span class="tp-kbd-only">Press E</span><span class="tp-touch-only">Tap B</span> beside one; each seat fits one rider.</p></div>
+  <div><span class="tp-rule-num">03</span><h3>Six hits. One twinkle.</h3><p>Lose your last heart and the ride pauses while everyone watches you sail off into the sky. Then it's back to the race.</p></div>
+</div></div>
+<footer class="tp-foot"><span>THE T PARTY / BEACON GAMES</span><span>Beacon OS · commuter chaos · no personal space</span></footer>
+{% raw %}<script type="application/json" id="tp-world-data">{
+  "carWidth": 1120,
+  "carCount": 8,
+  "duration": 300,
+  "gateInterval": 38.5,
+  "speed": 134,
+  "gravity": 640,
+  "jumpVelocity": 300,
+  "maxHealth": 6,
+  "cinematicSeconds": 4.8,
+  "capacity": 8,
+  "carNames": ["All aboard", "Personal space", "Wheel trouble", "The quiet car", "Moving furniture", "Seat scramble", "Last call", "The big green button"],
+  "colors": ["#FF791F", "#78AFE9", "#FEDE42", "#B99DD8", "#51C6B1", "#F28CA8", "#8CD879", "#FFFFFF"],
+  "seatOffsets": [150, 270, 390, 510, 630, 750, 870, 990]
+}
+</script>{% endraw %}
+<script src="{{ url_for('static', filename='t-party.js') }}"></script>
+{% endblock %}

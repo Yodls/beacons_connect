@@ -110,8 +110,9 @@ Blue, friends Sky, games Orange, meet ups Navy, clubs Yellow. A
 `sec-chat`, `sec-friend`, `sec-game`, `sec-place` or `sec-club` class on a
 wrapper picks the colour.
 
-Type: **Jersey 15** (pixel titles, one weight) and **Atkinson Hyperlegible
-Next** (everything you read), both from Google Fonts.
+Type: **Jersey 15** (pixel titles, one weight, `var(--title)`) and
+**Atkinson Hyperlegible Next** (everything you read), both from Google
+Fonts.
 
 ### Building blocks
 
@@ -124,8 +125,20 @@ Next** (everything you read), both from Google Fonts.
 - **Buttons**: every submit button is a raised Beacon Blue key; add
   `class="ghost"` for the white one. Panels that need a different button
   qualify their rule with `button` (see `.bell-tools` in `base.html`).
-- **Icons**: `ui.icon("game")`. Small icons are drawn on a 12px grid and
-  shown at 24px; keep sizes at multiples of 12 so pixels stay crisp.
+- **Icons**: `ui.icon("game")`. Small icons are Material Symbols
+  (Rounded, Apache License 2.0) in `_icons.html`; the five taskbar icons
+  fill in on the tab you are on. The big illustrations, the lighthouse and
+  the game icons stay pixel art.
+- **Folding windows** (phones): every window folds to its title bar,
+  tap to open (`_fold.html`). Mark a window `data-fold="open"` to keep it
+  open, or put `<i hidden data-fold-none></i>` in a page to turn folding
+  off there. Club cards on /clubs fold to their name row.- **The T Party** (`/games/t-party`): a party race game, linked from a
+  tile on /games. Its page is `templates/t_party.html` and its script
+  `static/t-party.js`. Practice with bots works now; party rooms need a
+  room server at `/api/t-party` (not built yet).
+- **Scoreboard** (/games): the ten students with the most finished games
+  won (`SCOREBOARD_SIZE` in app.py). Unlisted accounts appear only to
+  their friends and themselves, as on every other list of people.
 
 ### Rules the tests depend on (keep these when restyling)
 
@@ -156,8 +169,9 @@ flags inside the campus area.
 | Counts toward the 3-flag limit | Yes | No |
 | Cancelling the meetup | n/a | Takes the flag down |
 
-Flag types: Game, Study, Social, Club, Event and **U-Find** (selling
-something on campus, with an optional price). Owners can drag their flags to
+Flag types: Game, Study, Social, Club, Event and **Campus-Wide** (a
+campus-wide meetup from /fixtures; the kind is still called `home` in the
+code and the database). Each is drawn as a small flag in its own colour. Owners can drag their flags to
 a new spot, edit them, or take them down; nobody else can. Meetup cards in
 chats and on Meet up get a "See on map" link for anyone who can see the flag.
 

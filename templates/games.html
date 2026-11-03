@@ -66,6 +66,33 @@
       }
       .gp:has(input:focus-visible) { outline: 3px solid var(--orange); outline-offset: 2px; }
 
+      a.gp:hover { text-decoration: none; }
+      /* ---------- Scoreboard ---------- */
+      .winboard { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+      .winboard li {
+        display: flex; align-items: center; gap: 10px;
+        min-height: 46px; padding: 6px 10px;
+        background: #fff; border: 2px solid var(--line); border-radius: var(--r);
+      }
+      .winboard li.me { border-color: var(--navy); background: var(--paper); }
+      .winboard .place {
+        flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 400 20px/1 var(--title);
+      }
+      .winboard .place.p1 { background: var(--gold); }
+      .winboard .place.p2 { background: #C3CCD3; }
+      .winboard .place.p3 { background: #E0A46A; }
+      .winboard .who {
+        flex: 1; min-width: 0; color: var(--navy); font-weight: 700;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .winboard .who small { color: var(--muted); font-weight: 400; }
+      .winboard .wins { flex: none; color: var(--navy); font-size: .9rem; }
+      .winboard-you { margin-top: 10px; color: var(--muted); font-size: .9rem; }
+      a.gp:active { transform: translateY(4px); box-shadow: none; }
+      .partypick { margin-bottom: 0; }
       button.block { width: 100%; }
       button.warm[type="submit"] { background: var(--orange); color: var(--navy); }
       button.warm[type="submit"]:hover { background: #ff8f45; }
@@ -147,6 +174,8 @@
   after everything in this block.
 #}
 {% block main %}
+  {# Nothing on this page folds on a phone (see _fold.html). #}
+  <i hidden data-fold-none></i>
   <div class="pagehead">
     <h1>Games</h1>
     <p class="lede">Turn-based games with friends, or with whoever is waiting.</p>
@@ -193,6 +222,17 @@
             <button type="submit" class="block">Find a player</button>
           </form>
         {% endif %}
+      </section>
+
+      {# Party games: their own page, so a link rather than a pick. #}
+      <section class="sec-game">
+        {{ ui.section("Party games", "game", "star") }}
+        <div class="gamepick partypick">
+          <a class="gp" href="{{ url_for('t_party') }}">
+            <svg width="32" height="32" aria-hidden="true"><use href="#icon-g-train" /></svg>
+            <span>T Party</span>
+          </a>
+        </div>
       </section>
 
       <section class="sec-game">
@@ -321,6 +361,27 @@
           {% endif %}
         </div>
       {% endmacro %}
+
+      {# Who has won the most (app.game_lobby: finished games, unlisted
+         accounts only for their friends). #}
+      <section class="sec-game">
+        {{ ui.section("Scoreboard", "game", "star") }}
+        {% if leaders %}
+          <ol class="winboard">
+            {% for row in leaders %}
+              <li{% if row.id == current_user.id %} class="me"{% endif %}>
+                <span class="place p{{ loop.index }}">{{ loop.index }}</span>
+                {{ ui.avatar(row.name, row.id, sm=true) }}
+                <span class="who">{{ row.name }}{% if row.id == current_user.id %} <small>(you)</small>{% endif %}</span>
+                <b class="wins">{{ row.wins }} win{{ "" if row.wins == 1 else "s" }}</b>
+              </li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <div class="empty">No games won yet. Win one and you're on the board.</div>
+        {% endif %}
+        <p class="winboard-you">You've won <b>{{ my_wins }}</b> game{{ "" if my_wins == 1 else "s" }}.</p>
+      </section>
 
       <section class="sec-game">
         {{ ui.section("Your games", "game", "star", resumable | length) }}
