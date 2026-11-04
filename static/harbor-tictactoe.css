@@ -1,0 +1,265 @@
+/* Beacons Connect tic-tac-toe: a dock on the harbour.
+   Scoped to .ttt-harbor (templates/_ttt_board.html), so nothing else on the
+   chat page changes. The squares are .spot rather than .cell, so the generic
+   board-button rules in chat.html do not reach them.
+
+   Everything is pixel art drawn at one CSS pixel to the art pixel and scaled
+   up whole, like the Harborwalk behind the page: two screen pixels to the
+   art pixel on phones, three from 480px. --k is that scale and --u one art
+   pixel, so every size below is a whole number of art pixels.
+
+   Back to front: the scene (sky, far shore, island lighthouse, water, boats,
+   buoy), the dock's shadow, the dock, the squares with their pieces, then
+   the pilings on top. Night follows the switch in the top bar
+   (data-sky="night" on the html element), with the page's slow timings. */
+
+.ttt-harbor {
+  --k: 2;
+  --u: calc(var(--k) * 1px);
+  --hz: 36px;                          /* where the water starts, in art pixels */
+  container: ttt / inline-size;
+  width: 100%;
+}
+@media (min-width: 480px) { .ttt-harbor { --k: 3; } }
+
+/* The pane's usual padding and centring are for fixed-size boards; this one
+   fills the window edge to edge. */
+.boardwrap:has(.ttt-harbor) { display: block; padding: 0; overflow: hidden; }
+#board-area:has(.ttt-harbor) { width: 100%; }
+
+.ttt-scene {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 5);
+  padding: calc(var(--u) * 7) 12px calc(var(--u) * 7);
+  background: #4583C3;
+}
+
+/* ---------- the view off the Harborwalk ---------- */
+.ttt-art {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  width: calc(100% / var(--k)); height: calc(100% / var(--k));
+  transform: scale(var(--k)); transform-origin: 0 0;
+  shape-rendering: crispEdges;
+}
+.ttt-art i, .ttt-art svg { position: absolute; display: block; }
+
+.ttt-sky, .ttt-sky-n, .ttt-stars { left: 0; top: 0; width: 100%; height: var(--hz); }
+.ttt-sky {
+  background:
+    linear-gradient(to top, #D3E6F8 0 2px, #C3DDF6 2px 5px, #B1D3F4 5px 9px, #9FC9F1 9px 14px, rgba(159, 201, 241, 0) 14px),
+    linear-gradient(to bottom, #4A8EDE, #69A5E6 45%, #93C2EF);
+}
+.ttt-sky-n {
+  background:
+    linear-gradient(to top, #3A4F80 0 2px, #33477A 2px 5px, #2C4072 5px 9px, #26396A 9px 14px, rgba(38, 57, 106, 0) 14px),
+    linear-gradient(to bottom, #0A1430, #13234C 50%, #26396A);
+}
+.ttt-sky-n, .ttt-stars { opacity: 0; }
+
+.ttt-cloud.c1 { left: 3%; top: 4px; }
+.ttt-cloud.c2 { left: 80%; top: 3px; }
+.ttt-cloud.c3 { left: 17%; top: 18px; }
+.ttt-cloud.c4 { left: calc(50% - 27px); top: -5px; }
+
+/* one gull over the left-hand water: a few beats, then a long glide */
+.ttt-gull { left: calc(25% - 31px); top: 9px; width: 9px; height: 4px; animation: ttt-hover 5s ease-in-out infinite alternate; }
+.ttt-gull svg { left: 0; top: 0; }
+.ttt-gull .up { animation: ttt-beat-up 4.2s steps(1, end) infinite; }
+.ttt-gull .flat { animation: ttt-beat-flat 4.2s steps(1, end) infinite; }
+
+.ttt-shore, .ttt-lit { left: 0; top: calc(var(--hz) - 20px); width: 100%; height: 20px; }
+.ttt-lit { opacity: 0; }
+
+.ttt-water {
+  left: 0; top: var(--hz); bottom: 0; width: 100%;
+  background: linear-gradient(to bottom, #9CC6EA 0 2px, #84B6E2 2px 6px, #70A8DB 6px 14px, #5E9AD3 14px 28px, #4E8CCA 28px 48px, #4583C3 48px);
+}
+.ttt-ripples { left: 0; top: 0; width: 100%; height: 100%; }
+.ttt-boat.bob { animation: hw-bob 4s ease-in-out infinite alternate; }
+.ttt-boat.near { left: calc(25% - 33px); top: 60px; }
+
+.ttt-tint {
+  left: 0; top: var(--hz); bottom: 0; width: 100%;
+  background: linear-gradient(to bottom, #3E5079, #2E3F62);
+  mix-blend-mode: multiply; opacity: 0;
+}
+
+/* the island and its lighthouse, centred in the space right of the dock,
+   only where there is room for it: 38 art pixels each side of the dock */
+.ttt-art .ttt-isle { display: none; }
+.ttt-isle { left: calc(75% + 9px); top: calc(var(--hz) - 30px); width: 36px; height: 38px; }
+.ttt-isle .rock { left: 0; top: 0; }
+.ttt-isle .tower { left: 10px; top: 0; }
+.ttt-surf { left: -2px; bottom: -2px; width: 40px; height: 3px; }
+.ttt-surf svg { left: 0; top: 0; }
+.ttt-surf .f1 { animation: ttt-flick .9s linear infinite; }
+.ttt-surf .f2 { animation: ttt-flick .9s linear -.45s infinite; }
+.ttt-glow {
+  left: 8px; top: -5px; width: 20px; height: 20px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(closest-side, rgba(254, 222, 66, .55), rgba(254, 222, 66, .18) 55%, rgba(254, 222, 66, 0));
+}
+.ttt-beam {
+  top: 1px; height: 9px; opacity: 0;
+  -webkit-mask-image: repeating-linear-gradient(to bottom, #000 0 1px, transparent 1px 2px);
+  mask-image: repeating-linear-gradient(to bottom, #000 0 1px, transparent 1px 2px);
+}
+.ttt-beam.l {
+  right: 18px; width: 110px;
+  background: linear-gradient(to left, rgba(254, 222, 66, .85), rgba(254, 222, 66, 0));
+  clip-path: polygon(100% 40%, 0 0, 0 100%, 100% 60%);
+  transform-origin: right center; animation: ttt-sweep-l 9s ease-in-out infinite;
+}
+.ttt-beam.r {
+  left: 18px; width: 50px;
+  background: linear-gradient(to right, rgba(254, 222, 66, .85), rgba(254, 222, 66, 0));
+  clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%);
+  transform-origin: left center; transform: scaleX(0); animation: ttt-sweep-r 9s ease-in-out infinite;
+}
+@container ttt (min-width: 560px) { .ttt-art .ttt-isle { display: block; } }
+@media (max-width: 479px) {
+  @container ttt (min-width: 372px) { .ttt-art .ttt-isle { display: block; } }
+}
+
+/* a red channel buoy rocking left of the dock, its lamp flashing */
+.ttt-buoy {
+  left: calc(25% - 31px); top: calc(var(--hz) + 22px); width: 7px; height: 13px;
+  transform-origin: 3.5px 11px; animation: ttt-rock 2.6s ease-in-out infinite alternate;
+}
+.ttt-buoy svg { left: 0; top: 0; }
+.ttt-buoy .lamp { left: 3px; top: 1px; width: 1px; height: 1px; background: #FF5A5F; animation: ttt-flash 2.4s linear infinite; }
+.ttt-buoy .lamp::before {
+  content: ""; position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 90, 95, .75), rgba(255, 90, 95, 0)); opacity: .45;
+}
+
+/* ---------- the dock ---------- */
+.ttt-dock {
+  position: relative; z-index: 1; flex: none;
+  width: calc(var(--u) * 108); height: calc(var(--u) * 108);
+}
+/* its shadow on the water, two art pixels down and right of the frame */
+.ttt-dock::before {
+  content: ""; position: absolute; z-index: 0;
+  left: calc(var(--u) * 4); top: calc(var(--u) * 4);
+  width: calc(var(--u) * 104); height: calc(var(--u) * 104);
+  background: rgba(19, 34, 69, .34);
+}
+.ttt-boardart, .ttt-posts {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block;
+  shape-rendering: crispEdges;
+}
+.ttt-boardart { z-index: 1; }
+.ttt-posts { z-index: 3; pointer-events: none; }
+
+/* light catching the water in the squares, now and then */
+.ttt-glint { fill: #FFFFFF; opacity: 0; animation: ttt-twinkle 4.8s linear infinite; }
+.ttt-glint.g1 { animation-delay: -1.6s; }
+.ttt-glint.g2 { animation-delay: -3.2s; }
+
+/* the nine squares: one form and one key each, laid exactly over the water */
+.ttt-harbor .board.ttt {
+  position: absolute; z-index: 2;
+  left: calc(var(--u) * 8); top: calc(var(--u) * 8);
+  display: grid; gap: calc(var(--u) * 4);
+  grid-template-columns: repeat(3, calc(var(--u) * 28));
+  grid-auto-rows: calc(var(--u) * 28);
+}
+.ttt-harbor button.spot,
+.ttt-harbor button.spot:hover,
+.ttt-harbor button.spot:active,
+.ttt-harbor button.spot[disabled],
+.ttt-harbor button.spot[disabled]:hover,
+.ttt-harbor button.spot[disabled]:active {
+  display: block; width: 100%; height: 100%; min-height: 0;
+  margin: 0; padding: 0;
+  background: transparent; color: inherit;
+  border: 0; border-radius: 0; box-shadow: none; transform: none;
+  cursor: default; transition: background .12s;
+}
+.ttt-harbor.yours button.spot:not([disabled]) { cursor: pointer; }
+.ttt-harbor.yours button.spot:not([disabled]):hover { background: rgba(255, 255, 255, .18); }
+.ttt-harbor.yours button.spot:not([disabled]):active { background: rgba(255, 255, 255, .28); }
+.ttt-harbor button.spot:focus-visible { outline: 3px solid var(--orange); outline-offset: -3px; }
+
+.ttt-harbor .piece {
+  display: block; width: calc(var(--u) * 23); height: calc(var(--u) * 23);
+  margin: calc(var(--u) * 3) 0 0 calc(var(--u) * 3);
+  shape-rendering: crispEdges; pointer-events: none;
+}
+/* Afloat: each piece rides the water a pixel up and down, out of step with
+   its neighbours. Whole pixels only, like the rest of the art. */
+.ttt-harbor .piece:not(.ghost) {
+  animation: ttt-float 3s steps(1, end) infinite;
+  animation-delay: calc(var(--n, 0) * -.43s);
+}
+/* where your piece would go, under the pointer or the keyboard focus. It
+   stays while a move is being sent, when the keys are briefly disabled. */
+.ttt-harbor .ghost { opacity: 0; transition: opacity .12s; }
+.ttt-harbor.yours button.spot:hover .ghost,
+.ttt-harbor.yours button.spot:focus-visible .ghost { opacity: .5; }
+
+/* the winning line: gold rope round the squares, and the three pieces hop */
+.ttt-harbor button.spot.win,
+.ttt-harbor button.spot.win:hover,
+.ttt-harbor button.spot.win[disabled],
+.ttt-harbor button.spot.win[disabled]:hover {
+  background: rgba(255, 246, 200, .26);
+  box-shadow: inset 0 0 0 var(--u) #FEDE42, inset 0 0 0 calc(var(--u) * 2) rgba(254, 222, 66, .45);
+}
+.ttt-harbor .spot.win .piece { animation: ttt-hop 1.2s steps(1, end) infinite; animation-delay: calc(var(--n, 0) * -.2s); }
+.ttt-harbor.has-line .spot:not(.win) .piece { opacity: .55; }
+
+/* ---------- whose turn ---------- */
+.ttt-harbor .status,
+.ttt-harbor .status.yours {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; gap: 8px;
+  max-width: 100%; margin: 0; padding: 5px 12px 5px 7px;
+  background: #fff; color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r-sm);
+  box-shadow: 3px 3px 0 var(--navy);
+  font: 700 .95rem/1.25 var(--sans); text-align: left;
+}
+.ttt-harbor .status.yours, .ttt-harbor .status.won { background: var(--gold); }
+.ttt-harbor .status .mark { width: 23px; height: 23px; flex: none; display: block; shape-rendering: crispEdges; }
+
+/* ---------- night ---------- */
+.ttt-sky-n, .ttt-tint { transition: opacity 3.2s ease-in-out .4s; }
+.ttt-stars { transition: opacity .9s ease; }
+.ttt-lit, .ttt-glow, .ttt-beam { transition: opacity .5s ease; }
+.ttt-art .ttt-cloud, .ttt-shore, .ttt-isle .rock, .ttt-isle .tower { transition: filter 3.2s ease-in-out .4s; }
+.ttt-boardart, .ttt-posts { transition: filter 3.2s ease-in-out .4s; }
+html[data-sky="night"] .ttt-sky-n,
+html[data-sky="night"] .ttt-tint { opacity: 1; transition-delay: 0s; }
+html[data-sky="night"] .ttt-stars { opacity: 1; transition: opacity 1.8s ease 1.8s; }
+html[data-sky="night"] .ttt-lit.a { opacity: 1; transition: opacity .7s ease 1.3s; }
+html[data-sky="night"] .ttt-lit.b { opacity: 1; transition: opacity .7s ease 2.1s; }
+html[data-sky="night"] .ttt-glow { opacity: 1; transition: opacity .8s ease 1s; }
+html[data-sky="night"] .ttt-beam { opacity: 1; transition: opacity .8s ease 1.2s; }
+html[data-sky="night"] .ttt-art .ttt-cloud { filter: brightness(.45) saturate(.75); transition-delay: 0s; }
+html[data-sky="night"] .ttt-shore { filter: brightness(.36) saturate(.6); transition-delay: 0s; }
+html[data-sky="night"] :is(.ttt-isle .rock, .ttt-isle .tower) { filter: brightness(.62) saturate(.8); transition-delay: 0s; }
+html[data-sky="night"] :is(.ttt-boardart, .ttt-posts) { filter: brightness(.8) saturate(.9); transition-delay: 0s; }
+html[data-sky="night"] .ttt-buoy .lamp::before { opacity: 1; }
+
+/* ---------- motion ---------- */
+@keyframes ttt-float { 0% { transform: none; } 50% { transform: translateY(var(--u)); } }
+@keyframes ttt-hop { 0% { transform: none; } 50% { transform: translateY(calc(var(--u) * -2)); } }
+@keyframes ttt-twinkle { 0%, 100% { opacity: 0; } 6% { opacity: 1; } 12% { opacity: 0; } }
+@keyframes ttt-flick { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes ttt-flash { 0% { opacity: 0; } 6%, 30% { opacity: 1; } 40%, 100% { opacity: 0; } }
+@keyframes ttt-rock { from { transform: translateY(1px) rotate(-5deg); } to { transform: translateY(-1px) rotate(5deg); } }
+@keyframes ttt-hover { from { transform: translate(0, 0); } to { transform: translate(6px, 2px); } }
+@keyframes ttt-beat-up { 0%, 6%, 12% { opacity: 1; } 3%, 9%, 15%, 100% { opacity: 0; } }
+@keyframes ttt-beat-flat { 0%, 6%, 12% { opacity: 0; } 3%, 9%, 15%, 100% { opacity: 1; } }
+@keyframes ttt-sweep-l { 0%, 100% { transform: scaleX(1); } 25%, 75% { transform: scaleX(0); } }
+@keyframes ttt-sweep-r { 0%, 25%, 75%, 100% { transform: scaleX(0); } 50% { transform: scaleX(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ttt-harbor *, .ttt-harbor *::before, .ttt-harbor *::after { animation: none !important; }
+  .ttt-harbor * { transition-delay: 0s !important; }
+  .ttt-gull .flat, .ttt-surf .f2, .ttt-glint { opacity: 0; }
+  .ttt-beam.r { transform: scaleX(0); }
+  .ttt-buoy .lamp { opacity: 1; }
+}

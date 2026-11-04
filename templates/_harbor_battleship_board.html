@@ -1,0 +1,280 @@
+{#
+  Battleship: Boston Harbor, 1776. Included by _board.html for a battleship
+  game when harbor_look is on (the switch at the top of _board.html). The
+  earlier naval board, _battleship_board.html, is kept as it was.
+
+  Seat 0 commands the Continental Navy, seat 1 the Royal Navy. Above the two
+  charts is the harbor as it was in the spring of 1776: Castle William on
+  Castle Island with the Union flag over it, the Dorchester shore behind, a
+  British ship of the line at anchor and a Continental schooner. At night it
+  follows the day/night switch in the top bar.
+
+  The enemy's ships never reach this markup. The view from games.py gives
+  their positions only once a ship is sunk (their_sunk_ships), and only then
+  is it drawn. Every ship is drawn here, on the server, from the fleet data,
+  so the charts need no JavaScript to show.
+
+  Firing is two steps: pick a square, then Fire, so a slip of the thumb on a
+  phone does not waste a shot. static/harbor-battleship.js does the aiming
+  and animates the shot that has just landed. Without JavaScript every open
+  square is a submit button and fires at once, as before.
+
+  Still drawings come from static/harbor-battleship.svg (one cached file).
+  The clouds and the ripples are the Harborwalk's own, from _harborwalk.html.
+  Styles: static/harbor-battleship.css, scoped to .bs-harbor.
+#}
+{% set state = payload.state %}
+{% set sprite = url_for('static', filename='harbor-battleship.svg') %}
+{% set me = payload.seat %}
+{% set mine = 'c' if me == 0 else 'r' %}
+{% set theirs = 'r' if me == 0 else 'c' %}
+{% set navy = {'c': 'Continental Navy', 'r': 'Royal Navy'} %}
+{% set letters = 'ABCDEFGHIJ' %}
+{% set them = payload.opponent %}
+{% set over = game.status == 'finished' %}
+{% set placing = state.phase == 'placing' %}
+{% set firing = state.phase == 'firing' and not over %}
+{% set yours = payload.your_turn %}
+{% set their_ready = state.ready[1 - me] %}
+{% set fleet_size = state.my_fleet | length %}
+
+{# Which ship owns each of your squares, which squares belong to sunk ships,
+   and how many of the other side's shots have landed on you. #}
+{% set owner = {} %}
+{% set ns = namespace(my_sunk=[], their_sunk=[], fired_at_me=0, hits_on_me=0, my_hits=[]) %}
+{% for s in state.my_fleet %}
+  {% for c in s.cells %}{% set _ = owner.update({c: s.name}) %}{% endfor %}
+  {% if s.sunk %}{% set ns.my_sunk = ns.my_sunk + s.cells %}{% endif %}
+{% endfor %}
+{% set their_owner = {} %}
+{% for s in state.their_sunk_ships %}
+  {% set ns.their_sunk = ns.their_sunk + s.cells %}
+  {% for c in s.cells %}{% set _ = their_owner.update({c: s.name}) %}{% endfor %}
+{% endfor %}
+{% for g in state.my_grid %}
+  {% if g.hit or g.miss %}{% set ns.fired_at_me = ns.fired_at_me + 1 %}{% endif %}
+  {% if g.hit %}{% set ns.hits_on_me = ns.hits_on_me + 1 %}{% set ns.my_hits = ns.my_hits + [loop.index0] %}{% endif %}
+{% endfor %}
+{% set lost = state.my_fleet | selectattr('sunk') | list | length %}
+
+{# The result, said once, for the scene and for the bar under the chart. #}
+{% if over %}
+  {% if payload.you_won %}
+    {% set verdict = 'Victory' %}
+    {% if payload.outcome == 'resigned' %}
+      {% set result = them ~ (' resigned before the battle.' if placing else ' struck their colors and resigned.') %}
+    {% elif payload.outcome == 'abandoned' %}
+      {% set result = them ~ " didn't come back. The harbor is yours." %}
+    {% else %}
+      {% set result = 'The ' ~ navy[theirs] ~ ' fleet is sunk.' %}
+    {% endif %}
+  {% elif payload.outcome == 'draw' %}
+    {% set verdict = 'Draw' %}{% set result = 'The battle ends in a draw.' %}
+  {% else %}
+    {% set verdict = 'Defeat' %}
+    {% if payload.outcome == 'resigned' %}
+      {% set result = 'You resigned' ~ (' before the battle.' if placing else '.') %}
+    {% elif payload.outcome == 'abandoned' %}
+      {% set result = them ~ ' took the harbor while you were away.' %}
+    {% else %}
+      {% set result = 'Your fleet is sunk.' %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{% macro chart_frame(label) -%}
+  <div class="bs-chart">
+    <div class="bs-cols" aria-hidden="true">{% for l in letters %}<span>{{ l }}</span>{% endfor %}</div>
+    <div class="bs-rows" aria-hidden="true">{% for n in range(1, 11) %}<span>{{ n }}</span>{% endfor %}</div>
+    <div class="bs-board">
+      <svg class="bs-sea" viewBox="0 0 142 142" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-sea"/></svg>
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro ship(s, side) -%}
+  {% set sc = s.cells | sort %}
+  {% set n = sc | length %}
+  <svg class="bs-ship{% if n > 1 and sc[1] - sc[0] == 10 %} v{% endif %}{% if s.sunk is not defined or s.sunk %} sunk{% endif %}"
+       style="--r:{{ sc[0] // 10 }};--c:{{ sc[0] % 10 }};--len:{{ n }}"
+       viewBox="0 0 {{ 14 * n }} 14" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-{{ side }}-{{ s.name | lower }}"/></svg>
+{%- endmacro %}
+
+{% macro mark(i, sunk, hit, miss) -%}
+  {%- if sunk -%}
+    <svg class="mk" viewBox="0 0 14 14" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-smoke"/></svg>
+  {%- elif hit -%}
+    <svg class="mk fl" viewBox="0 0 14 14" focusable="false" aria-hidden="true"><use class="a" href="{{ sprite }}#bs-hit"/><use class="b" href="{{ sprite }}#bs-hit-b"/></svg>
+  {%- elif miss -%}
+    <svg class="mk" viewBox="0 0 14 14" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-miss"/></svg>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro fleet_list(side, sunk_names, hits_by_ship, label) -%}
+  <ul class="bs-fleet" aria-label="{{ label }}">
+    {% for s in state.my_fleet %}
+      {% set gone = s.name in sunk_names %}
+      <li{% if gone %} class="sunk"{% endif %}>
+        <svg class="bs-mini" style="--len:{{ s.length }}" viewBox="0 0 {{ 14 * s.length }} 14" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-{{ side }}-{{ s.name | lower }}"/></svg>
+        <span class="nm">{{ s.name }}</span>
+        {% if hits_by_ship is not none %}
+          {% set h = s.cells | select('in', ns.my_hits) | list | length %}
+          <span class="pips" aria-label="{{ 'sunk' if gone else (h ~ ' of ' ~ s.length ~ ' hit') }}">
+            {%- for k in range(s.length) %}<i{% if k < h %} class="hit"{% endif %}></i>{% endfor -%}
+          </span>
+        {% elif gone %}
+          <span class="tag-sunk">Sunk</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{%- endmacro %}
+
+<section class="bs-harbor{% if yours %} yours{% endif %}{% if placing %} placing{% endif %}{% if over %} over{% endif %}"
+         aria-label="Battleship in Boston Harbor, 1776"
+         data-game="{{ game.id }}" data-seat="{{ me }}" data-them="{{ them }}" data-sprite="{{ sprite }}">
+<div class="bs-in">
+
+  {# ---------- the harbor, 1776 ---------- #}
+  <div class="bs-scene">
+    <div class="bs-art" aria-hidden="true">
+      <i class="bs-sky"></i>
+      <i class="bs-sky-n"></i>
+      <i class="bs-stars"><i class="hw-star l white tw" style="left:7%;top:4px"></i><i class="hw-star s white" style="left:18%;top:15px"></i><i class="hw-star p blue" style="left:27%;top:6px"></i><i class="hw-star s gold tw" style="left:46%;top:3px;--tw:-1.2s"></i><i class="hw-star m gold" style="left:58%;top:12px"></i><i class="hw-star s white tw" style="left:66%;top:5px;--tw:-2.1s"></i><i class="hw-star p white" style="left:36%;top:17px"></i></i>
+      <svg class="bs-moon" width="7" height="7" focusable="false"><use href="{{ sprite }}#bs-moon"/></svg>
+      <svg class="bs-cloud c1" width="70" height="9" focusable="false"><use href="#hw-cloud-e"/></svg>
+      <svg class="bs-cloud c2" width="30" height="13" focusable="false"><use href="#hw-cloud-d"/></svg>
+      <svg class="bs-cloud c3" width="42" height="7" focusable="false"><use href="#hw-cloud-f" transform="matrix(-1 0 0 1 42 0)"/></svg>
+      <svg class="bs-shore" width="240" height="11" focusable="false"><use href="{{ sprite }}#bs-shore"/></svg>
+      <i class="bs-water"><svg width="100%" height="100%" focusable="false"><rect width="100%" height="100%" fill="url(#hw-rip-far)"/></svg></i>
+      <i class="bs-tint"></i>
+      <svg class="bs-shore lit" width="240" height="11" focusable="false"><use href="{{ sprite }}#bs-shore-lit"/></svg>
+      <i class="bs-gull"><svg class="up" width="9" height="4" focusable="false"><use href="{{ sprite }}#bs-gull-up"/></svg><svg class="flat" width="9" height="4" focusable="false"><use href="{{ sprite }}#bs-gull-flat"/></svg></i>
+      <i class="bs-boat bs-schooner"><svg width="26" height="21" focusable="false"><use href="{{ sprite }}#bs-schooner"/></svg><svg class="lit" width="26" height="21" focusable="false"><use href="{{ sprite }}#bs-schooner-lit"/></svg></i>
+      <i class="bs-boat bs-mow"><svg width="36" height="27" focusable="false"><use href="{{ sprite }}#bs-mow"/></svg><svg class="lit" width="36" height="27" focusable="false"><use href="{{ sprite }}#bs-mow-lit"/></svg></i>
+      <i class="bs-castle">
+        <svg width="92" height="28" focusable="false"><use href="{{ sprite }}#bs-castle"/></svg>
+        <svg class="lit" width="92" height="28" focusable="false"><use href="{{ sprite }}#bs-castle-lit"/></svg>
+        <i class="bs-colors"><svg class="a" width="8" height="6" focusable="false"><use href="{{ sprite }}#bs-union-a"/></svg><svg class="b" width="8" height="6" focusable="false"><use href="{{ sprite }}#bs-union-b"/></svg></i>
+      </i>
+    </div>
+    <p class="bs-caption">Castle William, Boston Harbor, 1776</p>
+    {% if over %}
+      <div class="bs-result{% if payload.you_won %} won{% endif %}" role="status">
+        <svg class="bs-flag" viewBox="0 0 21 15" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-flag-{{ mine if payload.you_won else theirs }}"/></svg>
+        <span><b>{{ verdict }}</b><small>{{ result }}</small></span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="bs-body">
+
+    {# ---------- enemy waters: where you fire ---------- #}
+    <section class="bs-sec bs-enemy" aria-label="Enemy waters, {{ navy[theirs] }}">
+      <header class="bs-head">
+        <svg class="bs-flag" viewBox="0 0 21 15" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-flag-{{ theirs }}"/></svg>
+        <div class="grow"><h4>{{ navy[theirs] }}</h4><small>Enemy waters &middot; {{ state.their_sunk | length }} of {{ fleet_size }} sunk</small></div>
+      </header>
+
+      {% if placing and not over %}
+        {# Before the battle: their chart is fog, and all there is to know is
+           whether they are ready. #}
+        <div class="bs-wait">
+          {% call chart_frame('') %}{% endcall %}
+          <p class="bs-note">
+            <svg class="bs-flag" viewBox="0 0 21 15" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-flag-{{ theirs }}"/></svg>
+            <span>{% if their_ready %}{{ them }}'s fleet is ready.{% else %}{{ them }} is still arranging their fleet.{% endif %}</span>
+          </p>
+        </div>
+      {% else %}
+        <form class="bs-shot" method="post" action="{{ url_for('game_move', game_id=game.id) }}">
+          {% call chart_frame('') %}
+            <div class="bs-ships">
+              {% for s in state.their_sunk_ships %}{{ ship(s, theirs) }}{% endfor %}
+            </div>
+            <div class="bs-cells" role="group" aria-label="Enemy waters, ten by ten. Pick a square to aim at.">
+              {% for cell in state.their_grid %}
+                {% set i = loop.index0 %}
+                {% set sunk = i in ns.their_sunk %}
+                <button type="submit" name="move" value="{{ i }}"
+                        class="bs-cell{% if sunk %} sunk{% elif cell.hit %} hit{% elif cell.miss %} miss{% endif %}"
+                        {% if sunk %}data-ship="{{ their_owner[i] }}"{% endif %}
+                        aria-label="{{ letters[i % 10] }}{{ i // 10 + 1 }}: {{ ('sunk ' ~ their_owner[i]) if sunk else 'hit' if cell.hit else 'miss' if cell.miss else 'open water' }}"
+                        {% if not firing or cell.shot or not yours %}disabled{% endif %}>{{ mark(i, sunk, cell.hit, cell.miss) }}</button>
+              {% endfor %}
+            </div>
+            <svg class="bs-reticle" viewBox="0 0 14 14" hidden focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-aim"/></svg>
+          {% endcall %}
+          <div class="bs-bar{% if yours %} go{% endif %}">
+            <p class="bs-say" aria-live="polite"><span class="bs-news"></span><span class="bs-prompt">
+              {%- if over -%}{{ result }}
+              {%- elif yours -%}Your turn
+              {%- else -%}Their turn{%- endif -%}
+            </span></p>
+            {% if firing %}
+              <input class="bs-target" type="hidden" name="move" value="" disabled>
+              <button class="bs-fire" type="submit" disabled>
+                <svg viewBox="0 0 14 14" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-ball"/></svg>Fire
+              </button>
+            {% endif %}
+          </div>
+        </form>
+        {{ fleet_list(theirs, state.their_sunk, none, navy[theirs] ~ ' ships') }}
+        <p class="bs-key" aria-hidden="true">
+          <span><svg viewBox="0 0 14 14" focusable="false"><use href="{{ sprite }}#bs-hit"/></svg>Hit</span>
+          <span><svg viewBox="0 0 14 14" focusable="false"><use href="{{ sprite }}#bs-miss"/></svg>Miss</span>
+          <span><svg viewBox="0 0 14 14" focusable="false"><use href="{{ sprite }}#bs-smoke"/></svg>Sunk</span>
+        </p>
+      {% endif %}
+    </section>
+
+    {# ---------- your fleet ---------- #}
+    <section class="bs-sec bs-own" aria-label="Your fleet, {{ navy[mine] }}">
+      <header class="bs-head">
+        <svg class="bs-flag" viewBox="0 0 21 15" focusable="false" aria-hidden="true"><use href="{{ sprite }}#bs-flag-{{ mine }}"/></svg>
+        <div class="grow"><h4>{{ navy[mine] }}</h4><small>Your fleet &middot; {{ fleet_size - lost }} of {{ fleet_size }} afloat</small></div>
+      </header>
+      {% call chart_frame('') %}
+        <div class="bs-ships">
+          {% for s in state.my_fleet %}{{ ship(s, mine) }}{% endfor %}
+        </div>
+        <div class="bs-cells" role="img"
+             aria-label="Your fleet. {{ them }} has fired {{ ns.fired_at_me }} shot{{ '' if ns.fired_at_me == 1 else 's' }} and hit {{ ns.hits_on_me }}.">
+          {% for cell in state.my_grid %}
+            {% set i = loop.index0 %}
+            {% set sunk = i in ns.my_sunk %}
+            <span class="bs-cell{% if sunk %} sunk{% elif cell.hit %} hit{% elif cell.miss %} miss{% endif %}"
+                  {% if i in owner %}data-ship="{{ owner[i] }}"{% endif %}>{{ mark(i, sunk, cell.hit, cell.miss) }}</span>
+          {% endfor %}
+        </div>
+      {% endcall %}
+
+      {% if placing and not over %}
+        <div class="bs-bar">
+          {% if not state.you_ready %}
+            <p class="bs-say">Shuffle until you like your formation, then ready your fleet.</p>
+            <div class="bs-acts">
+              <form method="post" action="{{ url_for('game_move', game_id=game.id) }}">
+                <input type="hidden" name="move" value="shuffle">
+                <button type="submit" class="ghost">Shuffle ships</button>
+              </form>
+              <form method="post" action="{{ url_for('game_move', game_id=game.id) }}">
+                <input type="hidden" name="move" value="ready">
+                <button type="submit">Ready for battle</button>
+              </form>
+            </div>
+          {% else %}
+            <p class="bs-say">Your fleet is ready.{% if not their_ready %} Waiting for {{ them }}.{% endif %}</p>
+          {% endif %}
+        </div>
+      {% elif placing and over %}
+        <div class="bs-bar"><p class="bs-say">{{ result }}</p></div>
+      {% endif %}
+
+      {{ fleet_list(mine, state.my_fleet | selectattr('sunk') | map(attribute='name') | list, true, "Ship's manifest") }}
+    </section>
+
+  </div>
+</div>
+</section>

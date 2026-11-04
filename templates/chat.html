@@ -1034,6 +1034,9 @@
   <i hidden data-fold-none></i>
   <link rel="stylesheet" href="{{ url_for('static', filename='naval-battleship.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='chess-board.css') }}">
+  {# The harbor boards for Tic-Tac-Toe and Battleship (see _board.html). #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='harbor-tictactoe.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='harbor-battleship.css') }}">
   <div class="chathead">
     {# A pair chat is keyed on the pairing; its circle takes the person's
        colours, as a friend chat's does. #}
@@ -1420,6 +1423,7 @@
 {% block script %}
 <script src="{{ url_for('static', filename='naval-battleship.js') }}"></script>
 <script src="{{ url_for('static', filename='chess-board.js') }}"></script>
+<script src="{{ url_for('static', filename='harbor-battleship.js') }}"></script>
 {# The small map in the Meet up drawer. Mounted when the drawer opens. #}
 <script src="{{ url_for('static', filename='pin-picker.js') }}"></script>
 <script>
@@ -2738,10 +2742,13 @@
       bindChess();
       // Live updates replace the board DOM; bind the naval controls again.
       if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
+      // The harbor Battleship board: aiming, and the shot that just landed.
+      if (window.BeaconBattleship) { window.BeaconBattleship.mount(slot); }
     }
 
     bindChess();
     if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
+    if (window.BeaconBattleship) { window.BeaconBattleship.mount(slot || document); }
 
     // A form on this page is sent without a page swap (see _enhance.html):
     // the channel brings the message, the move, the card. Two forms need a
