@@ -44,6 +44,7 @@ import club_catalog
 import club_icons
 import emails
 import games as rules
+import tparty
 import matching
 import notices
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -71,6 +72,8 @@ from models import (
     MapFlag,
     MapFlagViewer,
     SiteSetting,
+    TPartyRider,
+    TPartyRoom,
     MESSAGE_PARENTS,
     Message,
     MessageReaction,
@@ -4099,9 +4102,284 @@ def start_random_game(kind, partner_id):
 @login_required
 def t_party():
     """The T Party (templates/t_party.html, static/t-party.js). Practice
-    with bots for now: party rooms need a room server at /api/t-party,
-    which is not built yet."""
-    return render_template("t_party.html")
+    rides with three bots run in the browser; party rooms for two to eight
+    students run here, through the /api/t-party routes below. The train's
+    layout comes from tparty.WORLD, so the page and the server share one."""
+    return render_template("t_party.html", tp_world=tparty.WORLD)
+
+
+# ---------------------------------------------------------------- T Party rooms
+# The page polls /sync about ten times a second with what its rider is
+# pressing. Each sync takes the room's row FOR UPDATE, runs the ride up to
+# now in the browser's own twentieth-of-a-second steps (tparty.py), applies
+# that rider's input and sends the whole ride back, which the page draws.
+# The server is the referee: a page only ever says which buttons are down.
+#
+# Rooms are separate from Game rows on purpose (see TPartyRoom). No chat,
+# notice or email comes of a ride; it is a party game you share a code for.
+
+import copy as _tp_copy
+
+TP_CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O or 1/I to misread
+TP_CATCH_UP = 3.0       # seconds of ride one sync may run to catch up; past that it waits
+TP_STILL = 1.5          # a rider whose page goes quiet this long stops walking
+TP_GONE_PLATFORM = 30   # ... is taken off a train still at the platform after this long
+TP_GONE_RIDE = 60       # ... or off a moving or finished one after this long
+TP_ROOM_IDLE = timedelta(minutes=30)   # rooms nobody has synced in this long are cleared
+
+_tp_tables_checked = []
+
+
+@app.before_request
+def tparty_tables():
+    """Create the two T Party tables on this process's first request if they
+    are missing (checkfirst: only these two, nothing else is touched)."""
+    if _tp_tables_checked:
+        return None
+    _tp_tables_checked.append(True)
+    try:
+        db.metadata.create_all(bind=db.engine, checkfirst=True,
+                               tables=[TPartyRoom.__table__, TPartyRider.__table__])
+    except Exception:       # never take the site down over the game
+        db.session.rollback()
+        app.logger.exception("T Party: could not create tparty_rooms / tparty_riders.")
+    return None
+
+
+def tp_fail(message, status=400):
+    return jsonify({"error": message}), status
+
+
+def tp_from_page():
+    """Writes come from the game's own script, as the map's do."""
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def tp_name(user):
+    """First name only, as the page labels riders."""
+    return ((user.name or "").split() or ["Rider"])[0][:24]
+
+
+def tp_locked(code):
+    return db.session.execute(
+        db.select(TPartyRoom).where(TPartyRoom.code == code).with_for_update()
+    ).scalar_one_or_none()
+
+
+def tp_save(room, state):
+    # Reassign, never mutate: db.JSON does not track in-place edits.
+    room.state = state
+    room.updated_at = datetime.utcnow()
+
+
+def tp_drop_riders(code, uids):
+    if uids:
+        db.session.execute(db.delete(TPartyRider).where(
+            TPartyRider.room_code == code, TPartyRider.user_id.in_(uids)))
+
+
+def tp_leave(uid, keep=None):
+    """Take this student off whatever train they are on, unless it is `keep`.
+    The last one off closes the room. Commits."""
+    rider = db.session.get(TPartyRider, uid)
+    if rider is None or rider.room_code == keep:
+        return
+    code = rider.room_code
+    room = tp_locked(code)
+    tp_drop_riders(code, [uid])
+    if room is not None:
+        state = _tp_copy.deepcopy(room.state)
+        pid = tparty.rider_of(state, uid)
+        if pid:
+            tparty.remove_rider(state, pid)
+        if state["players"]:
+            tp_save(room, state)
+        else:
+            db.session.delete(room)
+    db.session.commit()
+
+
+def tp_run(room, state, now):
+    """Run the ride up to now. With nobody syncing it waits instead: a sync
+    catches up at most TP_CATCH_UP seconds and the rest is let go."""
+    moving = ("countdown", "running")
+    if state["phase"] not in moving:
+        room.clock = now
+        return
+    clock = room.clock if room.clock is not None else now
+    clock = max(clock, now - TP_CATCH_UP)
+    ride = tparty.Ride(state)
+    while clock + tparty.STEP <= now and state["phase"] in moving:
+        ride.step(tparty.STEP)
+        clock += tparty.STEP
+    room.clock = clock if state["phase"] in moving else now
+
+
+def tp_tidy(state, now):
+    """Riders whose page has gone quiet: stop them walking, then take them
+    off. Returns the user ids taken off."""
+    limit = TP_GONE_PLATFORM if state["phase"] == "lobby" else TP_GONE_RIDE
+    gone = []
+    for pid, r in list(state["_riders"].items()):
+        quiet = now - r["seen"]
+        if quiet > limit:
+            gone.append(r["uid"])
+            tparty.remove_rider(state, pid)
+        elif quiet > TP_STILL and pid in state["players"]:
+            state["players"][pid]["dir"] = 0
+    return gone
+
+
+def tp_room_for(code):
+    """The locked room and this student's rider id in it, or a refusal. A 404
+    tells the page it is off the train, and it goes back to the menu."""
+    code = (code or "").upper()
+    room = tp_locked(code) if re.fullmatch(r"[A-Z0-9]{6}", code) else None
+    if room is None:
+        return None, None, tp_fail("That train is no longer running.", 404)
+    pid = tparty.rider_of(room.state, current_user.id)
+    if pid is None or pid not in room.state["players"]:
+        return room, None, tp_fail("You're no longer on this train.", 404)
+    return room, pid, None
+
+
+@app.route("/api/t-party/current")
+@login_required
+def tparty_current():
+    """The ride this student is on, so a reloaded page climbs back aboard. A
+    finished ride is not offered back: they have already seen the end."""
+    rider = db.session.get(TPartyRider, current_user.id)
+    if rider is None:
+        return jsonify({"room": None})
+    room = db.session.get(TPartyRoom, rider.room_code)
+    pid = tparty.rider_of(room.state, current_user.id) if room is not None else None
+    if pid is None or room.state["phase"] == "finished":
+        tp_leave(current_user.id)
+        return jsonify({"room": None})
+    return jsonify({"room": tparty.view(room.state, pid)})
+
+
+@app.route("/api/t-party/rooms", methods=["POST"])
+@login_required
+def tparty_create():
+    if not tp_from_page():
+        return tp_fail("Start a room from the game page.")
+    duration = (request.get_json(silent=True) or {}).get("duration")
+    if type(duration) is not int or duration not in tparty.DURATIONS:
+        return tp_fail("Pick a ride length.")
+
+    # Rooms nobody has synced in half an hour go first; their riders with them.
+    db.session.execute(db.delete(TPartyRoom).where(
+        TPartyRoom.updated_at < datetime.utcnow() - TP_ROOM_IDLE))
+    db.session.commit()
+    tp_leave(current_user.id)
+
+    for _ in range(8):
+        code = "".join(secrets.choice(TP_CODE_LETTERS) for _ in range(6))
+        if db.session.get(TPartyRoom, code) is not None:
+            continue
+        state = tparty.new_state(code, secrets.randbelow(900000), duration)
+        pid = tparty.add_rider(state, current_user.id, tp_name(current_user), time.time())
+        db.session.add(TPartyRoom(code=code, state=state))
+        db.session.flush()
+        db.session.add(TPartyRider(user_id=current_user.id, room_code=code))
+        try:
+            db.session.commit()
+        except IntegrityError:      # the same code, made at the same moment
+            db.session.rollback()
+            continue
+        return jsonify(tparty.view(state, pid))
+    return tp_fail("Could not open a room just now. Try again.", 503)
+
+
+@app.route("/api/t-party/rooms/<code>/join", methods=["POST"])
+@login_required
+def tparty_join(code):
+    if not tp_from_page():
+        return tp_fail("Join from the game page.")
+    code = code.upper()
+    if not re.fullmatch(r"[A-Z0-9]{6}", code):
+        return tp_fail("Enter the six-character room code.")
+    tp_leave(current_user.id, keep=code)
+
+    room = tp_locked(code)
+    if room is None:
+        db.session.rollback()
+        return tp_fail("No train with that code is boarding. Check the code with your host.", 404)
+    state = _tp_copy.deepcopy(room.state)
+    pid = tparty.rider_of(state, current_user.id)
+    if pid is None or pid not in state["players"]:
+        if state["phase"] != "lobby":
+            db.session.rollback()
+            return tp_fail("That train has already left the platform.", 409)
+        pid = tparty.add_rider(state, current_user.id, tp_name(current_user), time.time())
+        if pid is None:
+            db.session.rollback()
+            return tp_fail("That train is full: eight riders already.", 409)
+    state["_riders"][pid]["seen"] = time.time()
+    tp_save(room, state)
+    db.session.merge(TPartyRider(user_id=current_user.id, room_code=code))
+    db.session.commit()
+    return jsonify(tparty.view(state, pid))
+
+
+@app.route("/api/t-party/rooms/<code>/start", methods=["POST"])
+@login_required
+def tparty_start(code):
+    if not tp_from_page():
+        return tp_fail("Start the ride from the game page.")
+    room, pid, refusal = tp_room_for(code)
+    if refusal:
+        db.session.rollback()
+        return refusal
+    state = _tp_copy.deepcopy(room.state)
+    if state["phase"] != "lobby":
+        db.session.rollback()
+        return jsonify(tparty.view(state, pid))     # already away: nothing to do
+    if state["host"] != pid:
+        db.session.rollback()
+        return tp_fail("Only the host can start the ride.", 403)
+    if len(state["players"]) < tparty.MIN_RIDERS:
+        db.session.rollback()
+        return tp_fail("Wait for at least one more rider to board.", 409)
+    tparty.start(state, secrets.randbelow(900000))
+    room.clock = time.time()
+    tp_save(room, state)
+    db.session.commit()
+    return jsonify(tparty.view(state, pid))
+
+
+@app.route("/api/t-party/rooms/<code>/sync", methods=["POST"])
+@login_required
+def tparty_sync(code):
+    if not tp_from_page():
+        return tp_fail("Ride from the game page.")
+    room, pid, refusal = tp_room_for(code)
+    if refusal:
+        if room is not None:
+            tp_drop_riders(room.code, [current_user.id])
+            db.session.commit()
+        else:
+            db.session.rollback()
+        return refusal
+    now = time.time()
+    state = _tp_copy.deepcopy(room.state)
+    state["_riders"][pid]["seen"] = now
+    tp_run(room, state, now)
+    tparty.Ride(state).input(pid, tparty.clean_input(request.get_json(silent=True)))
+    tp_drop_riders(room.code, tp_tidy(state, now))
+    tp_save(room, state)
+    db.session.commit()
+    return jsonify(tparty.view(state, pid))
+
+
+@app.route("/api/t-party/rooms/<code>/leave", methods=["POST"])
+@login_required
+def tparty_leave(code):
+    if not tp_from_page():
+        return tp_fail("Leave from the game page.")
+    tp_leave(current_user.id)
+    return jsonify({"ok": True})
 
 
 @app.route("/games/seek", methods=["POST"])

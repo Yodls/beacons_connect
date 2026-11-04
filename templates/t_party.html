@@ -9,10 +9,11 @@
   static/t-party.js, which boots on #t-party and hands its cleanup to
   Beacon.live so a page swap stops it.
 
-  data-standalone="true" keeps the game to practice with bots. Party rooms
-  need the room server at /api/t-party (create, join, start, sync, leave,
-  current), which the app does not have yet; when it does, drop the
-  attribute and the room keys turn on.
+  Party rooms run on the server: the /api/t-party routes in app.py and the
+  rules in tparty.py. Practice with three bots runs in the browser. Putting
+  data-standalone="true" back on #t-party turns the room buttons off again.
+  The train's layout (tp-world-data) is tparty.WORLD, rendered in below, so
+  the page and the server always ride the same train.
 #}
 
 {% block appstyle %}{% raw %}
@@ -266,6 +267,13 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
   #t-party .tp-btn.b.is-down {transform:translateY(5px)}
 }
 
+/* ---------- the site's bottom bar during a ride ----------
+   The ride covers the whole screen on a phone. Without the Fullscreen API
+   (a rider who joined starts with no tap to ask with, and iPhones never
+   grant it) the site's tab bar stayed on top of the thumb pad, so it steps
+   aside while the screen is the ride's. */
+html.tp-locked .tabbar {display:none}
+
 /* ---------- the legend under the game ---------- */
 #t-party .tp-legend {grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
 #t-party .tp-legend > div {padding:16px}
@@ -294,7 +302,7 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
     <li><b>2 to 8</b> riders</li><li><b>5 min</b> or 90 s</li>
   </ul>
 </div>
-<div id="t-party" data-standalone="true" data-api="/api/t-party" data-name="{{ current_user.name.split(' ')[0] }}"><div class="tp-grid">
+<div id="t-party" data-api="/api/t-party" data-name="{{ current_user.name.split(' ')[0] }}"><div class="tp-grid">
   <section class="sec-game tp-window" id="tp-stage" aria-label="The T Party game">
     <div class="sec sec-game tp-titlebar">
       <span class="tp-trainmark" aria-hidden="true">T</span>
@@ -408,21 +416,6 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
   </div>
 </div></div>
 <footer class="tp-foot"><span>THE T PARTY / BEACON GAMES</span><span>Beacon OS · commuter chaos · no personal space</span></footer>
-{% raw %}<script type="application/json" id="tp-world-data">{
-  "carWidth": 1120,
-  "carCount": 8,
-  "duration": 300,
-  "gateInterval": 38.5,
-  "speed": 134,
-  "gravity": 640,
-  "jumpVelocity": 300,
-  "maxHealth": 6,
-  "cinematicSeconds": 4.8,
-  "capacity": 8,
-  "carNames": ["All aboard", "Personal space", "Wheel trouble", "The quiet car", "Moving furniture", "Seat scramble", "Last call", "The big green button"],
-  "colors": ["#FF791F", "#78AFE9", "#FEDE42", "#B99DD8", "#51C6B1", "#F28CA8", "#8CD879", "#FFFFFF"],
-  "seatOffsets": [150, 270, 390, 510, 630, 750, 870, 990]
-}
-</script>{% endraw %}
+<script type="application/json" id="tp-world-data">{{ tp_world|tojson }}</script>
 <script src="{{ url_for('static', filename='t-party.js') }}"></script>
 {% endblock %}
