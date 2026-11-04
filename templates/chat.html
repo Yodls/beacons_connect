@@ -817,10 +817,24 @@
         box-shadow: var(--drop);
       }
       .gamepane > .empty { margin: 12px; }
-      /* The two buttons under an invite shown in the panel. Here rather than
-         in base.html because the panel only ever appears on this page. */
-      .invite-row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
-      .invite-row form { margin: 0; }
+      /* An invite waiting on you: a gold band over the chat, with the two
+         answers on its right (under them on a phone). Here rather than in
+         base.html because it only ever appears on this page. */
+      .invitebar {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+        margin: 12px 0; padding: 10px 14px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
+        font-size: 1rem;
+      }
+      .gamewrap.playing .invitebar { margin-top: 0; }
+      .invite-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+      .invite-icon .icon { width: 28px; height: 28px; }
+      .invite-text { flex: 1 1 12rem; min-width: 0; }
+      .invite-acts { display: flex; gap: 8px; margin-left: auto; }
+      .invite-acts form { margin: 0; }
+      .invite-acts button { min-height: 40px; padding: .35rem .9rem; font-size: .92rem; }
       /* the game's title bar: orange, like every game window. It also says
          who is at the board -- a few words on the "against" line rather
          than a box of its own under the bar, which cost the window a row. */
@@ -1122,13 +1136,15 @@
   {# The slot is always present on a one-on-one chat, even with no game: it
      is what the poller fills when an invite arrives, which is how the
      recipient sees it without refreshing. #}
-  <div class="gamewrap {% if game %}playing{% endif %}" id="gamewrap">
+  {# "playing" lays the chat beside the board: only once there is a board or
+     a result. An invite on its own is a banner over a full-width chat. #}
+  <div class="gamewrap {% if game and game.status in ("active", "finished") %}playing{% endif %}" id="gamewrap">
     {# Any chat with exactly one other person can hold a board -- a friend
        chat, or the pair conversation two strangers get when matchmaking puts
        them together. pane_game is keyed on the two players, so it needed no
        change for this. #}
     {% if opponent_id %}
-      <div id="gamepane-slot">{% if game %}{% include "_gamepane.html" %}{% endif %}</div>
+      <div id="gamepane-slot">{% if game or invite or meetup_ask %}{% include "_gamepane.html" %}{% endif %}</div>
     {% endif %}
 
     <div class="talkcol">
@@ -1197,13 +1213,12 @@
           {# A small window with the game's orange title bar. #}
           <span class="cardbar">{{ ui.icon("game") }}<span>{{ message.game_label }}</span></span>
           <span class="body">{{ message.body }}</span>
-          {% if message.can_answer %}
+          {# The invitee answers from the banner at the top of the chat; the
+             sender can take the invite back from this line while it waits. #}
+          {% if message.can_withdraw %}
             <span class="note-act">
-              <form method="post" action="{{ message.accept_url }}">
-                <button type="submit">Accept</button>
-              </form>
-              <form method="post" action="{{ message.decline_url }}">
-                <button type="submit" class="ghost">Decline</button>
+              <form method="post" action="{{ message.withdraw_url }}">
+                <button type="submit" class="ghost">Withdraw</button>
               </form>
             </span>
           {% endif %}
@@ -2350,11 +2365,12 @@
         bar.appendChild(span("", message.game_label || "Game"));
         p.appendChild(bar);
         p.appendChild(span("body", message.body));
-        if (message.can_answer) {
+        // The sender's way to take an invite back; the invitee answers from
+        // the banner the pane brings (swapPane).
+        if (message.can_withdraw) {
           var acts = document.createElement("span");
           acts.className = "note-act";
-          acts.appendChild(answer(message.accept_url, "Accept", ""));
-          acts.appendChild(answer(message.decline_url, "Decline", "ghost"));
+          acts.appendChild(answer(message.withdraw_url, "Withdraw", "ghost"));
           p.appendChild(acts);
         }
         p.appendChild(span("at", message.at || ""));
@@ -2710,8 +2726,15 @@
       // piece leaving when the other player's move slides in.
       if (window.BeaconChess) { window.BeaconChess.before(slot); }
       slot.replaceChildren.apply(slot, parsed.body.childNodes);
-      wrap.classList.toggle("playing", !!pane.html);
+      // Beside the board only once there is one (or a result); an invite's
+      // banner sits over a full-width chat.
+      wrap.classList.toggle("playing", !!pane.board);
       if (launch) { launch.hidden = !!pane.live; }
+      // An invite answered, one way or the other: the Withdraw on the line
+      // that sent it has nothing left to withdraw.
+      if (pane.board || !pane.live) {
+        log.querySelectorAll(".note-act").forEach(function (a) { a.remove(); });
+      }
       bindChess();
       // Live updates replace the board DOM; bind the naval controls again.
       if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }

@@ -1750,10 +1750,14 @@ def event_wording(message, game, actor_name, other_name):
     me, them = ("You", other_name) if mine else (actor_name, "you")
 
     if message.event == "invited":
-        return f"{me} invited {them} to {label}."
+        return f"{me} invited {them} to play {label}."
     if message.event == "accepted":
         return f"{me} accepted the {label} invite."
     if message.event == "declined":
+        # Withdrawing and declining both end an invite as "declined"; who
+        # wrote the line tells them apart: the sender took it back.
+        if game is not None and message.user_id == game.player_a:
+            return f"{me} took the {label} invite back."
         return f"{me} declined the {label} invite."
     # A result reads the same to both: the stored prose already names people.
     return message.body
@@ -1854,10 +1858,21 @@ def chat_rows(kind, parent, after=0):
                 and m.event == "invited"
                 and game.player_b == current_user.id
             )
+            # And the sender, while it is unanswered, can take it back from
+            # the line that says they sent it; the invitee answers from the
+            # banner at the top of the chat (_gamepane.html).
+            entry["can_withdraw"] = bool(
+                game is not None
+                and game.status == "invited"
+                and m.event == "invited"
+                and game.player_a == current_user.id
+            )
             entry["accept_url"] = url_for("game_action", game_id=m.game_id,
                                           action="accept")
             entry["decline_url"] = url_for("game_action", game_id=m.game_id,
                                            action="decline")
+            entry["withdraw_url"] = url_for("game_action", game_id=m.game_id,
+                                            action="withdraw")
         out.append(entry)
     return out
 
@@ -2127,12 +2142,13 @@ def chat_list():
 
     last = {}
     newest = db.session.execute(
-        db.select(Message.body, Message.created_at)
+        db.select(Message.body, Message.created_at, Message.user_id,
+                  Message.event, Message.game_id, Message.post_id)
         .where(Message.room == COMMUNITY)
         .order_by(Message.id.desc()).limit(1)
     ).first()
     if newest:
-        last[(COMMUNITY, 0)] = (newest[0], newest[1])
+        last[(COMMUNITY, 0)] = tuple(newest)
 
     # The newest message in each of THIS student's conversations. It used to
     # read every message in the table, once per parent kind, and keep the
@@ -2143,13 +2159,30 @@ def chat_list():
         ids = sorted(wanted[kind])
         if not ids:
             continue
-        for parent_id, body, when in db.session.execute(
-            db.select(column, Message.body, Message.created_at)
+        for parent_id, *rest in db.session.execute(
+            db.select(column, Message.body, Message.created_at, Message.user_id,
+                      Message.event, Message.game_id, Message.post_id)
             .where(column.in_(ids))
             .distinct(column)
             .order_by(column, Message.id.desc())
         ):
-            last[(kind, parent_id)] = (body, when)
+            last[(kind, parent_id)] = tuple(rest)
+
+    # A game event or a meetup as the newest message reads from the reader's
+    # side ("You invited Ben to play Chess.", "Ben asked you to meet up: …"),
+    # as the chat page words it, rather than the stored sentence. The rows
+    # that needs are fetched once each, and only when there are any.
+    from types import SimpleNamespace
+    game_ids = {r[4] for r in last.values() if r[3] and r[4]}
+    post_ids = {r[5] for r in last.values() if r[5]}
+    games = ({g.id: g for g in db.session.scalars(
+        db.select(Game).where(Game.id.in_(game_ids)))} if game_ids else {})
+    posts = ({p.id: p for p in db.session.scalars(
+        db.select(GamePost).where(GamePost.id.in_(post_ids)))} if post_ids else {})
+    posters = {r[2] for r in last.values() if r[5] and r[2] != current_user.id}
+    names = ({uid: name for uid, name in db.session.execute(
+        db.select(User.id, User.name).where(User.id.in_(posters)))}
+        if posters else {})
 
     # What is waiting in each, for the badge on its row. Keyed by the same
     # address a notice stores, so a chat's messages, a game invite and a
@@ -2159,7 +2192,21 @@ def chat_list():
         kind = entry["kind"]
         key = ((COMMUNITY, 0) if kind == COMMUNITY
                else (kind, entry.pop("_filed", None)))
-        preview, when = last.get(key, (None, None))
+        preview, when, who, event, game_id, post_id = last.get(key, (None,) * 6)
+        if event and game_id in games:
+            preview = event_wording(
+                SimpleNamespace(user_id=who, event=event, body=preview),
+                games[game_id], entry["title"], entry["title"])
+        elif post_id in posts:
+            post = posts[post_id]
+            plan = ", ".join(p for p in (post.game, post.when_text) if p)
+            if kind in PRIVATE_MEETUP_CHATS:
+                preview = ("You asked to meet up: " if who == current_user.id
+                           else f"{entry['title']} asked you to meet up: ") + plan
+            else:
+                preview = (("You" if who == current_user.id
+                            else names.get(who, "Somebody"))
+                           + " posted a meetup: " + plan)
         entry["preview"] = preview
         entry["when"] = when
         entry["url"] = notices.chat_url(kind, entry["target_id"])
@@ -2497,6 +2544,11 @@ def chat(kind, target_id):
     # on the two players, so it needed no change for this.
     opponent_id = chat_other_id(kind, parent)
     game = pane_game(opponent_id) if opponent_id else None
+    # The slot's context: the pane's token (with the banner in it) and the
+    # invite waiting on me, if any (_gamepane.html).
+    pane = (pane_context(opponent_id, game, invite_for_me(opponent_id),
+                         meetup_ask_for(kind, parent), kind, target_id)
+            if opponent_id else {})
     game_seat = game.seat_of(current_user.id) if game is not None else None
 
     # Opening the board counts as being at it, the same as the live request
@@ -2582,7 +2634,13 @@ def chat(kind, target_id):
         game=game,
         seat=game_seat,
         payload=game_payload(game, game_seat) if game is not None else None,
-        game_token=game_token(game, game_seat),
+        game_token=pane.get("game_token", "none"),
+        invite=pane.get("invite"),
+        invite_from=pane.get("invite_from"),
+        invite_label=pane.get("invite_label"),
+        meetup_ask=pane.get("meetup_ask"),
+        meet_kind=pane.get("meet_kind"),
+        meet_id=pane.get("meet_id"),
         # Asked of live_game_with rather than the pane: an invite is a message
         # now, so the pane does not see it, and offering to start a second
         # game during one would be wrong.
@@ -2631,19 +2689,90 @@ LIVE_WAIT = 25.0
 LIVE_TICK = 0.2
 
 
-def live_pane(target_id, game):
-    """The game half of a live answer, or None for a chat that cannot have one."""
-    busy = live_game_with(target_id) is not None
-    if game is None:
-        return {"token": "none", "html": "", "live": busy}
+def invite_for_me(other_id):
+    """The unanswered invite THEY sent ME, or None: what the chat's banner
+    shows. The one I sent is a line in the log, not a banner."""
+    invite = pending_invite_with(other_id)
+    if invite is not None and invite.player_b == current_user.id:
+        return invite
+    return None
 
-    seat = game.seat_of(current_user.id)
+
+def meetup_ask_for(kind, parent):
+    """The meetup the other person asked for in this one-on-one that is
+    still to come and that I have not joined: what the chat's banner shows.
+    None in any other conversation, or once I am in, or once it is over or
+    cancelled (still_on, status)."""
+    if kind not in PRIVATE_MEETUP_CHATS or parent is None:
+        return None
+    column = MESSAGE_PARENTS[kind]
+    joined = (db.select(GamePostRsvp.post_id)
+              .where(GamePostRsvp.post_id == GamePost.id,
+                     GamePostRsvp.user_id == current_user.id)
+              .exists())
+    post = db.session.scalar(
+        db.select(GamePost)
+        .join(Message, Message.post_id == GamePost.id)
+        .where(column == parent.id, GamePost.status == "open", still_on(),
+               GamePost.author_id != current_user.id, ~joined)
+        .order_by(GamePost.id.desc())
+    )
+    return post_payload(post) if post is not None else None
+
+
+def pane_token(game, seat, invite, meetup=None):
+    """game_token, plus the banners: an invite or a meetup ask waiting on
+    me re-swaps the slot even while a result is still on screen under it."""
+    token = game_token(game, seat)
+    if invite is not None and (game is None or invite.id != game.id):
+        token += f":i{invite.id}"
+    if meetup is not None:
+        token += f":m{meetup['id']}"
+    return token
+
+
+def pane_context(other_id, game, invite, meetup=None, kind=None, target_id=None):
+    """What _gamepane.html is drawn from, for the page and for the poller.
+    `kind`/`target_id` name this chat, for the meetup banner's form to come
+    back to."""
+    seat = game.seat_of(current_user.id) if game is not None else None
+    other = db.session.get(User, other_id)
     return {
-        "token": game_token(game, seat),
+        "game": game, "seat": seat,
+        "payload": game_payload(game, seat) if game is not None else None,
+        "game_token": pane_token(game, seat, invite, meetup),
+        "invite": invite,
+        "invite_from": other.name if other else "Somebody",
+        "invite_label": (rules.LABELS.get(invite.kind, invite.kind)
+                         if invite is not None else ""),
+        # meetup_ask, not meetup: chat.html already has a `meetup` (whether a
+        # group chat belongs to one), and the partial is included there.
+        "meetup_ask": meetup,
+        "meet_kind": kind,
+        "meet_id": target_id,
+        "other_id": other_id,
+    }
+
+
+def live_pane(other_id, game, meetup=None, kind="match", target_id=None):
+    """The game half of a live answer, or None for a chat that cannot have one.
+
+    `board` is whether there is a board (or a result) to lay the chat
+    beside; an invite or a meetup ask on its own is a banner over a
+    full-width chat.
+    """
+    busy = live_game_with(other_id) is not None
+    invite = invite_for_me(other_id)
+    if game is None and invite is None and meetup is None:
+        return {"token": "none", "html": "", "live": busy, "board": False}
+
+    ctx = pane_context(other_id, game, invite, meetup, kind,
+                       target_id if target_id is not None else other_id)
+    return {
+        "token": ctx["game_token"],
         "live": busy,
-        "html": render_template("_gamepane.html", game=game, seat=seat,
-                                payload=game_payload(game, seat),
-                                other_id=target_id),
+        "board": game is not None and game.status in ("active", "finished"),
+        "html": render_template("_gamepane.html", **ctx),
     }
 
 
@@ -3090,7 +3219,12 @@ def live_reply(kind, target_id):
             # about which game the panel shows, and it is where an abandoned
             # game gets settled. Reproducing that here would let the two drift.
             game = pane_game(watch_other) if watch_other else None
-            fresh = game_token(game, game.seat_of(me) if game else None)
+            # With the banner in it: an invite arriving for me has to wake
+            # the page even while a result is still showing under it.
+            meetup = meetup_ask_for(kind, parent) if watch_other else None
+            fresh = pane_token(game, game.seat_of(me) if game else None,
+                               invite_for_me(watch_other) if watch_other else None,
+                               meetup)
             # Membership, for a group chat only. Same shape as the game
             # token: one cheap aggregate, compared rather than rendered.
             crowd = (live_group_token(target_id)
@@ -3137,7 +3271,7 @@ def live_reply(kind, target_id):
             return jsonify({
                 "after": max([r["id"] for r in rows], default=after),
                 "messages": rows,
-                "game": (live_pane(watch_other, game)
+                "game": (live_pane(watch_other, game, meetup, kind, target_id)
                          if watch_other else None),
                 "group": (live_group(db.session.get(Chat, target_id))
                           if kind == "group" else None),
@@ -3296,23 +3430,11 @@ def chat_game(other_id):
     if parent is None:
         return jsonify({"error": "unavailable"}), 403
 
-    game = pane_game(other_id)
-    # Whether a game is in play at all, which is not the same question as
-    # whether the panel has something to show: an invite is in play but lives
-    # in the log. This is what decides if the launcher stays hidden.
-    busy = live_game_with(other_id) is not None
-
-    if game is None:
-        return jsonify({"token": "none", "html": "", "live": busy})
-
-    seat = game.seat_of(current_user.id)
-    return jsonify({
-        "token": game_token(game, seat),
-        "live": busy,
-        "html": render_template("_gamepane.html", game=game, seat=seat,
-                                payload=game_payload(game, seat),
-                                other_id=other_id),
-    })
+    # The same answer the live channel gives (live_pane): the token, whether
+    # a game is in play at all (which hides the launcher; an invite counts),
+    # whether there is a board to lay the chat beside, and the markup.
+    return jsonify(live_pane(other_id, pane_game(other_id),
+                             meetup_ask_for("match", parent), "match", other_id))
 
 
 @app.route("/chats/<kind>/<int:target_id>/messages")
@@ -4087,7 +4209,7 @@ def game_new():
     said = game_event(game, "invited", current_user.id,
                       f"{current_user.name} invited "
                       f"{other.name if other else 'them'} "
-                      f"to {rules.LABELS[kind]}.")
+                      f"to play {rules.LABELS[kind]}.")
     if not said:
         db.session.rollback()
         flash("That invite couldn't be sent.")
@@ -4581,6 +4703,11 @@ def post_new():
     if request.form.get("from_kind") and here is None:
         flash("That conversation isn't available to you.")
         return redirect(url_for("find_game"))
+    # A pairing's chat ends with its game (pairing_over): nothing more goes
+    # into it, a meetup included.
+    if here == "pair" and pairing_over(here_parent):
+        flash("This game is over, so its chat is closed.")
+        return redirect(url_for("chat", kind="pair", target_id=from_id))
 
     game = request.form.get("game", "").strip()
     mode = request.form.get("mode", "online")

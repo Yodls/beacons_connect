@@ -6,113 +6,110 @@
   That is the point of it being a partial -- the board markup has one source,
   so a live update cannot drift from a fresh page load.
 
-  data-token is how the poller decides whether to swap at all. It only re-swaps
-  when the token changes, because chess is a two-click interaction and
-  replacing identical markup would throw away a half-made move.
+  Three things can be in here, and the slot holds them (.paneset):
+    - the invite banner, when the other person has invited me to a game and
+      I have not answered: who, which game, Accept and Decline. Drawn from
+      the game row, so it is there even if the invite's message never got
+      written;
+    - the meetup banner, when the other person asked to meet up in this chat
+      and I have not joined: what, when, and "I'm in";
+    - the game window, once there is a board or a result to show. Nothing
+      is drawn for an invite, a declined one or a withdrawn one: the chat
+      stays full width and the lines in the log are the whole record, until
+      a game actually starts.
+
+  data-token is how the poller decides whether to swap at all (app.pane_token:
+  the game's token, plus the banners). It only re-swaps when the token
+  changes, because chess is a two-click interaction and replacing identical
+  markup would throw away a half-made move.
 #}
 {%- import "_ui.html" as ui -%}
-{# The token is handed over rather than rebuilt here: it also carries
-   whether the other player is still at the board, and two copies of that
-   rule would drift apart. #}
-<div class="gamepane" data-token="{{ payload.token }}">
-  <div class="gamehead">
-    {{ ui.avatar(payload.label, game.id, square=true) }}
-    <div class="grow">
-      <h3>{{ payload.label }}</h3>
-      <span class="vs">against {{ payload.opponent }}
-        {#- Whether the other player is actually at the board, as a few words
-            on this line rather than a box of its own. Nothing ends on a timer
-            any more, so a game can be paused for as long as the two of them
-            like -- which only works if somebody waiting can tell a long
-            think from an empty chair. -#}
-        {%- if game.status == "active" %}
-          {%- set away = payload.opponent_away %}
-          {%- set never = away and not payload.opponent_arrived %}
-          {%- set waiting = away and not payload.can_claim %}
-          <span class="presence {{ 'never' if never else ('gone' if away else 'here') }}"
-                {%- if waiting %} title="The game stays open until they come back."{% endif %}>
-            <span class="dot" aria-hidden="true"></span>
-            {%- if never -%}
-              hasn't opened it yet
-            {%- elif away -%}
-              left {{ payload.away_label }} ago
-            {%- else -%}
-              at the board
-            {%- endif -%}
-            {#- The tooltip's sentence, for a screen reader too. -#}
-            {%- if waiting %}<span class="sr">. The game stays open until they come back.</span>{% endif -%}
-          </span>
-        {%- endif -%}
+<div class="paneset" data-token="{{ game_token }}">
+  {% if invite %}
+    <div class="invitebar">
+      <span class="invite-icon">{{ ui.icon("game") }}</span>
+      <span class="invite-text"><b>{{ invite_from }}</b> invited you to play {{ invite_label }}</span>
+      <span class="invite-acts">
+        <form method="post" action="{{ url_for('game_action', game_id=invite.id, action='accept') }}">
+          <button type="submit">Accept</button>
+        </form>
+        <form method="post" action="{{ url_for('game_action', game_id=invite.id, action='decline') }}">
+          <button type="submit" class="ghost">Decline</button>
+        </form>
       </span>
     </div>
-    <div class="gamehead-acts">
-      {% if game.status == "active" %}
-        {# Only once they have been gone long enough and the move is theirs;
-           the route checks the same rule (claimable_by) before it acts. #}
-        {% if payload.can_claim %}
-          <form method="post" action="{{ url_for('game_claim', game_id=game.id) }}">
-            <button type="submit" class="claim">Claim the win</button>
+  {% endif %}
+
+  {% if meetup_ask %}
+    <div class="invitebar meetup-ask">
+      <span class="invite-icon">{{ ui.icon("meet") }}</span>
+      <span class="invite-text"><b>{{ invite_from }}</b> asked you to meet up: {{ meetup_ask.game }}{% if meetup_ask.when_text %}, {{ meetup_ask.when_text }}{% endif %}</span>
+      <span class="invite-acts">
+        {# The same form as the card's "I'm in", carrying the conversation so
+           it comes back here (app.card_home). #}
+        <form method="post" action="{{ url_for('post_rsvp', post_id=meetup_ask.id) }}">
+          <input type="hidden" name="from_kind" value="{{ meet_kind }}" />
+          <input type="hidden" name="from_id" value="{{ meet_id }}" />
+          <button type="submit">I'm in</button>
+        </form>
+      </span>
+    </div>
+  {% endif %}
+
+  {% if game and game.status in ("active", "finished") %}
+  <div class="gamepane">
+    <div class="gamehead">
+      {{ ui.avatar(payload.label, game.id, square=true) }}
+      <div class="grow">
+        <h3>{{ payload.label }}</h3>
+        <span class="vs">against {{ payload.opponent }}
+          {#- Whether the other player is actually at the board, as a few words
+              on this line rather than a box of its own. Nothing ends on a timer
+              any more, so a game can be paused for as long as the two of them
+              like -- which only works if somebody waiting can tell a long
+              think from an empty chair. -#}
+          {%- if game.status == "active" %}
+            {%- set away = payload.opponent_away %}
+            {%- set never = away and not payload.opponent_arrived %}
+            {%- set waiting = away and not payload.can_claim %}
+            <span class="presence {{ 'never' if never else ('gone' if away else 'here') }}"
+                  {%- if waiting %} title="The game stays open until they come back."{% endif %}>
+              <span class="dot" aria-hidden="true"></span>
+              {%- if never -%}
+                hasn't opened it yet
+              {%- elif away -%}
+                left {{ payload.away_label }} ago
+              {%- else -%}
+                at the board
+              {%- endif -%}
+              {#- The tooltip's sentence, for a screen reader too. -#}
+              {%- if waiting %}<span class="sr">. The game stays open until they come back.</span>{% endif -%}
+            </span>
+          {%- endif -%}
+        </span>
+      </div>
+      <div class="gamehead-acts">
+        {% if game.status == "active" %}
+          {# Only once they have been gone long enough and the move is theirs;
+             the route checks the same rule (claimable_by) before it acts. #}
+          {% if payload.can_claim %}
+            <form method="post" action="{{ url_for('game_claim', game_id=game.id) }}">
+              <button type="submit" class="claim">Claim the win</button>
+            </form>
+          {% endif %}
+          <form method="post"
+                action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
+            <button type="submit" class="ghost">Resign</button>
+          </form>
+        {% else %}
+          {# Only offered once the game is over; the route refuses it otherwise. #}
+          <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
+            <button type="submit" class="ghost">Close</button>
           </form>
         {% endif %}
-        <form method="post"
-              action="{{ url_for('game_action', game_id=game.id, action='resign') }}">
-          <button type="submit" class="ghost">Resign</button>
-        </form>
-      {% elif game.status in ("finished", "declined") %}
-        {# Only offered once the game is over; the route refuses it otherwise. #}
-        <form method="post" action="{{ url_for('game_close', game_id=game.id) }}">
-          <button type="submit" class="ghost">Close</button>
-        </form>
-      {% endif %}
+      </div>
     </div>
-  </div>
 
-  {# An invite appears here only where the panel would otherwise be empty.
-     It normally arrives as a message in the log with its own Accept and
-     Decline, and it must never cover a result somebody is still reading --
-     pane_game decides that, and this only draws what it is handed. The
-     reason it is drawn at all: a message can be missing, and an invite that
-     cannot be answered locks both players out of playing each other. #}
-  {% if game.status == "invited" %}
-    <div class="empty invite">
-      {% if game.player_b == current_user.id %}
-        <b>{{ payload.opponent }} invited you to {{ payload.label }}.</b>
-        <span class="invite-row">
-          <form method="post"
-                action="{{ url_for('game_action', game_id=game.id, action='accept') }}">
-            <button type="submit">Accept</button>
-          </form>
-          <form method="post"
-                action="{{ url_for('game_action', game_id=game.id, action='decline') }}">
-            <button type="submit" class="ghost">Decline</button>
-          </form>
-        </span>
-      {% else %}
-        <b>Waiting for {{ payload.opponent }} to accept.</b>
-        <span class="invite-row">
-          <form method="post"
-                action="{{ url_for('game_action', game_id=game.id, action='withdraw') }}">
-            <button type="submit" class="ghost">Withdraw</button>
-          </form>
-        </span>
-      {% endif %}
-    </div>
-  {% elif game.status == "declined" %}
-    {# Said to the reader rather than about them. The panel used to tell
-       whoever declined that the person who invited them had turned it down,
-       which named the one player who certainly had not. #}
-    <div class="empty">
-      {%- if payload.ended_by_me is none -%}
-        This invite is no longer active.
-      {%- elif payload.withdrawn -%}
-        {{ "You took this invite back." if payload.ended_by_me
-           else payload.opponent ~ " took this invite back." }}
-      {%- else -%}
-        {{ "You turned this invite down." if payload.ended_by_me
-           else payload.opponent ~ " turned this invite down." }}
-      {%- endif -%}
-    </div>
-  {% else %}
     {% if game.outcome == "abandoned" %}
       <div class="empty">
         {% if payload.you_won %}
@@ -127,5 +124,6 @@
         {% include "_board.html" %}
       </div>
     </div>
+  </div>
   {% endif %}
 </div>
