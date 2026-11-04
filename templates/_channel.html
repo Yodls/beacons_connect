@@ -192,13 +192,16 @@
              "&reacts=" + encodeURIComponent(state.reacts || "") +
              // And how many messages it holds, so a deleted one is noticed.
              "&log=" + encodeURIComponent(state.log || "");
-        // Only presence cares about this: a tab behind another window should
-        // still collect notices, but it is not somebody sitting at a board.
-        // Saying so is the whole fix -- this loop re-issues on each response
-        // rather than on a timer, so a hidden tab is not throttled and used
-        // to go on reporting a player who had walked away.
-        if (document.hidden) { q += "&hidden=1"; }
       }
+      // Whether anybody is looking at this tab. A tab behind another window
+      // should still collect notices, but it is not somebody sitting at a
+      // board, not somebody reading the chat it has open (so nothing in it
+      // is marked read), and not somebody on the site (so the email about
+      // what arrived is not withheld). Said on every round, whatever the
+      // page: this loop re-issues on each response rather than on a timer,
+      // so a hidden tab is not throttled and used to go on reporting
+      // somebody who had walked away.
+      if (document.hidden) { q += "&hidden=1"; }
       // The lobby's waiting state. It is also what keeps the student in the
       // queue: the server touches their row when it sees this.
       if (what && what.seeking) { q += "&seeking=1"; }

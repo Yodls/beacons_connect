@@ -61,15 +61,14 @@
     <h1>Group chats</h1>
     {# notice_count is the bell's unread count (inject_dock in app.py),
        already on every page with the top bar: no new query. #}
-    <p class="lede"><span class="counter">You have {{ notice_count or 0 }} new
-      notification{{ "" if (notice_count or 0) == 1 else "s" }}.</span></p>
+    <p class="lede">Create a group chat, join one with a code, or browse public chats.</p>
   </div>
 
   <section class="sec-chat">
     {{ ui.section("Start a chat", "chat", "plus") }}
     <div class="maker">
-      <h3>Name it and go</h3>
-      <p>You get a join code to share. You can invite people once you are in.</p>
+      <h3>Create a group chat</h3>
+      <p>You'll get a code to share. You can invite people once you're in.</p>
       <form method="post" action="{{ url_for('chat_new') }}">
         <div class="line">
           <input type="text" name="name" maxlength="80" required
@@ -79,11 +78,11 @@
         <div class="picks">
           <label>
             <input type="radio" name="visibility" value="private" checked />
-            Private &mdash; unlisted, code still works
+            Private: not listed, but the code still works
           </label>
           <label>
             <input type="radio" name="visibility" value="public" />
-            Public &mdash; anyone can find it
+            Public: anyone can find it
           </label>
         </div>
       </form>
@@ -182,8 +181,7 @@
         </div>
       {% else %}
         <div class="empty">
-          <b>No public chats yet.</b> Make one and mark it public to start
-          the list off.
+          <b>No public chats yet.</b> Create one and make it public.
         </div>
       {% endfor %}
     </div>

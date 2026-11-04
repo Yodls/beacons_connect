@@ -243,9 +243,7 @@ def account_gone(friend_id, name):
     them as the actor would be destroyed by the very deletion it describes.
     """
     return notify(friend_id, "account_gone",
-                  f"{name} has left Beacons Connect. Your conversation and "
-                  "any games you played together have gone with their "
-                  "account.",
+                  f"{name} left Beacons Connect. Your conversation and games with them were removed.",
                   "/matches")
 
 
@@ -284,7 +282,7 @@ def game_answer(recipient_id, actor, game, label, action):
     said = "accepted" if action == "accept" else "declined"
     return notify(
         recipient_id, "game_answer",
-        f"{actor.name} {said} your game of {label}.",
+        f"{actor.name} {said} your {label} invite.",
         chat_url("match", actor.id),
         actor_id=actor.id, game_id=game.id,
     )
@@ -547,20 +545,51 @@ def clear_queue(user_id):
     ).rowcount
 
 
+def clear_url(user_id, url):
+    """Retire every unread notice of this person's that points at `url`."""
+    return db.session.execute(
+        db.update(Notice)
+        .where(Notice.user_id == user_id,
+               Notice.url == url,
+               Notice.read_at.is_(None))
+        .values(read_at=datetime.utcnow())
+    ).rowcount
+
+
 def clear_chat(user_id, kind, target_id):
-    """Reading a conversation retires its message notice.
+    """Reading a conversation retires everything that pointed at it.
 
     This is the whole of "do not tell somebody about what they are already
     looking at". The sender cannot know who is reading, so the notice is
     written unconditionally and retired here -- by the chat page itself, and by
-    the live channel on behalf of whichever chat the tab has open. No presence
-    table, no heartbeat.
+    the live channel on behalf of whichever chat a visible tab has open. No
+    presence table, no heartbeat.
+
+    Every kind, not only new messages: a meetup asked there, "now friends", a
+    game's answer, a pairing and a challenge all point at the conversation,
+    and all of them are on screen once it is open. (A challenge still waits
+    in the chat with its keys; only the bell stops asking.) Leaving a
+    conversation for good calls clear_url with the same address, so a chat
+    somebody can no longer open stops counting too.
     """
+    return clear_url(user_id, chat_url(kind, target_id))
+
+
+def settle(user_id, kind, actor_id=None, chat_id=None):
+    """Retire the unread notices of one kind about one person or chat.
+
+    For what was answered by another road than the bell: a friend request
+    from the friends page, an invite from the chats hub, a meetup joined from
+    its card on the map. close() wants a notice id, and those forms do not
+    carry one. By actor or chat, never by kind alone.
+    """
+    if actor_id is None and chat_id is None:
+        return 0
+    where = [Notice.user_id == user_id, Notice.kind == kind, Notice.read_at.is_(None)]
+    if actor_id is not None:
+        where.append(Notice.actor_id == actor_id)
+    if chat_id is not None:
+        where.append(Notice.chat_id == chat_id)
     return db.session.execute(
-        db.update(Notice)
-        .where(Notice.user_id == user_id,
-               Notice.kind == "message",
-               Notice.url == chat_url(kind, target_id),
-               Notice.read_at.is_(None))
-        .values(read_at=datetime.utcnow())
+        db.update(Notice).where(*where).values(read_at=datetime.utcnow())
     ).rowcount

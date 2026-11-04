@@ -80,8 +80,8 @@
     model.log.forEach(function(line){var el=document.createElement('li');el.textContent=line;document.getElementById('practice-history').appendChild(el);});
     if(model.phase==='placing') status.textContent='Prepare for battle: shuffle or ready your fleet.';
     else if(model.phase==='finished') status.textContent=model.winner==='you'?'Victory! You defeated the Royal Navy.':'Defeat. The Royal Navy sank your fleet.';
-    else if(model.computerBusy) status.textContent='Royal Navy turn — incoming cannon fire!';
-    else status.textContent='Your turn — select a coordinate and FIRE!';
+    else if(model.computerBusy) status.textContent='Royal Navy turn. Incoming cannon fire!';
+    else status.textContent='Your turn. Select a coordinate and fire!';
     save();
   }
   function selectTarget(n) {if(model.phase!=='firing'||model.computerBusy||model.myShots.includes(n))return;selected=n;render();}
@@ -101,7 +101,7 @@
     model.aiShots.push(n);
     var hit=allCells(model.mine).has(n);
     var sunken=model.mine.find(function(s){return s.cells.includes(n)&&isSunk(s,model.aiShots);});
-    log('Royal Navy fires '+letter(n)+' — '+(hit?'hit':'miss')+(sunken?'! Your '+sunken.name+' sank.':'.'));
+    log('Royal Navy fires '+letter(n)+': '+(hit?'hit':'miss')+(sunken?'! Your '+sunken.name+' sank.':'.'));
     model.computerBusy=false;
     if(allSunk(model.mine,model.aiShots)) {model.winner='computer';model.phase='finished';log('The Royal Navy wins.');}
     render();
@@ -113,7 +113,7 @@
     var n=selected;selected=null;model.myShots.push(n);
     var hit=allCells(model.theirs).has(n);
     var sunken=model.theirs.find(function(s){return s.cells.includes(n)&&isSunk(s,model.myShots);});
-    log('Continental Navy fires '+letter(n)+' — '+(hit?'hit':'miss')+(sunken?'! Enemy '+sunken.name+' sank.':'.'));
+    log('Continental Navy fires '+letter(n)+': '+(hit?'hit':'miss')+(sunken?'! Enemy '+sunken.name+' sank.':'.'));
     if(allSunk(model.theirs,model.myShots)) {model.phase='finished';model.winner='you';log('The Royal Navy has been defeated!');render();return;}
     model.computerBusy=true;render();setTimeout(computerTurn,550);
   });

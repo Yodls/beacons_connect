@@ -205,7 +205,7 @@
 {% block main %}
   <div class="pagehead">
     <h1>Meet up in person!</h1>
-    <p class="lede">Post a meetup on the map, join the queue to be paired, or answer a post.</p>
+    <p class="lede">Post a meetup, get paired with someone, or join one that's already posted.</p>
   </div>
 
   {# The campus map first, as wide as the page, with Post a meetup inside its
@@ -228,7 +228,7 @@
           {% if counts.get(waiting.game | lower) %}
             <span class="waiting">{{ counts[waiting.game | lower] }} other student(s) waiting</span>
           {% else %}
-            Nobody else has picked it yet &mdash; you're first in line.
+            You're first in line.
           {% endif %}
         </p>
         <form method="post" data-region="#matchmaking" action="{{ url_for('find_leave') }}">
@@ -241,7 +241,7 @@
           <select name="game" required class="act">
             {% for game in games %}
               <option value="{{ game }}">
-                {{ game }}{% if counts.get(game | lower) %} &mdash; {{ counts[game | lower] }} waiting{% endif %}
+                {{ game }}{% if counts.get(game | lower) %} ({{ counts[game | lower] }} waiting){% endif %}
               </option>
             {% endfor %}
             {# The write-in. Safe to offer now that pairing folds the name

@@ -123,7 +123,7 @@
 
     function lostWarning(groups) {
       return groups.length
-        ? "Unsaved changes in " + groups.join(" and ") + " will be lost, because the page reloads. Save them first if you want to keep them."
+        ? "You have unsaved changes in " + groups.join(" and ") + ". Save them first or they'll be lost."
         : "";
     }
 
@@ -166,7 +166,7 @@
 
       ask({
         title: form.dataset.confirm,
-        body: form.dataset.confirmBody || "Are you sure you want to save your changes?",
+        body: form.dataset.confirmBody || "Save these changes?",
         ok: form.dataset.confirmOk || "Save changes",
         danger: form.hasAttribute("data-confirm-danger"),
         list: changed ? changed.map(function (s) { return "Changed: " + s; }) : null,

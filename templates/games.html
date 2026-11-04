@@ -34,7 +34,6 @@
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       }
       @media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
-      .pagehead p.lede { max-width: 26rem; }
 
       /* ---------- Play someone new: the game tiles ----------
          Raised white tiles; the picked one is gold and pressed in. The
@@ -178,7 +177,7 @@
   <i hidden data-fold-none></i>
   <div class="pagehead">
     <h1>Games</h1>
-    <p class="lede">Turn-based games with friends, or with whoever is waiting.</p>
+    <p class="lede">Play with friends or get matched with another student.</p>
   </div>
 
   <div class="split">
@@ -197,7 +196,7 @@
             {# One element, not a div around a paragraph: it is a status note.
                Nothing to press -- see the script for why. #}
             <p class="seek-slow" id="seek-slow" hidden>
-              Still looking &mdash; nobody is waiting for {{ seeking_label }}
+              Still looking. Nobody is waiting for {{ seeking_label }}
               just yet.
             </p>
             <form method="post" action="{{ url_for('game_seek_cancel') }}">
@@ -378,7 +377,7 @@
             {% endfor %}
           </ol>
         {% else %}
-          <div class="empty">No games won yet. Win one and you're on the board.</div>
+          <div class="empty">No wins yet. Win a game to get on the scoreboard.</div>
         {% endif %}
         <p class="winboard-you">You've won <b>{{ my_wins }}</b> game{{ "" if my_wins == 1 else "s" }}.</p>
       </section>

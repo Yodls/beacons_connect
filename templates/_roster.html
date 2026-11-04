@@ -28,7 +28,7 @@
     {{ ui.avatar(person.name, person.id) }}
     <span class="grow">{{ person.name }}
       {%- if owner_id is defined and person.id == owner_id %}
-        <span class="dock-quiet">made it</span>
+        <span class="dock-quiet">Owner</span>
       {% endif -%}
     </span>
 

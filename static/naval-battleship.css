@@ -1,4 +1,4 @@
-/* Beacon Connect — Revolution at Sea. Scoped to avoid changing existing games. */
+/* Beacons Connect, Revolution at Sea. Scoped to avoid changing existing games. */
 .naval-game, .naval-practice { --nav-ink:#173b87; --nav-ink-2:#4366ac; --nav-paper:#fffefb; --nav-line:rgba(64,174,220,.35); --nav-panel:rgba(255,255,255,.94); --nav-red:#c93535; --nav-hit-bg:#ffe4e1; --nav-water:#eff9ff; --nav-frame:#9ab9d7; font-family:"Segoe Print","Comic Sans MS", system-ui, sans-serif; color:var(--nav-ink); }
 body.theme-dark .naval-game, body.theme-dark .naval-practice, [data-theme="dark"] .naval-game { --nav-ink:#d7edff; --nav-ink-2:#a6cdec; --nav-paper:#102840; --nav-line:rgba(110,185,222,.3); --nav-panel:#163450; --nav-red:#ff7a75; --nav-hit-bg:#543340; --nav-water:#163957; --nav-frame:#547b9b; }
 .naval-game *, .naval-practice * { box-sizing:border-box; }

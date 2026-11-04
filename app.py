@@ -110,15 +110,10 @@ JOINS_HUB = {
     ("study_style", "I'm forming a study group with my classmates"):
         "Accountability Groups",
 }
-# How many people to suggest in the home rail. The friends page asks for more.
-#
-# Paired with HOME_CHATS below, and the pairing is the reason for the number.
-# The two sit side by side on a wide screen and stretch to the taller of them,
-# so three cards beside six conversation rows come out within about fifty
-# pixels of each other and the grid covers the rest. Four left the chat
-# column with a slab of white under it. Change one of these two and look at
-# the home page, because nothing in the suite can see a layout.
-RECOMMEND_LIMIT = 3
+# How many people the home page is given to suggest. It draws as many of
+# them as fit beside My chats (the script at the foot of home.html), so this
+# is a ceiling, not the number shown; the friends page asks for more.
+HOME_SUGGESTIONS = 10
 GENDER_BONUS = 2.0
 GENDERS = {
     "man": "Man",
@@ -464,9 +459,8 @@ CODE_WAIT = ("A code was sent less than a minute ago. Check your inbox and "
 # again from another browser (register).
 SIGNUP_EXPIRED = ("Your sign-up expired before it was verified. "
                   "Please register again.")
-SIGNUP_GONE = "That sign-up is no longer waiting. Please register again."
-SIGNUP_RESUMED = ("That address had a sign-up waiting on a code. We've "
-                  "started it again and sent you a new one.")
+SIGNUP_GONE = "We couldn't find that sign-up. Please register again."
+SIGNUP_RESUMED = ("This email already had a sign-up in progress. We've sent you a new code.")
 
 # An unverified account is kept for SIGNUP_TTL after it is made, then goes
 # and the student registers again. A code still runs out after CODE_TTL, but
@@ -595,6 +589,21 @@ SEEN_EVERY = timedelta(seconds=30)
 DIGEST_EVERY = timedelta(hours=48)
 DIGEST_TICK = 3600          # seconds between passes of the summary thread
 DIGEST_FIRST = 300          # and before the first, so a restart is not a burst
+# An alert about a new message, a meetup asked or a challenge is held this
+# long, then sent only if the notice is still unread and the person still
+# away. Somebody who opens the chat in the meantime, or comes back to the
+# site, is never emailed about what they have already seen.
+ALERT_HOLD = timedelta(seconds=120)
+# A notice older than this when the thread first finds it (the thread was
+# down, say) waits for the summary instead: an alert hours late is not one.
+ALERT_WINDOW = timedelta(minutes=15)
+ALERT_TICK = 30             # seconds between alert passes of the email thread
+ALERT_FIRST = 15            # and before the first
+# Which notices are alerted, and which chats a message alert is for: a
+# group, a club or the campus room is a room of people, and one post there
+# would mail all of them.
+ALERT_KINDS = {"message": "message", "meetup": "meetup", "game_invite": "game"}
+ALERT_CHATS = ("/chats/match/%", "/chats/pair/%")
 EMAIL_TYPES = ("alerts", "digest")
 # Where the two switches live: Profile Settings, Account and safety.
 EMAIL_SETTINGS = "/profile#safety"
@@ -648,54 +657,96 @@ def _email_message(user, subject, text, html, which):
                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
 
 
-def maybe_email(notice, kind, what=None):
-    """Email the recipient about this notice, if that is wanted.
+# ---- the held alerts
 
-    Not if it has already been emailed about, not to somebody who turned
-    alerts off or has no verified address, and not to somebody on the site
-    -- the bell is already showing it to them. The stamp is written here, in
-    the route's own transaction, so two messages landing at once cannot both
-    send; the email itself goes after the response (send_queued_emails).
+def alerts_due(now, user_ids=None):
+    """The notices whose alert is due on this pass.
+
+    Unread, never emailed about, of a kind that is alerted (a message only
+    in a one-on-one), between ALERT_HOLD and ALERT_WINDOW old, for somebody
+    with alerts on, a verified address, and not on the site. A chatty
+    conversation moves its one notice's created_at with every message, so a
+    burst is one email a couple of minutes after the last of it.
     """
-    if notice is None or notice.emailed_at is not None:
-        return False
+    return db.session.scalars(
+        db.select(Notice)
+        .join(User, User.id == Notice.user_id)
+        .where(
+            Notice.read_at.is_(None), Notice.emailed_at.is_(None),
+            Notice.kind.in_(list(ALERT_KINDS)),
+            db.or_(Notice.kind != "message",
+                   db.or_(*[Notice.url.like(pattern) for pattern in ALERT_CHATS])),
+            Notice.created_at <= now - ALERT_HOLD,
+            Notice.created_at > now - ALERT_WINDOW,
+            User.email_alerts, User.email_verified,
+            db.or_(User.last_seen_at.is_(None), User.last_seen_at < now - ON_SITE),
+            *([Notice.user_id.in_(user_ids)] if user_ids is not None else []))
+        .order_by(Notice.id)).all()
+
+
+def claim_alert(notice_id, now):
+    """Take this notice's alert, or learn another worker has. One UPDATE
+    that only succeeds while nobody has stamped it, as claim_digest does."""
+    claimed = db.session.execute(
+        db.update(Notice)
+        .where(Notice.id == notice_id, Notice.emailed_at.is_(None))
+        .values(emailed_at=now)
+        .returning(Notice.id)).first()
+    db.session.commit()
+    return claimed is not None
+
+
+def alert_what(notice):
+    """What the alert names, read back out of the notice's own sentence: the
+    plan for a meetup ("asked to meet up: Chess · Fri 6 PM · Healey"), the
+    game for a challenge ("challenged you to Chess")."""
+    body = notice.body.rstrip(".")
+    for kind, cut in (("meetup", ": "), ("game_invite", " challenged you to ")):
+        if notice.kind == kind and cut in body:
+            return body.split(cut, 1)[1]
+    return None
+
+
+def alert_for(notice):
+    """The alert email for one notice."""
     user = db.session.get(User, notice.user_id)
-    if user is None or not user.email_alerts or not user.email_verified:
-        return False
-    if on_site(user):
-        return False
     actor = db.session.get(User, notice.actor_id) if notice.actor_id else None
     subject, text, html = emails.alert(
-        kind, user.name, actor.name if actor else "Somebody",
+        ALERT_KINDS[notice.kind], user.name, actor.name if actor else "Somebody",
         site_url(notice.url), email_off_url(user.id, "alerts"),
-        site_url(EMAIL_SETTINGS), what=what)
-    notice.emailed_at = datetime.utcnow()
-    db.session.flush()
-    g.setdefault("queued_emails", []).append(
-        (_email_message(user, subject, text, html, "alerts"), notice.id))
-    return True
+        site_url(EMAIL_SETTINGS), what=alert_what(notice))
+    return _email_message(user, subject, text, html, "alerts")
 
 
-def _send_batch(batch):
-    """Send each email; a failed one has its notice un-stamped for the summary."""
-    with app.app_context():
-        for message, notice_id in batch:
-            try:
-                mail.send(message)
-            except MailHeldBack:
-                # A development database declining to mail a non-admin: not a
-                # failure, and nothing to retry. send_guarded has already
-                # logged it in one line; the notice stays stamped, as if sent.
-                continue
-            except Exception:  # noqa: BLE001 -- any SMTP failure is the same here
-                app.logger.exception("email alert to %s was not sent",
-                                     ",".join(message.recipients))
-                if notice_id is not None:
-                    db.session.execute(db.update(Notice)
-                                       .where(Notice.id == notice_id)
-                                       .values(emailed_at=None))
-                    db.session.commit()
-        db.session.remove()
+def run_alerts(now=None, user_ids=None):
+    """One pass of the held alerts. Returns how many were sent.
+
+    `user_ids` limits the pass to those people -- for the tests, which must
+    not touch anybody else's mail on a shared database.
+    """
+    now = now or datetime.utcnow()
+    sent = 0
+    for notice in alerts_due(now, user_ids):
+        if not claim_alert(notice.id, now):
+            continue
+        message = alert_for(notice)
+        try:
+            mail.send(message)
+        except MailHeldBack:
+            # A development database declining to mail a non-admin: not a
+            # failure, and nothing to retry. send_guarded has already logged
+            # it in one line; the notice stays stamped, as if sent.
+            pass
+        except Exception:  # noqa: BLE001 -- any mail failure is the same here
+            app.logger.exception("email alert to %s was not sent",
+                                 ",".join(message.recipients))
+            # Un-stamped, so the summary can still carry it.
+            db.session.execute(db.update(Notice).where(Notice.id == notice.id)
+                               .values(emailed_at=None))
+            db.session.commit()
+            continue
+        sent += 1
+    return sent
 
 
 @app.after_request
@@ -753,24 +804,6 @@ def not_found(error):
     return render_template("notfound_public.html"), 404
 
 
-@app.after_request
-def send_queued_emails(response):
-    """Send what this request queued, now that it has committed.
-
-    On a thread, so a slow mail server never slows a message going out, and a
-    broken one never fails it. Not at all if the request failed: whatever it
-    queued an email about did not happen.
-    """
-    batch = g.pop("queued_emails", None)
-    if batch and response.status_code < 400:
-        if app.config["EMAIL_ASYNC"]:
-            threading.Thread(target=_send_batch, args=(batch,),
-                             name="email-alerts", daemon=True).start()
-        else:
-            _send_batch(batch)
-    return response
-
-
 # ---- the every-other-day summary
 
 def claim_digest(user_id, now):
@@ -792,15 +825,19 @@ def claim_digest(user_id, now):
 
 
 def digest_for(user):
-    """The summary email for one person, and the notices it newly covers."""
-    unread = db.session.scalars(
-        db.select(Notice).where(Notice.user_id == user.id, Notice.read_at.is_(None))
+    """The summary email for one person, and the notices it covers.
+
+    Only what is still unread and was never emailed about: somebody already
+    sent an alert is not told the same thing twice.
+    """
+    fresh = db.session.scalars(
+        db.select(Notice).where(Notice.user_id == user.id, Notice.read_at.is_(None),
+                                Notice.emailed_at.is_(None))
         .order_by(Notice.id.desc())).all()
-    fresh = [n for n in unread if n.emailed_at is None]
     items = [{"body": n.body, "url": site_url(n.url)}
-             for n in unread[:emails.DIGEST_SHOWN]]
+             for n in fresh[:emails.DIGEST_SHOWN]]
     subject, text, html = emails.digest(
-        user.name, items, len(unread), site_url("/"),
+        user.name, items, len(fresh), site_url("/"),
         email_off_url(user.id, "digest"), site_url(EMAIL_SETTINGS))
     return _email_message(user, subject, text, html, "digest"), fresh
 
@@ -859,29 +896,36 @@ _digest_thread = {"started": False}
 _digest_lock = threading.Lock()
 
 
-def _digest_loop():
-    time.sleep(DIGEST_FIRST)
+def _email_loop():
+    """The email thread: the held alerts every ALERT_TICK, and the summary
+    every DIGEST_TICK (the first after DIGEST_FIRST, so a restart is not a
+    burst)."""
+    time.sleep(ALERT_FIRST)
+    next_digest = time.monotonic() + max(0, DIGEST_FIRST - ALERT_FIRST)
     while True:
         with app.app_context():
             try:
-                run_digests()
+                run_alerts()
+                if time.monotonic() >= next_digest:
+                    next_digest = time.monotonic() + DIGEST_TICK
+                    run_digests()
             except Exception:  # noqa: BLE001 -- the thread must outlive a bad pass
-                app.logger.exception("the summary pass failed")
+                app.logger.exception("the email pass failed")
                 db.session.rollback()
             finally:
                 db.session.remove()
-        time.sleep(DIGEST_TICK)
+        time.sleep(ALERT_TICK)
 
 
 @app.before_request
 def start_digests():
-    """Start the summary thread, once per process, on its first request."""
+    """Start the email thread, once per process, on its first request."""
     if _digest_thread["started"] or not app.config["EMAIL_DIGESTS"]:
         return None
     with _digest_lock:
         if not _digest_thread["started"]:
             _digest_thread["started"] = True
-            threading.Thread(target=_digest_loop, name="email-digest",
+            threading.Thread(target=_email_loop, name="email",
                              daemon=True).start()
     return None
 
@@ -1400,6 +1444,36 @@ CHAT_TAG = {
     "club": "Club",
     "group": "Group",
 }
+# The headings a list of chats is grouped under (home, /chats/all), in the
+# order they are drawn: key (the anchor), title, icon, the window kind whose
+# colour the band wears (base.html's .sec-* classes), and the chat kinds
+# under it.
+CHAT_SECTIONS = (
+    ("friends", "Friends", "user", "sec-friend", ("match",)),
+    ("clubs", "Clubs", "club", "sec-club", ("club",)),
+    ("groups", "Group chats", "people", "sec-chat", ("group",)),
+    ("games", "Game pairings", "game", "sec-game", ("pair",)),
+    ("campus", "Campus", "talk", "sec-chat", (COMMUNITY,)),
+)
+
+
+def chat_sections(entries, per=None, skip=()):
+    """chat_list() under its headings, each still most recent first.
+
+    Empty headings are left out, and so are the keys in `skip` (home draws
+    no game pairings: a pairing is for one game, and ends with it). `per`
+    caps the rows drawn under a heading, never its total, so "See all 9"
+    can say how many there really are.
+    """
+    out = []
+    for key, title, icon, look, kinds in CHAT_SECTIONS:
+        if key in skip:
+            continue
+        rows = [e for e in entries if e["kind"] in kinds]
+        if rows:
+            out.append({"key": key, "title": title, "icon": icon, "look": look,
+                        "total": len(rows), "rows": rows[:per] if per else rows})
+    return out
 
 def activity_catalogue(in_person_only=False, presets_only=False):
     """Every activity with its locations, ready for a form or for validation.
@@ -1919,10 +1993,54 @@ def pairing_label(pairing):
     return pairing.game
 
 
+def pairing_over(pairing, live_with=None):
+    """Whether an online pairing's game is done, which ends its chat.
+
+    Derived, the way chat_ended is for a meetup's chat, rather than written
+    to the row when the game finishes: nothing has to run, and the chat
+    stays readable for its two people (the board and the last words) while
+    taking no more messages and leaving the chat lists. Closing by status
+    would shut it to both and strand the board (see pairing_close).
+
+    An in-person pairing has no game to be over; it closes by hand from
+    /find. `live_with` is the set of people the current user has a live
+    game with, when the caller has it already; otherwise it is asked here.
+    """
+    if pairing.mode != "online":
+        return False
+    other_id = (pairing.user_hi if pairing.user_lo == current_user.id
+                else pairing.user_lo)
+    if live_with is not None:
+        return other_id not in live_with
+    return live_game_with(other_id) is None
+
+
 def pairing_subtitle(pairing):
     """The line under a pair chat's title, which is the other person's name:
     what brought the two of you together ("Tic-Tac-Toe pairing")."""
     return f"{pairing_label(pairing)} pairing"
+
+
+@app.template_filter("short_ago")
+def short_ago(moment, now=None):
+    """When something happened, as a chat list says it beside a row: "now",
+    "5m", "3h", "Mon" within the week, else "Nov 3". Boston's day, not
+    UTC's, so a message sent at 11 pm is not filed under tomorrow."""
+    if moment is None:
+        return ""
+    now = now or datetime.utcnow()
+    gone = now - moment
+    minutes = int(gone.total_seconds() // 60)
+    if minutes < 1:
+        return "now"
+    if minutes < 60:
+        return f"{minutes}m"
+    if minutes < 24 * 60:
+        return f"{minutes // 60}h"
+    local = utc_to_boston(moment)
+    if minutes < 7 * 24 * 60:
+        return f"{local:%a}"
+    return f"{local:%b} {local.day}"
 
 
 def chat_entry(kind, target_id, title, subtitle=None, avatar_id=None):
@@ -1945,13 +2063,29 @@ def chat_list():
     entries = [chat_entry(COMMUNITY, 0, COMMUNITY_TITLE)]
     for friend in matching.active_matches(current_user.id):
         entries.append(chat_entry("match", friend["user_id"], friend["name"]))
-    for pairing in db.session.scalars(
+    pairings = db.session.scalars(
         db.select(GamePairing).where(
             db.or_(GamePairing.user_lo == current_user.id,
                    GamePairing.user_hi == current_user.id),
             GamePairing.status == "open",
         )
-    ):
+    ).all()
+    # An online pairing whose game is over has nothing left to say
+    # (pairing_over). Who the student still has a live game with is asked
+    # once, and only when there is an online pairing to ask about.
+    live_with = None
+    if any(p.mode == "online" for p in pairings):
+        live_with = {
+            (b if a == current_user.id else a)
+            for a, b in db.session.execute(
+                db.select(Game.player_a, Game.player_b).where(
+                    db.or_(Game.player_a == current_user.id,
+                           Game.player_b == current_user.id),
+                    Game.status.in_(LIVE_GAME)))
+        }
+    for pairing in pairings:
+        if pairing_over(pairing, live_with):
+            continue
         other_id = (pairing.user_hi if pairing.user_lo == current_user.id
                     else pairing.user_lo)
         other = db.session.get(User, other_id)
@@ -2037,18 +2171,19 @@ def chat_list():
     return entries
 
 
-# How many conversations the home page shows before it stops. Every chat a
-# student has was burying everything below it -- 72 rows on one account here.
-# Six rather than five to match the suggestion rail beside it: see
-# RECOMMEND_LIMIT, which is the other half of that pairing.
-HOME_CHATS = 6
+# How many conversations the home page shows under each heading before
+# "See all". Every chat a student has was burying everything below it -- 72
+# rows on one account here -- so each heading keeps its most recent few.
+HOME_SECTION_ROWS = 3
 
 
 @app.route("/chats/all")
 @login_required
 def all_chats():
     """Every conversation, for when the recent few are not the one you wanted."""
-    return render_template("allchats.html", chats=chat_list())
+    entries = chat_list()
+    return render_template("allchats.html", sections=chat_sections(entries),
+                           chat_total=len(entries))
 
 
 @app.route("/")
@@ -2057,12 +2192,12 @@ def index():
     everything = chat_list()
     return render_template(
         "home.html",
-        chats=everything[:HOME_CHATS],
+        sections=chat_sections(everything, HOME_SECTION_ROWS, skip=("games",)),
         # The real number, not the number drawn. A band that counts the rows
         # it drew tells a student with seventy conversations nothing.
         chat_total=len(everything),
         recs=matching.recommend_people(
-            current_user.id, limit=RECOMMEND_LIMIT, gender_bonus=GENDER_BONUS
+            current_user.id, limit=HOME_SUGGESTIONS, gender_bonus=GENDER_BONUS
         ),
     )
 
@@ -2156,16 +2291,15 @@ def notify_message(kind, parent, target_id, title=None):
     """
     where = None if kind == "match" else title
     for user_id in chat_audience(kind, parent, target_id):
-        notice = notices.message(
+        # The email about it, for the private chats only, is the email
+        # thread's (run_alerts): held a couple of minutes, then sent only if
+        # this is still unread.
+        notices.message(
             user_id, current_user, kind,
             current_user.id if kind == "match" else target_id,
             chat_id=parent.id if kind == "group" else None,
             where=where,
         )
-        # Email for the private chats only. A group, a club or the campus
-        # room is a room of people; one post there would mail all of them.
-        if kind in PRIVATE_MEETUP_CHATS:
-            maybe_email(notice, "message")
 
 
 REPLY_QUOTE_MAX = 140
@@ -2226,9 +2360,11 @@ def message_react(message_id):
     if kind is None:
         return refuse("That message is not available to you.")
     if message.event:
-        return refuse("That one cannot take a reaction.", 400)
+        return refuse("You can't react to that message.", 400)
     if kind == "group" and chat_ended(parent):
         return refuse("That meetup has ended, so its chat is closed.")
+    if kind == "pair" and pairing_over(parent):
+        return refuse("This game is over, so its chat is closed.")
     emoji = request.form.get("emoji", "")
     if emoji not in REACTION_NAMES:
         return refuse("That is not one of the reactions.", 400)
@@ -2288,8 +2424,7 @@ def message_delete(message_id):
     if message.user_id != current_user.id:
         return refuse("You can only delete your own messages.")
     if message.event or message.post_id:
-        return refuse("That one can't be deleted. A meetup is cancelled "
-                      "from its card instead.", 400)
+        return refuse("To remove a meetup, cancel it from its card.", 400)
 
     db.session.execute(
         db.update(Message).where(Message.reply_to_id == message.id)
@@ -2307,6 +2442,10 @@ def chat(kind, target_id):
     parent, title = chat_target(kind, target_id)
 
     if parent is None:
+        # Unfriended, a pairing closed, out of the group or the club: the
+        # bell may still point here, and there is nothing here to see.
+        if notices.clear_url(current_user.id, notices.chat_url(kind, target_id)):
+            db.session.commit()
         flash("That chat is not available to you.")
         return redirect(url_for("index"))
 
@@ -2320,6 +2459,10 @@ def chat(kind, target_id):
         # in the template: the composer going away is not a rule.
         elif kind == "group" and chat_ended(parent):
             refused("That meetup has ended, so its chat is closed.")
+        # A pairing is for one game, and its chat ends with it
+        # (pairing_over): readable still, but taking nothing more.
+        elif kind == "pair" and pairing_over(parent):
+            refused("This game is over, so its chat is closed.")
         elif len(body) > MESSAGE_MAX:
             refused(f"Messages are limited to {MESSAGE_MAX} characters.")
         else:
@@ -2432,7 +2575,8 @@ def chat(kind, target_id):
         # that add and remove people do not belong on it, and the join code
         # it carries would not work for anybody who tried it.
         meetup=group is not None and group.post_id is not None,
-        ended=chat_ended(group),
+        # A meetup's chat ends with the meetup; a pairing's with its game.
+        ended=(pairing_over(parent) if kind == "pair" else chat_ended(group)),
         invitable=invitable,
         subtitle=(pairing_subtitle(parent) if kind == "pair" else CHAT_SUBTITLE[kind]),
         game=game,
@@ -2842,6 +2986,10 @@ def live_reply(kind, target_id):
     if watching:
         parent, _ = chat_target(kind, target_id)
         if parent is None:
+            # A conversation this person can no longer open: whatever the
+            # bell still held about it has nothing to point at.
+            if notices.clear_url(me, notices.chat_url(kind, target_id)):
+                db.session.commit()
             return jsonify({"error": "unavailable"}), 403
 
     after = request.args.get("after", type=int, default=0)
@@ -2879,7 +3027,10 @@ def live_reply(kind, target_id):
         # the request -- the one moment the tab that asked for it demonstrably
         # still existed. Anything that arrives later is kept out of the badge
         # by exclusion instead, so an abandoned request cannot swallow it.
-        touched = notices.clear_chat(me, kind, target_id)
+        # Not for a hidden tab: a chat open behind another window, or on a
+        # phone in a pocket, is not being read, and marking it read would
+        # also stop the email about it.
+        touched = (not hidden) and bool(notices.clear_chat(me, kind, target_id))
 
         # And for the same reason, this is where a board records that somebody
         # is sitting at it. A hidden tab still polls -- notices and the bell
@@ -3848,7 +3999,7 @@ def game_seek():
             db.delete(GameSeek).where(GameSeek.user_id == current_user.id))
         game, where, partner = start_random_game(kind, partner_id)
         flash(f"Matched with {partner.name if partner else 'another student'}. "
-              "Your move is in the chat.")
+              "Open the chat to play.")
         return redirect(url_for("chat", kind=where[0], target_id=where[1]))
 
     # Nobody about: wait. Re-picking a different game replaces the slot rather
@@ -3939,12 +4090,11 @@ def game_new():
                       f"to {rules.LABELS[kind]}.")
     if not said:
         db.session.rollback()
-        flash("That invite could not be sent. Nothing was started.")
+        flash("That invite couldn't be sent.")
         return redirect(url_for("chat", kind="match", target_id=opponent_id))
 
-    maybe_email(notices.game_invite(opponent_id, current_user, game,
-                                    rules.LABELS[kind]),
-                "game", what=rules.LABELS[kind])
+    # Its email, if they stay away, is the email thread's (run_alerts).
+    notices.game_invite(opponent_id, current_user, game, rules.LABELS[kind])
     db.session.commit()
 
     # No flash: the chat now carries this, and a flash would sit on screen
@@ -4404,6 +4554,9 @@ def pairing_close(pairing_id):
         return back_to("find_game")
 
     pairing.status = "closed"
+    # Neither of you can open it now: whatever the bell held about it goes.
+    for who in (current_user.id, other_id):
+        notices.clear_url(who, notices.chat_url("pair", pairing_id))
     db.session.commit()
     flash("Chat closed.")
     return back_to("find_game")
@@ -4597,15 +4750,14 @@ def post_new():
         if post.mode == "inperson":
             make_event_flag(post, point=None if point_bad else point)
         # The other person in a private chat is told: in the bell, which a
-        # meetup posted there never reached before, and by email if they are
-        # away. A club's or the campus room's is for a room of people.
+        # meetup posted there never reached before, and by email if they stay
+        # away (run_alerts). A club's or the campus room's is for a room of
+        # people.
         if here in PRIVATE_MEETUP_CHATS:
             other = chat_other_id(here, here_parent)
             plan = " · ".join(p for p in (post.game, post.when_text, post.location) if p)
-            maybe_email(notices.meetup(other, current_user, here,
-                                       current_user.id if here == "match" else from_id,
-                                       plan),
-                        "meetup", what=plan)
+            notices.meetup(other, current_user, here,
+                           current_user.id if here == "match" else from_id, plan)
         db.session.commit()
         if here == "club":
             flash(f"Posted to {here_parent.name}.")
@@ -4687,6 +4839,8 @@ def post_rsvp(post_id):
                     db.session.add(Message(
                         user_id=current_user.id, chat_id=room.id,
                         body=f"{current_user.name} joined the meetup."))
+                # Asked to meet up, and now in: the bell stops asking.
+                notices.settle(current_user.id, "meetup", actor_id=post.author_id)
                 db.session.commit()
                 flash(f"You're in for {post.game}.")
 
@@ -4812,6 +4966,7 @@ def leave_club(club_id):
     else:
         club = db.session.get(Club, club_id)
         db.session.delete(membership)
+        notices.clear_url(current_user.id, notices.chat_url("club", club_id))
         db.session.commit()
         flash(f"You left {club.name}.")
 
@@ -4847,7 +5002,7 @@ def not_admin():
     """
     if current_user.is_admin:
         return None
-    flash("That page is for whoever looks after the site.")
+    flash("You don't have access to that page.")
     return redirect(url_for("clubs"))
 
 
@@ -4858,13 +5013,13 @@ def hub_request():
     pitch = request.form.get("pitch", "").strip()
 
     if not name:
-        flash("Give the hub a name.")
+        flash("Enter a club name.")
         return redirect(url_for("clubs"))
     if len(name) > HUB_NAME_MAX:
-        flash(f"Hub names are limited to {HUB_NAME_MAX} characters.")
+        flash(f"Club names are limited to {HUB_NAME_MAX} characters.")
         return redirect(url_for("clubs"))
     if not pitch:
-        flash("Say what the hub is for, so there is something to decide on.")
+        flash("Tell us what the club is about.")
         return redirect(url_for("clubs"))
     if len(pitch) > HUB_PITCH_MAX:
         flash(f"Keep it under {HUB_PITCH_MAX} characters.")
@@ -5463,7 +5618,7 @@ def not_poster():
     """
     if current_user.can_post_fixtures:
         return None
-    flash("Posting campus-wide meetups is for whoever looks after them.")
+    flash("You don't have permission to post campus-wide meetups.")
     return redirect(url_for("fixtures"))
 
 
@@ -6488,7 +6643,7 @@ def chat_invite(chat_id):
     other = db.session.get(User, int(other_id)) if other_id.isdigit() else None
 
     if chat is None or not is_member(chat_id):
-        flash("That chat is not yours to invite to.")
+        flash("Only members can invite people to this chat.")
     elif chat.post_id is not None:
         # Who is in a meetup's chat is who is going to the meetup. An invite
         # would put somebody in it who is not on that list.
@@ -6531,12 +6686,14 @@ def chat_invite_respond(chat_id, action):
     chat = db.session.get(Chat, chat_id)
 
     # Up here rather than per branch: however this request turns out, the
-    # notice that asked the question is no longer asking it.
+    # notice that asked the question is no longer asking it. By the chat as
+    # well as by the bell's own id, for an answer given from the chats hub.
     notices.close(current_user.id, request.form.get("notice"))
+    notices.settle(current_user.id, "chat_invite", chat_id=chat_id)
     db.session.commit()
 
     if invite is None or invite.status != "invited" or chat is None:
-        flash("That invite is no longer waiting.")
+        flash("That invite is no longer active.")
     elif action == "accept":
         invite.status = "accepted"
         if not is_member(chat_id):
@@ -6618,8 +6775,11 @@ def chat_leave(chat_id):
         # There is no being in the meetup but out of its chat: the RSVP list
         # is the membership. Leaving the meetup is the action that does this,
         # and it is the one offered on the page.
-        flash("Leave the meetup itself and this chat closes with it.")
+        flash("To leave this chat, leave the meetup.")
         return redirect(url_for("chat", kind="group", target_id=chat.id))
+
+    # Out of the chat is out of the bell's reasons to open it.
+    notices.clear_url(current_user.id, notices.chat_url("group", chat_id))
 
     if chat.owner_id != current_user.id:
         db.session.delete(membership)
@@ -6671,6 +6831,7 @@ def chat_remove(chat_id, user_id):
             flash("They are not in that chat.")
         else:
             db.session.delete(membership)
+            notices.clear_url(user_id, notices.chat_url("group", chat_id))
             db.session.commit()
             flash(f"Removed {other.name if other else 'that student'} "
                   f"from {chat.name}.")
@@ -6709,6 +6870,10 @@ def unmatch(other_id):
     name = other.name if other else "That student"
 
     if matching.end_match(current_user.id, other_id):
+        # The conversation is closed to both: the bell stops pointing at it.
+        notices.clear_url(current_user.id, notices.chat_url("match", other_id))
+        notices.clear_url(other_id, notices.chat_url("match", current_user.id))
+        db.session.commit()
         flash(f"Removed {name} from your friends.")
     else:
         flash(f"{name} is not on your friends list.")
@@ -6780,10 +6945,10 @@ def dock_search():
 
 ASK_MESSAGES = {
     "asked": "Friend request sent to {name}.",
-    "matched": "You and {name} are friends now — they had already asked you.",
+    "matched": "{name} had already asked you, so you are friends now.",
     "already": "You've already sent {name} a friend request.",
     "already_matched": "You're already friends with {name}.",
-    "declined": "{name} turned down a friend request. Leave it there.",
+    "declined": "{name} declined your friend request.",
     "self": "You can't send yourself a friend request.",
     "unknown": "We couldn't find that student.",
 }
@@ -6838,11 +7003,13 @@ def match_respond(other_id, action):
         if action == "accept":
             notices.friend_accepted(other_id, current_user)
     else:
-        flash("That friend request is no longer waiting on you.")
+        flash("That friend request is no longer active.")
 
-    # Answered, so the notice that asked has nothing left to ask. Harmless when
-    # the answer came from the matches page and there is no notice id to close.
+    # Answered, so the notice that asked has nothing left to ask. By the
+    # person as well as by the bell's own id: an answer given from the
+    # friends page carries no notice id.
     notices.close(current_user.id, request.form.get("notice"))
+    notices.settle(current_user.id, "friend_request", actor_id=other_id)
     db.session.commit()
 
     if (back := dock_back()) is not None:
@@ -7511,15 +7678,13 @@ def account():
                 joined = save_answers(questions, picks, selected)
                 db.session.commit()
                 if joined:
-                    flash(f"Saved. You have been added to "
-                          f"{', '.join(joined)}, because of what you said "
-                          "about studying.")
+                    flash(f"Saved. Based on your answers, you've been added to {', '.join(joined)}.")
                 else:
                     flash("Saved.")
                 return redirect(url_for("account"))
 
         else:
-            flash("That form did not say what it was for.")
+            flash("Something went wrong. Please try again.")
 
     return render_template(
         "account.html",
@@ -8245,7 +8410,7 @@ def map_flags_list():
 def map_flag_create():
     """Create one expiring flag inside the reviewed campus boundary."""
     if not from_the_map():
-        return jsonify({"error": "This request must come from the campus map."}), 400
+        return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
 
     data = request.get_json(silent=True) or {}
     try:
@@ -8318,7 +8483,7 @@ def map_flag_update(public_id):
     """Move or edit one of your flags. Send only what changed: a dragged pin
     sends its new latitude and longitude; the editor sends the whole form."""
     if not from_the_map():
-        return jsonify({"error": "This request must come from the campus map."}), 400
+        return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
 
     flag, refused = owned_flag(public_id, "change")
     if refused:
@@ -8344,7 +8509,7 @@ def map_flag_update(public_id):
 def map_flag_delete(public_id):
     """Take one of your flags down. For an event flag the meetup stays."""
     if not from_the_map():
-        return jsonify({"error": "This request must come from the campus map."}), 400
+        return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
 
     flag, refused = owned_flag(public_id, "remove")
     if refused:

@@ -240,7 +240,7 @@
 
   <div class="pagehead">
     <h1>Profile Settings</h1>
-    <p class="lede">Manage your profile settings here, click the tiles.</p>
+    <p class="lede">Update your profile, clubs and account settings.</p>
   </div>
 
   <nav class="pf-jump" aria-label="On this page">
@@ -283,7 +283,7 @@
               <span class="label">Find me on</span>
               <ul class="pf-tags">{% for s in handles %}<li>{{ s.label }}: {{ profile[s.key] }}</li>{% endfor %}</ul>
             {% endif %}
-            <p class="hint">Shows what is saved now. Your email is never part of it.</p>
+            <p class="hint">This is how your profile looks to other students. Your email is never shown.</p>
           </div>
         </div>
       </details>
@@ -303,7 +303,7 @@
             {% endfor %}
           </select>
         </label>
-        <p class="pf-locked">{{ ui.icon("lock") }}<span>{{ current_user.email }} &mdash; your UMass Boston email. It can't be changed: it is how you sign in, and only you see it here.</span></p>
+        <p class="pf-locked">{{ ui.icon("lock") }}<span>{{ current_user.email }} is the email you sign in with. It can't be changed. Only you can see it.</span></p>
         <div class="row"><button type="submit">Save</button></div>
       </section>
     </form>
@@ -311,7 +311,7 @@
     <form class="pf" id="pf-profile" method="post" action="{{ url_for('profile_details') }}"
           enctype="multipart/form-data" data-group="Your profile" data-confirm="Save changes to your profile?">
       {{ note_for("profile") }}
-      <p class="hint">From here down, any Save button saves every change from Profile picture to Your usernames.</p>
+      <p class="hint">Save applies to every change in this section.</p>
 
       {# (a) picture #}
       <section class="pf-row" data-section="Profile picture" id="pf-picture">
@@ -405,7 +405,7 @@
               </li>
             {% endfor %}
           </ul>
-          <p class="hint">Tick Remove beside a club, then Save, to leave it.</p>
+          <p class="hint">Check Remove next to a club, then Save.</p>
           <div class="row"><button type="submit">Save</button></div>
         {% else %}
           <p class="empty">You're not in any clubs yet.</p>
@@ -423,8 +423,7 @@
       <section class="pf-row" data-section="Your interests" id="pf-interests">
         <h3>Your interests</h3>
         <input type="hidden" name="section" value="answers" />
-        <p class="hint">These are what you are matched on. Changing them changes who you are
-          suggested, and who is suggested you.</p>
+        <p class="hint">We use these answers to suggest people and clubs. You can update them any time.</p>
         {% include "_questions.html" %}
         <div class="row"><button type="submit">Save answers</button></div>
       </section>
@@ -437,7 +436,7 @@
     <form class="pf" id="pf-account" method="post" action="{{ url_for('profile_account') }}"
           data-group="Account and safety" data-confirm="Save your account and safety settings?">
       {{ note_for("safety") }}
-      <p class="hint">Only you see this window.</p>
+      <p class="hint">Only you can see this.</p>
 
       {# (l) blocked people #}
       <section class="pf-row" data-section="Blocked people" id="pf-blocked">
@@ -476,8 +475,7 @@
         <label class="pf-mark pf-switch"><input type="checkbox" name="email_digest" value="1"
                {% if current_user.email_digest %}checked{% endif %} />Email me a summary of unread
           notifications, at most every other day</label>
-        <p class="hint">Sent to {{ current_user.email }}. Never more than one email per
-          conversation until you've read it.</p>
+        <p class="hint">Sent to {{ current_user.email }}. One email per conversation until you've read it.</p>
         <div class="row"><button type="submit">Save</button></div>
       </section>
 
@@ -514,29 +512,28 @@
        your account_delete route. Its own form, as on Your account. #}
     <form class="pf pf-leaving" id="pf-delete" method="post" action="{{ url_for('profile_delete') }}"
           data-group="Delete your account" data-confirm="Delete your account?" data-confirm-ok="Delete my account"
-          data-danger="This cannot be undone. Everything listed under Delete your account goes with it.">
+          data-danger="This cannot be undone. Everything listed here will be deleted.">
       {{ note_for("leaving") }}
       <section class="pf-row" id="pf-delete-row">
         <h3>Delete your account</h3>
         <p class="heavy">This cannot be undone. Deleting your account removes:</p>
         <ul>
-          <li>your answers, and your place in every hub</li>
+          <li>your answers and club memberships</li>
           <li>{{ counts.friends }} friendship{{ "" if counts.friends == 1 else "s" }},
               and the conversation with each of them</li>
           <li>{{ counts.messages }} message{{ "" if counts.messages == 1 else "s" }} you have
-              written, including in hub and group chats</li>
+              written, including in club and group chats</li>
           <li>{{ counts.meetups }} meetup{{ "" if counts.meetups == 1 else "s" }} you posted
               and {{ counts.pins }} map pin{{ "" if counts.pins == 1 else "s" }}</li>
-          <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played
-              &mdash; <span class="heavy">these disappear from the other
-              player's history too</span></li>
+          <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played.
+              <span class="heavy">They disappear from the other
+              player's history too.</span></li>
           <li>your profile picture and everything on this page</li>
         </ul>
         {% if counts.passing %}
           <p class="keeps">
             {{ "These group chats" if counts.passing | length > 1 else "This group chat" }}
-            will carry on without you, managed by whoever has been in
-            {{ "them" if counts.passing | length > 1 else "it" }} longest:
+            will stay open. The longest-standing member becomes the owner:
             <b>{{ counts.passing | join(", ") }}</b>.
           </p>
         {% endif %}
@@ -548,8 +545,7 @@
             <b>{{ counts.closing | join(", ") }}</b>.
           </p>
         {% endif %}
-        <p class="keeps">What other people wrote in hub, group and campus
-          chats stays where it is. Your name comes off anything you reported.</p>
+        <p class="keeps">Messages other people sent will stay. Your name is removed from any reports you made.</p>
         {# The password, not the email, as on Your account: the email is printed
            in the account menu on every page, so it would confirm nothing. #}
         <label>Type your password to confirm
@@ -680,8 +676,7 @@
       (opts.alertOnly || opts.danger ? el("pf-confirm-cancel") : el("pf-confirm-ok")).focus();
     }
     function lost(groups) {
-      return groups.length ? "Unsaved changes in " + groups.join(" and ") +
-        " will be lost, because the page reloads. Save them first if you want to keep them." : "";
+      return groups.length ? "You have unsaved changes in " + groups.join(" and ") + ". Save them first or they'll be lost." : "";
     }
 
     // Installed once per browser tab, on the document and in the capture phase,
@@ -713,7 +708,7 @@
           ask({ title: "Nothing to save yet", body: "Make a change in " + form.dataset.group + " first.", alertOnly: true });
           return;
         }
-        ask({ title: form.dataset.confirm, body: "Are you sure you want to save these changes?",
+        ask({ title: form.dataset.confirm, body: "Save these changes?",
               ok: form.dataset.confirmOk || "Save changes",
               list: changed.map(function (s) { return "Changed: " + s; }), warn: lost(dirty(form)) }, send);
       }, true);

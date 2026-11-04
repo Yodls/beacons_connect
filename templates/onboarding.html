@@ -45,7 +45,7 @@
 {% block content %}
   <div class="auth">
     <div class="auth-stack wide">
-      {% set tagline = "A few questions, one time only. Change any of it later." %}
+      {% set tagline = "A few quick questions. You can change your answers any time." %}
       {% set brand_compact = true %}
       {% include "_brandpanel.html" %}
 
@@ -56,8 +56,7 @@
           {{ ui.flashes() }}
 
           <p class="lede">
-            This is how we find students you'd actually get along with.
-            You can change any of it later.
+            We use your answers to suggest people and clubs you'll get along with.
           </p>
 
           <form method="post">

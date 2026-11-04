@@ -13,14 +13,13 @@
 {% block content %}
   <div class="auth">
     <div class="auth-stack">
-      {% set tagline = "Your inbox, your call." %}
+      {% set tagline = "Email settings" %}
       {% include "_brandpanel.html" %}
       <div class="auth-card">
         <div class="bar sec-chat">{{ ui.icon("lock") }}<h1>Email settings</h1><span class="grip"></span></div>
         <div class="auth-body">
           {% if state == "bad" %}
-            <p class="lede">This link isn't valid. It may have been copied
-              only in part.</p>
+            <p class="lede">This link isn't valid. Try copying the full link from your email.</p>
             <p><a href="{{ url_for('login') }}">Sign in</a> and change your
               email settings under Profile Settings instead.</p>
           {% elif state == "done" %}

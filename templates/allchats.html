@@ -4,38 +4,42 @@
 
 {% block appstyle %}
       /* The rows are home's, and so is their styling -- this page only needs
-         to say how the list itself sits on a page of its own. */
-      .allchats .grid { display: grid; gap: .5rem; margin-top: .9rem; }
+         to say how each list sits flush in its window. */
+      .allchats > .chatrows { margin: 0; gap: 0; }
 {% endblock %}
 
 {#
-  Every conversation, newest first.
+  Every conversation, under the same headings as home (app.CHAT_SECTIONS),
+  newest first under each.
 
-  Home shows the most recent handful so the page below them is reachable; this
-  is where the rest live. The rows come from _chatrow.html, the same partial
-  home uses, so the two lists cannot drift apart.
+  Home shows the most recent few of each kind so the page below them is
+  reachable; this is where the rest live, and home's "See all" links land on
+  the matching window by its id. The rows come from _chatrow.html, the same
+  partial home uses, so the two lists cannot drift apart. Every window stays
+  open on a phone: this page is the full list, not a menu of them.
 #}
 {% block main %}
   <div class="pagehead">
     <h1>All chats</h1>
-    <p class="lede">
-      {{ chats | length }} conversation{{ "" if chats | length == 1 else "s" }},
-      most recently active first.
-    </p>
+    <p class="lede">{{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }}.</p>
   </div>
 
-  <section class="sec-chat allchats">
-    <div class="grid">
-      {% for chat in chats %}
-        {% include "_chatrow.html" %}
-      {% else %}
-        <div class="empty">
-          <b>No chats yet.</b> Send someone a friend request or join a club and
-          the conversation shows up here.
-        </div>
-      {% endfor %}
-    </div>
-  </section>
+  {% for sec in sections %}
+    <section class="sec-chat allchats" id="chats-{{ sec.key }}" data-fold="open">
+      {{ ui.section(sec.title, "chat", sec.icon, sec.total) }}
+      <div class="grid chatrows">
+        {% for chat in sec.rows %}
+          {% include "_chatrow.html" %}
+        {% endfor %}
+      </div>
+    </section>
+  {% else %}
+    <section class="sec-chat allchats">
+      <div class="empty">
+        <b>No chats yet.</b> Add a friend or join a club to start one.
+      </div>
+    </section>
+  {% endfor %}
 
   <p class="nav"><a href="{{ url_for('index') }}">&larr; Back to home</a></p>
 {% endblock %}

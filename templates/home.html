@@ -369,11 +369,19 @@
          column is 106px and nothing needs this. */
       @media (max-width: 370px) { .quick-label { font-size: .8rem; padding: 4px 6px; } }
 
-      /* ---------- My chats: rows inside the window ---------- */
-      .home .sec-chat > .grid { margin: 0; gap: 0; }
-      .home .sec-chat > .grid > .empty { margin: 14px; }
-      /* .chatrow and its parts moved to base.html when /chats/all began
-         drawing the same rows -- a selector two pages use belongs there. */
+      /* ---------- People you might like: as many as fit ----------
+         Every suggestion is drawn; beside the chats the script at the foot
+         of the page hides the ones that would not fit in the chats' height.
+         On a phone, and without it, the stylesheet shows five. */
+      .home .sec-friend .grid > .card:nth-child(n+6) { display: none; }
+      .home .sec-friend .seeall { font-size: .9rem; font-weight: 700; }
+
+      /* ---------- My chats: headings and rows inside the window ---------- */
+      .home .sec-chat > .chatsecs { margin: 0; }
+      .home .sec-chat > .chatsecs > .empty { margin: 14px; }
+      /* .chatrow, the headings and their parts live in base.html, because
+         /chats/all draws the same ones -- a selector two pages use belongs
+         there. */
 {% endblock %}
 
 {#
@@ -397,20 +405,20 @@
     <div class="bar">{{ ui.icon("home") }}<span class="bar-title">Welcome back</span>
       {# Day or night for this window: see "day or night" in the style above. #}
       <button class="dayswitch" type="button" role="switch" aria-checked="false"
-            aria-label="Daytime harbour" title="Daytime harbour" data-scene-toggle><span class="ds-knob"><svg class="ds-moon" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#FFFFFF" d="M9.5 4v1m1-5v1"/><path stroke="#FFF6C8" d="M.5 4v4m1-6v2m0 4v2m1-9v1m0 7v2m1-1v1"/><path stroke="#F2A900" d="M2.5 3v1m1-3v2m0 1v3m1 0v1m3 0v1m1 1v1m1-2v2m1-2v1"/><path fill="#FEDE42" d="M2 2h1v1h-1zm-1 2h2v3h-2zm0 3h3v1h-3zm1 1h5v1h-5zm1 1h6v1h-6zm1 1h4v2h-4z"/></svg><svg class="ds-sun" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#132245" d="M1.5 1v1m0 8v1m1-9v1m0 6v1m1-6v4m5-4v4m1-6v1m0 6v1m1-9v1m0 8v1"/><path stroke="#132245" stroke-width="2" d="M1 5v2m5-7v2m0 8v2m5-7v2"/><path stroke="#132245" stroke-width="4" d="M6 3v6"/><path fill="#FEDE42" d="M4 4h4v4h-4z"/><path stroke="#FFF6C8" d="M4.5 4v2m1-2v1"/></svg></span></button><span class="grip"></span></div>
+            aria-label="Switch between day and night" title="Switch between day and night" data-scene-toggle><span class="ds-knob"><svg class="ds-moon" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#FFFFFF" d="M9.5 4v1m1-5v1"/><path stroke="#FFF6C8" d="M.5 4v4m1-6v2m0 4v2m1-9v1m0 7v2m1-1v1"/><path stroke="#F2A900" d="M2.5 3v1m1-3v2m0 1v3m1 0v1m3 0v1m1 1v1m1-2v2m1-2v1"/><path fill="#FEDE42" d="M2 2h1v1h-1zm-1 2h2v3h-2zm0 3h3v1h-3zm1 1h5v1h-5zm1 1h6v1h-6zm1 1h4v2h-4z"/></svg><svg class="ds-sun" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path stroke="#132245" d="M1.5 1v1m0 8v1m1-9v1m0 6v1m1-6v4m5-4v4m1-6v1m0 6v1m1-9v1m0 8v1"/><path stroke="#132245" stroke-width="2" d="M1 5v2m5-7v2m0 8v2m5-7v2"/><path stroke="#132245" stroke-width="4" d="M6 3v6"/><path fill="#FEDE42" d="M4 4h4v4h-4z"/><path stroke="#FFF6C8" d="M4.5 4v2m1-2v1"/></svg></span></button><span class="grip"></span></div>
     <div class="scene">
       <i class="hb-daysky" aria-hidden="true"></i>
       <div class="scene-copy">
         <h1>Hi {{ current_user.name.split(" ")[0] }}</h1>
         <p class="lede">
-          {% if chats %}
+          {% if chat_total %}
             {# The total, like the band below. This counted the rows on the
                page, which was the same number until the page started showing
                only the most recent handful -- and then greeted somebody
                with 163 conversations by telling them they had five. #}
             {{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }} open.
           {% else %}
-            Your conversations will live here.
+            Your conversations will show up here.
           {% endif %}
         </p>
       </div>
@@ -458,23 +466,33 @@
        page draws the most recent handful, and an account with seventy
        conversations learns nothing from a band that says 5. #}
     {{ ui.section("My chats", "chat", "talk", chat_total) }}
-    <div class="grid">
-      {% for chat in chats %}
-        {% include "_chatrow.html" %}
+    {# Under headings (app.CHAT_SECTIONS), each with its most recent few
+       and a way through to the rest of that kind on /chats/all. #}
+    <div class="chatsecs">
+      {% for sec in sections %}
+        {# A tile per kind: a band in the kind's colour (sec.look is a .sec-*
+           class, so the band takes --kind-bg), then the rows. #}
+        <div class="chatsec {{ sec.look }}" id="chats-{{ sec.key }}">
+          <div class="chatsec-head">
+            <span class="tag-dot">{{ ui.icon(sec.icon) }}</span>
+            <h3 class="chatsec-title">{{ sec.title }}</h3><span class="chatsec-count">{{ sec.total }}</span>
+            {# Only when there are more. "See all 2" above two rows is noise. #}
+            {% if sec.total > sec.rows | length %}
+              <a class="chatsec-more" href="{{ url_for('all_chats') }}#chats-{{ sec.key }}">See all {{ sec.total }} &rsaquo;</a>
+            {% endif %}
+          </div>
+          <div class="chatrows">
+            {% for chat in sec.rows %}
+              {% include "_chatrow.html" %}
+            {% endfor %}
+          </div>
+        </div>
       {% else %}
         <div class="empty">
-          <b>No chats yet.</b> Send someone a friend request or join a club and
-          the conversation shows up here.
+          <b>No chats yet.</b> Add a friend or join a club to start one.
         </div>
       {% endfor %}
     </div>
-    {# Only when there are more. "View all 3" above three rows is noise. #}
-    {% if chat_total > chats | length %}
-      <p class="nav">
-        <a class="viewall" href="{{ url_for('all_chats') }}">
-          View all {{ chat_total }} chats &rarr;</a>
-      </p>
-    {% endif %}
   </section>
 
   <section class="sec-friend">
@@ -505,6 +523,53 @@
         </div>
       {% endfor %}
     </div>
+    {% if recs %}
+      <a class="seeall" href="{{ url_for('matches') }}#suggested">See all suggestions &rsaquo;</a>
+    {% endif %}
   </section>
 </div>
+
+{# Beside the chats on a wide screen, the suggestions fill their window to
+   the chats' height and no further: every card is drawn, and this hides the
+   ones that would not fit, so the two windows always end on the same line
+   with the chats setting it. Measured again when the window is resized. It
+   polls nothing (see the note above the markup). Below 900px the stylesheet
+   shows five. #}
+<script>
+  (function () {
+    // section, not .sec-chat alone: the welcome window above is a .win
+    // with the same colour class.
+    var chats = document.querySelector(".home > section.sec-chat");
+    var win = document.querySelector(".home > section.sec-friend");
+    if (!chats || !win) { return; }
+    var cards = Array.prototype.slice.call(win.querySelectorAll(".grid > .card"));
+    var foot = win.querySelector(".seeall");
+    var wide = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
+    function fit() {
+      if (!document.contains(win)) { window.removeEventListener("resize", later); return; }
+      if (!wide || !wide.matches) {
+        cards.forEach(function (c) { c.style.display = ""; });
+        return;
+      }
+      cards.forEach(function (c) { c.style.display = "block"; });
+      // The chats' own height, with this window out of the row so the
+      // grid's stretch cannot inflate it.
+      win.style.display = "none";
+      var room = chats.getBoundingClientRect().height;
+      win.style.display = "";
+      var top = win.getBoundingClientRect().top;
+      var tail = (foot ? foot.getBoundingClientRect().height : 0) + 28;
+      // All measured before any is hidden: hiding one moves the rest up.
+      var bottoms = cards.map(function (c) { return c.getBoundingClientRect().bottom - top + tail; });
+      cards.forEach(function (c, i) {
+        c.style.display = (i === 0 || bottoms[i] <= room) ? "block" : "none";
+      });
+    }
+    var timer = null;
+    function later() { clearTimeout(timer); timer = setTimeout(fit, 120); }
+    window.addEventListener("resize", later);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fit); }
+    fit();
+  })();
+</script>
 {% endblock %}

@@ -57,7 +57,7 @@
       {% elif kind == "bug" %}
         Tell us what went wrong and we will look at it.
       {% else %}
-        Anything at all &mdash; a question, an idea, or something that is
+        Anything at all: a question, an idea, or something that is
         not working.
       {% endif %}
     </p>
@@ -97,20 +97,14 @@
               {% endfor %}
             </select>
           </label>
-          <p class="hint">For anybody else &mdash; or to report a particular
-            message, meetup or pin &mdash; use the Report link beside it.
-            That tells us what was said as well as who said it.</p>
+          <p class="hint">To report a specific message, meetup or pin, use the Report link next to it.</p>
         {% else %}
           <p class="about">
-            <b>Use the Report link beside what you are reporting.</b>
-            <span class="said">It sits next to a person in your
-              conversations, and beside a message, a meetup or a map pin.
-              Reporting that way tells us what was said as well as who said
-              it, which is what we need to act on it.</span>
+            <b>Use the Report link next to the person, message, meetup or pin you want to report.</b>
+            <span class="said">That way we can see exactly what happened.</span>
           </p>
-          <p class="hint">If that is not what you need,
-            <a href="{{ url_for('report_new', kind='contact') }}">send us a
-            message</a> instead.</p>
+          <p class="hint">Need something else?
+            <a href="{{ url_for('report_new', kind='contact') }}">Send us a message</a>.</p>
         {% endif %}
       {% else %}
         {# Only offered when nothing is being reported: a message about a
@@ -129,10 +123,9 @@
         {%- elif kind == "bug" %}What went wrong?
         {%- else %}Your message{% endif %}
         <textarea name="detail" maxlength="{{ detail_max }}" required
-                  placeholder="{% if kind == 'abuse' %}As much as you want to say.{% else %}What were you doing, and what did you expect?{% endif %}"></textarea>
+                  placeholder="{% if kind == 'abuse' %}Describe what happened.{% else %}What were you doing, and what did you expect?{% endif %}"></textarea>
       </label>
-      <p class="hint">Up to {{ detail_max }} characters. You will be told
-        when somebody has looked at it.</p>
+      <p class="hint">Up to {{ detail_max }} characters. We'll let you know when we've reviewed it.</p>
 
       <div class="row">
         <button type="submit">Send</button>

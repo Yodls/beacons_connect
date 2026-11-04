@@ -334,8 +334,7 @@ def verification(name, code, minutes):
     text = (
         f"Hi {first},\n\n"
         f"Your Beacons Connect verification code is {code}\n\n"
-        f"It expires in {minutes} minutes. Type it into the page you left "
-        "open to finish signing up.\n\n"
+        f"It expires in {minutes} minutes. Enter it on the sign-up page to finish.\n\n"
         "If you did not create an account, you can ignore this message -- "
         "nothing happens until the code is used.\n\n"
         + _text_sign_off()
@@ -343,8 +342,8 @@ def verification(name, code, minutes):
 
     rows = (_hello(name, "Here is the code that finishes your sign-up.")
             + _code_rows(code, minutes) + _divider()
-            + _note("Didn't sign up? You can ignore this message &mdash; "
-                    "nothing happens until the code is used."))
+            + _note("Didn't sign up? You can ignore this message. "
+                    "Nothing happens until the code is used."))
 
     html = _frame(subject, f"Your code is {code}. It expires in {minutes} minutes.",
                   rows)
@@ -379,7 +378,7 @@ def _code_rows(code, minutes):
             <td align="center" style="padding:10px 28px 22px;font-family:{BODY_FONT};
                        font-size:13px;line-height:1.5;color:{MUTED};">
               It expires in <b style="color:{NAVY};">{minutes} minutes</b>.
-              Type it into the page you left open.
+              Enter it on the page where you asked for it.
             </td>
           </tr>"""
 
@@ -396,8 +395,7 @@ def password_code(name, code, minutes):
     text = (
         f"Hi {first},\n\n"
         f"Your code to set a new Beacons Connect password is {code}\n\n"
-        f"It expires in {minutes} minutes. Type it into the page you left "
-        "open.\n\n"
+        f"It expires in {minutes} minutes. Enter it on the page where you asked for it.\n\n"
         "Didn't ask to change your password? You can ignore this message -- "
         "nothing changes until the code is used.\n\n"
         + _text_sign_off()
@@ -406,7 +404,7 @@ def password_code(name, code, minutes):
     rows = (_hello(name, "Here is the code to set a new password.")
             + _code_rows(code, minutes) + _divider()
             + _note("Didn't ask to change your password? You can ignore this "
-                    "message &mdash; nothing changes until the code is used."))
+                    "message. Nothing changes until the code is used."))
     return subject, text, _frame(
         subject, f"Your code is {code}. It expires in {minutes} minutes.", rows)
 
@@ -453,8 +451,7 @@ ALERTS = {
         "button": "Answer the challenge",
     },
 }
-ALERT_REASON = ("You're getting this because somebody you're friends with "
-                "reached you on Beacons Connect while you weren't on the site.")
+ALERT_REASON = ("You're getting this because a friend reached out to you on Beacons Connect while you were away.")
 
 
 def alert(kind, name, actor, url, off_url, settings_url, what=None):
@@ -482,7 +479,7 @@ def alert(kind, name, actor, url, off_url, settings_url, what=None):
 
 DIGEST_SHOWN = 8
 DIGEST_REASON = ("You're getting this because you have unread notifications "
-                 "on Beacons Connect. It comes at most every other day.")
+                 "on Beacons Connect. We send it at most every other day.")
 
 
 def digest(name, items, total, site_url, off_url, settings_url):
@@ -516,5 +513,5 @@ def digest(name, items, total, site_url, off_url, settings_url):
                    f'cellspacing="0" border="0">{list_html}</table>')
             + _button("See them all", site_url) + _divider()
             + _why(DIGEST_REASON, off_url, settings_url))
-    return subject, text, _frame(subject, f"{total} unread {noun} are waiting for you.",
+    return subject, text, _frame(subject, f"{total} unread {noun} {'is' if total == 1 else 'are'} waiting for you.",
                                  rows)

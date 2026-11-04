@@ -1509,9 +1509,9 @@
       }
 
       /* ---------- a conversation, as a row in a list of them ----------
-         Home draws the five most recent and /chats/all draws every one,
-         from the same partial -- so the rules live here rather than on
-         either page. No Jinja in them, which is what keeps this stylesheet
+         Home draws the most recent few under each heading and /chats/all
+         draws every one, from the same partial -- so the rules live here
+         rather than on either page. No Jinja in them, which is what keeps this stylesheet
          byte-identical across pages. */
       .chatrow {
         display: flex; align-items: center; gap: 12px;
@@ -1543,26 +1543,63 @@
       /* the display above would beat the browser's own [hidden] rule */
       .chatrow .unread[hidden] { display: none; }
       .chatrow.has-unread .last { color: var(--navy); font-weight: 700; }
-      /* Something new in here: a navy mark on the row's left edge, as a
-         chat app marks an unread channel. It grows when the row is
-         pointed at, and pops in once when a message arrives while the list
-         is on screen (the live channel adds .pop, _channel.html). */
+      /* Something new in here: a round navy mark at the row's left edge, as
+         a chat app marks an unread channel. Whole, inside the row's own
+         padding, so it never reads as cut off. It stretches to a short bar
+         when the row is pointed at, and pops in once when a message arrives
+         while the list is on screen (the live channel adds .pop,
+         _channel.html). */
       .chatrow { position: relative; }
       .chatrow::before {
-        content: ""; position: absolute; left: 0; top: 50%;
-        width: 5px; height: 0;
-        background: var(--navy); border-radius: 0 4px 4px 0;
-        transform: translateY(-50%);
-        transition: height .15s ease-out;
+        content: ""; position: absolute; left: 3px; top: 50%;
+        width: 8px; height: 8px;
+        background: var(--navy); border-radius: 4px;
+        transform: translateY(-50%) scale(0);
+        transition: transform .15s ease-out, height .15s ease-out;
       }
-      .chatrow.has-unread::before { height: 10px; }
+      .chatrow.has-unread::before { transform: translateY(-50%) scale(1); }
       .chatrow.has-unread:hover::before, .chatrow.has-unread:focus-visible::before { height: 22px; }
       .chatrow.has-unread.pop::before { animation: mark-pop .25s ease-out; }
-      @keyframes mark-pop { 0% { height: 0; } 60% { height: 16px; } 100% { height: 10px; } }
+      @keyframes mark-pop {
+        0% { transform: translateY(-50%) scale(0); }
+        60% { transform: translateY(-50%) scale(1.4); }
+        100% { transform: translateY(-50%) scale(1); }
+      }
       @media (prefers-reduced-motion: reduce) {
         .chatrow::before { transition: none; }
         .chatrow.has-unread.pop::before { animation: none; }
       }
+      /* Chats under headings (home's My chats; /chats/all has a window per
+         heading): a tile per kind, its band in the kind's pale colour
+         (.sec-* on the tile sets --kind-bg) with the icon, the title in the
+         pixel face, the count, and a way to the rest. Under a heading the
+         row's kind tag says nothing the heading has not, so it is not
+         drawn. */
+      .chatsecs { display: grid; gap: 12px; }
+      .chatsec {
+        border: 2px solid var(--line); border-radius: var(--r);
+        overflow: hidden;
+      }
+      .chatsec-head {
+        display: flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 4px 12px;
+        background: var(--kind-bg); color: var(--navy);
+        border-bottom: 2px solid var(--line);
+      }
+      .chatsec-title { margin: 0; font: 400 20px/1.08 var(--title); letter-spacing: .01em; }
+      .chatsec-count {
+        min-width: 26px; height: 24px; padding: 0 6px;
+        display: grid; place-items: center;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 13px/1 var(--sans);
+      }
+      .chatsec-more { margin-left: auto; font-size: .85rem; font-weight: 700; white-space: nowrap; }
+      .chatrows .chatrow .tag { display: none; }
+      /* The row's first line: the name, with when the last message came on
+         the right; the message itself on the line under. */
+      .chatrow .top { display: flex; align-items: baseline; gap: 8px; }
+      .chatrow .when { margin-left: auto; color: var(--muted); font-size: .78rem; white-space: nowrap; }
       /* each kind of chat wears its own colour */
       .tag.community { background: var(--beacon); color: #fff; }
       .tag.match     { background: var(--sky);    color: var(--navy); }

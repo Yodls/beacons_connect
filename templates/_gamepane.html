@@ -30,7 +30,7 @@
           {%- set never = away and not payload.opponent_arrived %}
           {%- set waiting = away and not payload.can_claim %}
           <span class="presence {{ 'never' if never else ('gone' if away else 'here') }}"
-                {%- if waiting %} title="The game keeps until they are back."{% endif %}>
+                {%- if waiting %} title="The game stays open until they come back."{% endif %}>
             <span class="dot" aria-hidden="true"></span>
             {%- if never -%}
               hasn't opened it yet
@@ -40,7 +40,7 @@
               at the board
             {%- endif -%}
             {#- The tooltip's sentence, for a screen reader too. -#}
-            {%- if waiting %}<span class="sr">. The game keeps until they are back.</span>{% endif -%}
+            {%- if waiting %}<span class="sr">. The game stays open until they come back.</span>{% endif -%}
           </span>
         {%- endif -%}
       </span>
@@ -103,7 +103,7 @@
        which named the one player who certainly had not. #}
     <div class="empty">
       {%- if payload.ended_by_me is none -%}
-        This invite didn't go ahead.
+        This invite is no longer active.
       {%- elif payload.withdrawn -%}
         {{ "You took this invite back." if payload.ended_by_me
            else payload.opponent ~ " took this invite back." }}
@@ -116,7 +116,7 @@
     {% if game.outcome == "abandoned" %}
       <div class="empty">
         {% if payload.you_won %}
-          {{ payload.opponent }} didn't come back &mdash; you win {{ payload.label }}.
+          {{ payload.opponent }} didn't come back, so you win {{ payload.label }}.
         {% else %}
           You left, so {{ payload.opponent }} took {{ payload.label }}.
         {% endif %}

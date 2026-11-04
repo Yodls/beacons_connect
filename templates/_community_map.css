@@ -95,15 +95,15 @@
          One card, built by the script: a title bar in the flag's colour,
          who put it there and what it is, a line each for when, where and
          who, the note, the keys. It is shown in a callout standing on the
-         flag (a Leaflet popup, below) or, on a phone, in a sheet over the
-         foot of the map (further below). */
+         flag (a Leaflet popup, below) or, on a phone, as its own window
+         under the map (further below). */
       .flag-detail {
         display: grid; min-width: 0;
         font: 400 1rem/1.35 var(--sans); color: var(--navy);
       }
       .flag-detail a { color: var(--navy); }
-      /* The bar stays put while a long card scrolls under it (the callout
-         scrolls inside Leaflet's content box, the sheet in itself). */
+      /* The bar stays put while a long callout scrolls under it (inside
+         Leaflet's content box). */
       .fd-bar {
         position: sticky; top: 0; z-index: 1;
         display: flex; align-items: center; gap: 8px;
@@ -113,8 +113,8 @@
       }
       .fd-bar > .icon { width: 18px; height: 18px; flex: none; }
       .fd-kind { flex: 1 1 auto; font: 400 20px/1.08 var(--title); letter-spacing: .02em; }
-      .fd-grip { display: none; }
-      .fd-close, .fd-close:hover, .fd-close:active {
+      .fd-close, .fd-close:hover, .fd-close:active,
+      .fd-back, .fd-back:hover, .fd-back:active {
         flex: none; width: 30px; height: 30px; min-height: 0; padding: 0;
         display: grid; place-items: center;
         background: #fff; color: var(--navy);
@@ -122,7 +122,46 @@
         box-shadow: none; transform: none;
       }
       .fd-close .icon { width: 12px; height: 12px; }
+      /* back to the pile's list: the sprite's arrow, turned to point back */
+      .fd-back { margin-left: -6px; }
+      .fd-back .icon { width: 16px; height: 16px; transform: scaleX(-1); }
       .fd-body { display: grid; gap: 9px; padding: 11px 12px 12px; }
+
+      /* A pile's list: a row for each flag on the spot, in its colour, with
+         its title, when it is, and how it stands with you. A row opens
+         that flag's card. Scrolls inside once it is longer than a screenful
+         of rows. */
+      .fd-rows {
+        margin: 0; padding: 0; list-style: none;
+        max-height: min(20rem, 45vh); overflow: auto; overscroll-behavior: contain;
+      }
+      .fd-rows li + li { border-top: 2px dashed var(--line); }
+      .fd-row, .fd-row:hover, .fd-row:active {
+        display: flex; align-items: center; gap: 10px;
+        width: 100%; min-height: 54px; margin: 0; padding: 8px 12px;
+        background: #fff; color: var(--navy);
+        border: 0; border-radius: 0; box-shadow: none; transform: none;
+        font: 400 1rem/1.25 var(--sans); text-align: left; cursor: pointer;
+      }
+      .fd-row:hover { background: var(--paper); }
+      .fd-row:focus-visible { outline: 3px solid var(--orange); outline-offset: -3px; }
+      .fd-row .grow { flex: 1 1 auto; min-width: 0; }
+      .fd-row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .fd-row-title {
+        flex: 0 1 auto; min-width: 0; font-size: .98rem; font-weight: 700;
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      }
+      .fd-row-head .tag { flex: none; height: 20px; font-size: .7rem; }
+      .flag-detail .fd-row-head .tag { background: #fff; color: var(--navy); }
+      .flag-detail .fd-row-head .tag.soon { background: var(--gold); }
+      .flag-detail .fd-row-head .tag.in { background: var(--beacon); color: #fff; }
+      .fd-row-line {
+        display: block; margin-top: 2px; color: var(--muted); font-size: .85rem;
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      }
+      /* In a callout, about four and a half rows before the list scrolls,
+         so the half row says there is more and the pile's pin stays in view. */
+      .beacon-callout .fd-rows { max-height: 15.5rem; }
       /* who put it there, and what it is */
       .fd-head { display: flex; align-items: center; gap: 10px; }
       .fd-head .grow { flex: 1 1 auto; min-width: 0; }
@@ -167,7 +206,16 @@
         opacity: .6; cursor: not-allowed; transform: none; box-shadow: none;
       }
       .fd-actions .map-button, .fd-actions .key { min-height: 40px; padding: 0 12px; font-size: .9rem; }
-      .fd-actions .quiet { color: var(--muted); border-color: var(--line-2); box-shadow: 0 3px 0 var(--line-2); }
+      /* Report: a plain link at the row's far end, not a key, so it neither
+         competes with the others nor looks switched off */
+      .fd-actions .quiet, .fd-actions .quiet:hover {
+        margin-left: auto; padding: 0 2px;
+        background: none; color: var(--muted);
+        border: 0; box-shadow: none;
+        font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+      }
+      .fd-actions .quiet:hover { color: var(--navy); }
+      .fd-actions .quiet:active { transform: none; }
       /* your own flag's keys: a smaller row of their own */
       .fd-own { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
       .fd-actions .small { min-height: 34px; padding: 0 10px; font-size: .82rem; box-shadow: 0 2px 0 var(--navy); }
@@ -201,20 +249,13 @@
         border: 2px solid var(--navy); border-top-color: transparent; border-left-color: transparent;
       }
 
-      /* the sheet: on a phone the card rises over the foot of the map */
-      .map-sheet {
-        position: absolute; z-index: 1001; left: 0; right: 0; bottom: 0;
-        max-height: calc(100% - 56px); overflow: auto; overscroll-behavior: contain;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-bottom: 0;
-        border-radius: var(--r) var(--r) 0 0;
-        box-shadow: 0 -4px 0 rgba(19, 34, 69, .18);
-      }
-      /* a grip in its bar, to say it can be drawn down */
-      .map-sheet .fd-grip {
-        display: block; position: absolute; left: 50%; top: 5px;
-        width: 36px; height: 4px; transform: translateX(-50%);
-        background: var(--flag-ink, #fff); opacity: .65; border-radius: 2px;
+      /* On a phone: the card as its own window under the map, where Post a
+         meetup and Drop a flag stand (they step aside while it is open). */
+      .map-below .flag-detail {
+        overflow: hidden;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: var(--drop);
       }
       /* a link drawn as a white key */
       .key {
@@ -404,7 +445,6 @@
       .approved-place-icon.place-on > span { transform: translate(-25%, -50%); opacity: 1; }
       @media (prefers-reduced-motion: reduce) {
         .approved-place-icon > span { transition: none; }
-        #beaconCampusMap { transition: none; }
       }
       /* you are here: an orange pixel with a white rim */
       .user-position-dot {
@@ -437,10 +477,7 @@
       }
       @media (max-width: 560px) {
         #beaconCampusMap .leaflet-bar a { width: 44px; height: 44px; line-height: 42px; }
-        /* The map grows to fit a flag's sheet (the script sets its height
-           and --sheet-h), and the status line moves up out of the way. */
-        #beaconCampusMap { transition: height .25s ease; }
-        .map-status { bottom: calc(var(--sheet-h, 0px) + 26px); }
+        .map-status { bottom: 26px; }
         .map-pickbar { bottom: 26px; }
         .campus-map-card.picking .map-status { bottom: 82px; }
         /* 16px keeps iOS from zooming the page when a field is focused */

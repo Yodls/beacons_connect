@@ -67,6 +67,20 @@
                 drop-shadow(0 1.5px 0 var(--navy)) drop-shadow(0 -1.5px 0 var(--navy))
                 drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px #fff);
       }
+      /* Flags on the same spot (community-map.js, "flags on the same spot"):
+         one flag with how many on a gold disc at its cloth's corner, and the
+         next flag's cloth peeking out behind, so a mix of kinds reads as a
+         mix. The outline drawn round the pin takes in both cloths. A tap
+         lists them; while the list is open the pile is raised (.on). */
+      .flag-head.behind { left: 23.5px; top: 0; }
+      .flag-count {
+        position: absolute; left: 41px; top: -7px;
+        min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box;
+        display: grid; place-items: center;
+        background: var(--gold); color: var(--navy);
+        border: 1.5px solid var(--navy); border-radius: 10px;
+        font: 400 13px/1 var(--title);
+      }
       /* your own flags, and a meetup's pin, can be dragged */
       .beacon-flag-icon.leaflet-marker-draggable { cursor: grab; }
       /* the draft flag: dashed and bobbing until it is submitted */

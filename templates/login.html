@@ -12,8 +12,7 @@
   <div class="auth">
     <div class="auth-stack">
       {# The band's wording follows the admin's "Only @umb.edu addresses" switch. #}
-      {% set brand_cta = {"href": url_for("register"), "label": "You must register a new account to gain access!"
-                          ~ (" (use your umb.edu email to register)" if umb_only() else "")} %}
+      {% set brand_cta = {"href": url_for("register"), "label": ("Sign up with your umb.edu email." if umb_only() else "Sign up with your email.")} %}
       {% include "_brandpanel.html" %}
 
       <div class="auth-card">
@@ -22,7 +21,7 @@
         <div class="auth-body">
           {{ ui.flashes() }}
 
-          <p class="lede">Sign in here</p>
+          <p class="lede">Sign in to your account.</p>
 
           <form method="post">
             <label>Email <input type="email" name="email" required autofocus
@@ -33,7 +32,7 @@
           </form>
         </div>
 
-        <p class="auth-foot">Forgot password? <a href="{{ url_for('forgot_password') }}">Click here<span class="vh"> to reset your password</span></a>.</p>
+        <p class="auth-foot"><a href="{{ url_for('forgot_password') }}">Forgot your password?</a></p>
       </div>
     </div>
   </div>

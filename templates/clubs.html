@@ -199,7 +199,7 @@
   <div class="pagehead">
     {# The hint sits beside the heading, outside the h1, so the heading
        stays exactly "My Clubs". #}
-    <div class="titleline"><h1>My Clubs</h1><span class="titlehint">- (find &amp; join clubs below!)</span></div>
+    <div class="titleline"><h1>My Clubs</h1><span class="titlehint">Find and join clubs below.</span></div>
     <p class="lede">
       <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
     </p>
@@ -239,7 +239,7 @@
         <h2>Recommended</h2>
         <span class="count">{{ recommended | length }}</span>
       </div>
-      <p class="cathome">Picked from what you told us you like.</p>
+      <p class="cathome">Based on your interests.</p>
       <div class="clubgrid">
         {% for club in recommended %}
           {{ clubcard(club, joined_ids, picks, member_counts, club_new) }}
@@ -274,19 +274,18 @@
      box below is a .win, which is what every other framed block on the site
      uses anyway. #}
   <section class="win hubask sec-club">
-    <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Missing something?</span><span class="grip"></span></div>
+    <div class="bar">{{ ui.icon("club") }}<span class="bar-title">Don't see your club?</span><span class="grip"></span></div>
     <form class="hubform" method="post" action="{{ url_for('hub_request') }}">
       <p class="lede">
-        If there's no hub for the thing you're into, ask for one. It goes to
-        whoever looks after the list.
+        Request a new club and an admin will review it.
       </p>
-      <label for="hubname">What should it be called?</label>
+      <label for="hubname">Club name</label>
       <input id="hubname" name="name" maxlength="60" required
              placeholder="Rock Climbing" autocomplete="off" />
-      <label for="hubpitch">What's it for?</label>
+      <label for="hubpitch">What's it about?</label>
       <textarea id="hubpitch" name="pitch" maxlength="300" rows="2" required
-                placeholder="Weekly sessions at the gym, and trips when the weather holds."></textarea>
-      <button type="submit">Request this hub</button>
+                placeholder="Weekly climbing sessions and weekend trips."></textarea>
+      <button type="submit">Request club</button>
     </form>
   </section>
 

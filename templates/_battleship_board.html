@@ -7,7 +7,7 @@
 {% set letters = 'ABCDEFGHIJ' %}
 <section class="naval-game" aria-label="Revolutionary War Battleship">
   <header class="naval-illustration">
-    <h2 class="sr-only">Revolution at Sea — Battleship</h2>
+    <h2 class="sr-only">Revolution at Sea: Battleship</h2>
   </header>
   <div class="naval-explainer">
     <span class="naval-emblem" aria-hidden="true">⚓</span>
@@ -98,7 +98,7 @@
       {% else %}Defeat. Your fleet was overwhelmed.{% endif %}
     {% elif state.phase == 'placing' %}
       {{ 'Awaiting the enemy fleet.' if state.you_ready else 'Arrange your fleet before battle.' }}
-    {% elif payload.your_turn %}Your turn — take aim and fire.
+    {% elif payload.your_turn %}Your turn. Take aim and fire.
     {% else %}Awaiting {{ payload.opponent }}'s cannon fire.{% endif %}
   </footer>
 </section>

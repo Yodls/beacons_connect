@@ -5,7 +5,8 @@
     1. settings ........ map area, flag looks, how often to refresh
     2. page elements ... everything it drives, found by id in _community_map.html
     3. helpers ......... status line, requests, icons, text
-    4. the map ......... Leaflet with OpenStreetMap tiles, landmarks, flags
+    4. the map ......... Leaflet with OpenStreetMap tiles, landmarks, flags;
+                         flags on the same spot share one pin, listed on a tap
     5. the flag card ... what you see when you tap a flag, and its buttons
     6. the draft ....... "Drop a flag", the dashed draft flag and its editor
     7. friends ......... the "My friend(s)" picker
@@ -271,11 +272,11 @@
   function initMap() {
     map = L.map("beaconCampusMap", {
       zoomControl: true, minZoom: 15, maxZoom: 19,
-      // The map may be panned half a campus past the dashed area on every
+      // The map may be panned a whole campus past the dashed area on every
       // side (flags still have to go inside it): a flag's callout stands
-      // on the flag, and one on the north edge needs the map to pan that
-      // far to show it.
-      maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(0.5), maxBoundsViscosity: 0.85
+      // on the flag, and one near the north edge, zoomed out, needs the
+      // map to pan that far to show it.
+      maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(1), maxBoundsViscosity: 0.85
     }).setView(CAMPUS_CENTER, 17);
     lockUntilTap(document.getElementById("beaconCampusMap"));
 
@@ -289,7 +290,7 @@
     tiles.on("tileerror", function () {
       tileFailed += 1;
       if (!tileLoaded && tileFailed === 4) {
-        announce("Map tiles didn't load. OpenStreetMap only serves them to the site's own web address.", "error");
+        announce("The map couldn't load. Try again in a moment.", "error");
       }
     });
 
@@ -303,26 +304,28 @@
     flagLayer = L.layerGroup().addTo(map);
     userLayer = L.layerGroup().addTo(map);
 
-    // The map's box changes size when a flag's sheet grows it on a phone.
-    // Leaflet only watches the window, so it is told here. While a sheet
-    // is up the map keeps its top edge still (the flag stays where it was
-    // tapped) rather than its centre.
-    if (window.ResizeObserver) {
-      new ResizeObserver(function () {
-        map.invalidateSize({ pan: !root.classList.contains("showing"), animate: false });
-      }).observe(map.getContainer());
-    }
-
     map.on("click", function (event) {
-      // A tap on the map puts a landmark back, and on a phone puts the
-      // flag's sheet away (Leaflet shuts the callout itself).
-      if (mode === "idle") { pickPlace(null); if (phone() && selected) { select(null); } return; }
+      // A tap on the map puts a landmark back, and on a phone shuts the
+      // flag's card or a pile's list under the map (Leaflet shuts the
+      // callout itself).
+      if (mode === "idle") {
+        pickPlace(null);
+        if (phone() && (selected || listing)) { select(null); }
+        return;
+      }
       if (mode === "pick") { movePick(event.latlng); return; }
       if (!campusContains(event.latlng)) {
         announce("Flags have to go inside the dashed campus area.", "error");
         return;
       }
       if (mode === "placing") { startDraft(event.latlng); } else { moveDraft(event.latlng); }
+    });
+    // Which flags share a pin depends on the zoom: regroup at every one, and
+    // let an open list or card follow (a pile split, a flag joined one).
+    map.on("zoomend", function () {
+      if (dragging) { return; }
+      renderMarkers();
+      if (mode === "idle") { renderDetail(); }
     });
     map.on("locationfound", locationFound);
     map.on("locationerror", function (event) {
@@ -429,44 +432,131 @@
   }
 
   // A flag pin: a navy pole with a waving cloth in the kind's colour and
-  // its icon on it (drawn by _map_chrome.css).
+  // its icon on it (drawn by _map_chrome.css). For flags on the same spot,
+  // `count` puts how many on the cloth and `behind` (the next flag's kind)
+  // a second cloth peeking out behind it.
   function flagIcon(category, options) {
     var look = kindOf(category);
-    var classes = "beacon-flag-pin" +
-      (options.on ? " on" : "") + (options.draft ? " draft" : "");
+    var classes = "beacon-flag-pin" + (options.on ? " on" : "") +
+      (options.draft ? " draft" : "") + (options.count ? " stack" : "");
     var head = spriteMarkup(options.draft && !options.keepIcon ? "plus" : look.icon);
+    var behind = options.count
+      ? '<span class="flag-head behind" style="--flag-color:' + kindOf(options.behind).color + '"></span>' : "";
+    var count = options.count
+      ? '<span class="flag-count">' + (options.count > 9 ? "9+" : options.count) + "</span>" : "";
+    var html = '<span class="' + classes + '" style="--flag-color:' + look.color + ";--flag-ink:" + look.ink + '">' +
+      behind + '<span class="flag-head">' + head + '</span><span class="flag-pole"></span>' + count + "</span>";
     return L.divIcon({
       className: "beacon-flag-icon",
-      html: '<span class="' + classes + '" style="--flag-color:' + look.color + ";--flag-ink:" + look.ink + '">' +
-        '<span class="flag-head">' + head + '</span><span class="flag-pole"></span></span>',
-      iconSize: [36, 52],
+      html: html,
+      iconSize: options.count ? [44, 52] : [36, 52],
       iconAnchor: [18, 52]
     });
+  }
+
+  // ---------- 4a. flags on the same spot ----------
+  // Flags whose pins would cover each other at this zoom are drawn as one
+  // flag with a count on its cloth: a pile. They pile up often, not by
+  // chance: a meetup posted without a pin goes on its place's landmark. A
+  // tap opens a list of them (the flag card's window, section 5), and a
+  // row opens that flag's card, with a key back to the list. Grouped afresh
+  // at every zoom, so flags a few metres apart share a pin zoomed out and
+  // stand apart zoomed in.
+  var STACK_ACROSS = 28;  // px between two flags' feet that still overlap,
+  var STACK_UPDOWN = 40;  // across and up or down (the pin is 36 by 52)
+  var listing = null;     // a flag in the pile whose list is open
+  var pileOf = {};        // flag id -> every flag in its pile (piles of two or more)
+
+  // Greedy, in the order the server sends them (soonest to end first, so
+  // the soonest leads its group): a flag joins the first group whose lead
+  // its foot is near, or starts its own.
+  function groupFlags(flags) {
+    var groups = [];
+    flags.forEach(function (flag) {
+      var at = map.latLngToLayerPoint([flag.latitude, flag.longitude]);
+      for (var i = 0; i < groups.length; i += 1) {
+        if (Math.abs(at.x - groups[i].at.x) < STACK_ACROSS && Math.abs(at.y - groups[i].at.y) < STACK_UPDOWN) {
+          groups[i].flags.push(flag);
+          return;
+        }
+      }
+      groups.push({ at: at, flags: [flag] });
+    });
+    return groups;
+  }
+
+  // "A", "A and B", "A, B and C": every one, for a stack's title.
+  function listAll(names) {
+    if (names.length <= 2) { return names.join(" and "); }
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  // Where a flag is drawn: on its pile's pin when it is in one, else on its
+  // own point. A card or list stands there.
+  function drawnAt(flag) {
+    var pile = pileOf[flag.id];
+    var at = pile ? pile[0] : flag;
+    return L.latLng(at.latitude, at.longitude);
+  }
+
+  function drawFlag(flag) {
+    var mine = flag.mine && mode === "idle";
+    var marker = L.marker([flag.latitude, flag.longitude], {
+      icon: flagIcon(flag.category, { on: flag.id === selected }),
+      title: labelOf(flag.category) + " flag: " + flag.title + (mine ? " (drag to move)" : ""),
+      keyboard: true, draggable: mine,
+      // flags stay out of the way while a new one is being placed
+      interactive: mode === "idle",
+      zIndexOffset: flag.id === selected ? 1000 : 500
+    }).addTo(flagLayer);
+    marker.on("click", function () { announce(""); select(flag.id); });
+    if (mine) {
+      marker.on("dragstart", function () { dragging = true; select(flag.id, false, true); });
+      marker.on("dragend", function () {
+        dragging = false;
+        moveFlag(flag, marker.getLatLng(), marker);
+      });
+    }
+  }
+
+  function drawStack(group) {
+    var lead = group.flags[0];
+    // Raised, as a chosen flag is, while its list or one of its cards is open.
+    var on = group.flags.some(function (f) { return f.id === selected || f.id === listing; });
+    var marker = L.marker([lead.latitude, lead.longitude], {
+      icon: flagIcon(lead.category, { count: group.flags.length, behind: group.flags[1].category, on: on }),
+      title: group.flags.length + " flags here: " +
+        listAll(group.flags.map(function (f) { return f.title; })) + ". Tap to see them.",
+      keyboard: true, interactive: mode === "idle", zIndexOffset: on ? 1000 : 600
+    }).addTo(flagLayer);
+    marker.on("click", function () { announce(""); openPile(group.flags); });
+  }
+
+  // A pile's list: any card shuts and the list opens in its place.
+  function openPile(flags) {
+    selected = null;
+    listing = flags[0].id;
+    confirmDown = null;
+    renderMarkers();
+    renderDetail();
   }
 
   function renderMarkers() {
     if (!map) { return; }
     flagLayer.clearLayers();
-    info.flags.forEach(function (flag) {
-      if (draft && draft.editing === flag.id) { return; }   // the draft stands in for it
-      var mine = flag.mine && mode === "idle";
-      var marker = L.marker([flag.latitude, flag.longitude], {
-        icon: flagIcon(flag.category, { on: flag.id === selected }),
-        title: labelOf(flag.category) + " flag: " + flag.title + (mine ? " (drag to move)" : ""),
-        keyboard: true, draggable: mine,
-        // flags stay out of the way while a new one is being placed
-        interactive: mode === "idle",
-        zIndexOffset: flag.id === selected ? 1000 : 500
-      }).addTo(flagLayer);
-      marker.on("click", function () { announce(""); select(flag.id); });
-      if (mine) {
-        marker.on("dragstart", function () { dragging = true; select(flag.id, false, true); });
-        marker.on("dragend", function () {
-          dragging = false;
-          moveFlag(flag, marker.getLatLng(), marker);
-        });
-      }
+    pileOf = {};
+    var shown = info.flags.filter(function (flag) {
+      return !(draft && draft.editing === flag.id);   // the draft stands in for it
     });
+    groupFlags(shown).forEach(function (group) {
+      if (group.flags.length === 1) { drawFlag(group.flags[0]); return; }
+      group.flags.forEach(function (f) { pileOf[f.id] = group.flags; });
+      drawStack(group);
+    });
+    // The open callout stands on its flag (or its pile) where that is drawn
+    // now.
+    var open = findFlag(selected || listing);
+    if (callout && callout.isOpen() && open) { callout.setLatLng(drawnAt(open)); }
     if (draft) {
       var pin = L.marker([draft.lat, draft.lng], {
         icon: flagIcon(draft.category, { draft: true, keepIcon: true }),
@@ -520,30 +610,30 @@
   // The flag you tapped opens in a callout on the map: a Beacon OS window
   // standing on the flag with a tail pointing at it (a Leaflet popup,
   // dressed by _community_map.css). On a phone, where a callout would not
-  // fit over 300px of tiles, the same card rises as a sheet over the foot
-  // of the map instead, and the map grows a little to keep the flag in
-  // view above it. One card is built either way; only its home differs.
+  // fit over 300px of tiles, the same card opens as its own window under
+  // the map instead (5b). One card is built either way; only its home
+  // differs.
   var PHONE = window.matchMedia("(max-width: 560px)");
   var CALLOUT_LIFT = 68;  // px from the flag's point up to the callout's foot
   var CALLOUT_FOOT = 12;  // the callout's own margin under that, holding its tail
-  var SHEET_MS = 220;
   var callout = null;     // the Leaflet popup, made the first time it is needed
   var shutting = false;   // the callout is being closed from here, not by a tap
-  var sheet = null;       // the phone's sheet, made the first time it is needed
-  var sheetMoving = null; // its slide, so a second tap doesn't fight the first
-  var sheetHeight = 0;    // how tall the sheet stands (its card may scroll inside)
-  var sheetBand = 0;      // the band of map left above it
-  var mapBase = 0;        // the map's height before a sheet grew it
-  var mapTall = 0;        // and once it has
+  var below = null;       // the phone's window under the map, made when first needed
+  var belowHolds = "";    // what it holds ("pile:<id>" or "card:<id>")
   var flying = false;     // select() is flying to the flag: no other nudges
-  var stage = root.querySelector(".campus-map-stage");
 
   function phone() { return PHONE.matches; }
   function still() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
 
   function select(id, fly, quiet) {
     selected = id;
+    // A card takes the place of a pile's list, and shutting it (id null)
+    // shuts both. Its back key (buildCard) reopens the list.
+    listing = null;
     confirmDown = null;
+    // The markers first: the card opens on its flag (or its pile) where that
+    // is drawn.
+    if (!quiet) { renderMarkers(); }
     // Flying there puts the card in view itself, so the callout's own
     // nudge to fit on opening is not wanted on top of it.
     flying = !!fly;
@@ -551,40 +641,47 @@
     renderDetail();
     flying = false;
     if (callout) { callout.options.autoPan = true; }
-    if (!quiet) { renderMarkers(); }
     var flag = findFlag(id);
     if (flag && fly && map) { flyToFlag(flag); }
-    // Your own flag can be dragged: said in the status line, where there
-    // is room for it (not over the phone's band of map).
-    if (flag && flag.mine && !phone()) { announce("Drag your flag on the map to move it."); }
+    // Your own flag can be dragged when it stands alone: said in the status
+    // line, on a wide screen.
+    if (flag && flag.mine && !phone() && !pileOf[flag.id]) { announce("Drag your flag on the map to move it."); }
   }
 
   // Fly to a flag so that its card lands in the middle of the map: the
-  // point flown to is the flag's, moved by half the card's height (up for a
-  // callout standing on the flag, down for a sheet under it).
+  // point flown to is the flag's, moved by half the callout's height. On a
+  // phone the card is under the map, so the flag goes to the map's foot,
+  // just above it.
   function flyToFlag(flag) {
     var zoom = 18;
-    var at = L.latLng(flag.latitude, flag.longitude);
+    var at = drawnAt(flag);
     var lift = 0;
     if (phone()) {
-      // The flag's foot near the bottom of the band above the sheet.
-      if (sheetHeight) { lift = Math.max(60, sheetBand - 14) - mapTall / 2; }
+      var high = map.getSize().y;
+      lift = Math.max(70, high - 40) - high / 2;
     } else if (callout && callout.isOpen()) {
       lift = callout.getElement().offsetHeight / 2 + CALLOUT_LIFT + CALLOUT_FOOT;
       // Once there, let the callout nudge the map if any of it is still
       // off the edge.
       map.once("moveend", function () { if (callout.isOpen()) { callout.update(); } });
     }
-    var centre = lift ? map.unproject(map.project(at, zoom).subtract([0, lift]), zoom) : at;
+    var centre = map.unproject(map.project(at, zoom).subtract([0, lift]), zoom);
     map.flyTo(centre, zoom, { duration: 0.45 });
   }
 
   function tag(text, extra) { return node("span", "tag" + (extra ? " " + extra : ""), text); }
 
+  // A key on the card. Its click goes no further than the key: a key that
+  // redraws the card (a list row, the back key, the "Tap again" of Take
+  // down) leaves the tap with a target no longer inside the callout, and
+  // Leaflet would take it for a tap on the map and shut the callout.
+  function onTap(el, fn) {
+    el.addEventListener("click", function (event) { event.stopPropagation(); fn(event); });
+  }
   function button(text, className, onClick) {
     var b = node("button", className, text);
     b.type = "button";
-    b.addEventListener("click", onClick);
+    onTap(b, onClick);
     return b;
   }
 
@@ -634,26 +731,43 @@
     return text;
   }
 
+  // The window's title bar: a back key when there is somewhere to go back
+  // to, the icon and what it is, and the close key.
+  function windowBar(icon, label, back) {
+    var bar = node("div", "fd-bar");
+    if (back) {
+      var key = node("button", "fd-back");
+      key.type = "button";
+      key.setAttribute("aria-label", back.label);
+      key.title = back.label;
+      key.appendChild(spriteNode("arrow"));
+      onTap(key, back.go);
+      bar.appendChild(key);
+    }
+    bar.appendChild(spriteNode(icon));
+    bar.appendChild(node("span", "fd-kind", label));
+    var close = node("button", "fd-close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close");
+    close.appendChild(spriteNode("close"));
+    onTap(close, function () { select(null); });
+    bar.appendChild(close);
+    return bar;
+  }
+
   // The card itself: a title bar in the flag's colour, who put it there and
   // what it is, a line each for when, where and who, the note, the keys.
-  function buildCard(flag) {
+  // A flag in a pile gets a key back to the pile's list.
+  function buildCard(flag, pile) {
     var look = kindOf(flag.category);
     var ev = flag.event;
     var card = node("div", "flag-detail" + (ev ? " is-event" : ""));
     card.style.setProperty("--flag-color", look.color);
     card.style.setProperty("--flag-ink", look.ink);
-
-    var bar = node("div", "fd-bar");
-    bar.appendChild(spriteNode(look.icon));
-    bar.appendChild(node("span", "fd-kind", ev ? "Meetup" : labelOf(flag.category)));
-    bar.appendChild(node("span", "fd-grip"));
-    var close = node("button", "fd-close");
-    close.type = "button";
-    close.setAttribute("aria-label", "Close this flag's details");
-    close.appendChild(spriteNode("close"));
-    close.addEventListener("click", function () { select(null); });
-    bar.appendChild(close);
-    card.appendChild(bar);
+    card.appendChild(windowBar(look.icon, ev ? "Meetup" : labelOf(flag.category), pile ? {
+      label: "All " + pile.length + " flags here",
+      go: function () { openPile(pile); }
+    } : null));
 
     var body = node("div", "fd-body");
     var head = node("div", "fd-head");
@@ -750,23 +864,73 @@
     return card;
   }
 
+  // A pile's list: a row for each flag in it, soonest to end first (the
+  // server's order), each opening that flag's card.
+  function rowLine(flag) {
+    var ev = flag.event;
+    if (ev) {
+      return (ev.when || "Time to be arranged") + " · " + ev.going + " of " + ev.max + " going";
+    }
+    return labelOf(flag.category) + " · " + expiresText(flag.expires_at);
+  }
+  function buildList(pile) {
+    var list = node("div", "flag-detail flag-pile");
+    list.style.setProperty("--flag-color", KINDS.event.color);
+    list.style.setProperty("--flag-ink", KINDS.event.ink);
+    list.appendChild(windowBar("meet", pile.length + " flags here", null));
+    var rows = node("ul", "fd-rows");
+    pile.forEach(function (flag) {
+      var li = node("li");
+      var row = node("button", "fd-row");
+      row.type = "button";
+      var swatch = node("span", "map-key-swatch");
+      swatch.style.setProperty("--flag-color", kindOf(flag.category).color);
+      row.appendChild(swatch);
+      // The title with its tags beside it, then the line under both at the
+      // row's full width, so a tag never crowds out when or who.
+      var text = node("span", "grow");
+      var head = node("span", "fd-row-head");
+      head.appendChild(node("b", "fd-row-title", flag.title));
+      var soon = soonText(flag.event);
+      if (soon) { head.appendChild(tag(soon, "soon")); }
+      if (flag.mine) { head.appendChild(tag("Yours")); }
+      else if (flag.event && flag.event.im_going) { head.appendChild(tag("You're in", "in")); }
+      text.appendChild(head);
+      text.appendChild(node("span", "fd-row-line", rowLine(flag)));
+      row.appendChild(text);
+      onTap(row, function () { announce(""); select(flag.id); });
+      li.appendChild(row);
+      rows.appendChild(li);
+    });
+    list.appendChild(rows);
+    return list;
+  }
+
   function renderDetail() {
     // Rebuild only when something on the card changed, so a refresh never
     // pulls a button out from under somebody about to press it.
     var current = selected && mode === "idle" ? findFlag(selected) : null;
-    var key = mode + "|" + confirmDown + "|" + (phone() ? "sheet" : "callout") + "|" +
+    var pile = current ? pileOf[current.id] || null
+      : (listing && mode === "idle" ? pileOf[listing] || null : null);
+    // The list's pile split (zoomed in) or emptied: it shuts.
+    if (!current && listing && !pile) { listing = null; }
+    var key = mode + "|" + confirmDown + "|" + (phone() ? "below" : "callout") + "|" +
       JSON.stringify(current) +
-      (current ? expiresText(current.expires_at) + soonText(current.event) : "");
+      (current ? expiresText(current.expires_at) + soonText(current.event) : "") + "|" +
+      (pile ? pile.map(function (f) {
+        return current ? f.id : f.id + rowLine(f) + soonText(f.event) + f.title + (f.event && f.event.im_going);
+      }).join(",") : "");
     if (key === shownCard) { return; }
     shownCard = key;
     el.detail.replaceChildren();
     if (mode === "placing") {
       el.detail.appendChild(node("p", "fd-hint", "Tap the map where you want people to find you."));
     }
-    if (!current || !map) { closeCallout(); closeSheet(); return; }
-    var card = buildCard(current);
-    if (phone()) { closeCallout(); showSheet(card, current); }
-    else { closeSheet(); showCallout(card, current); }
+    var shown = current || (pile ? pile[0] : null);
+    if (!shown || !map) { closeCallout(); closeBelow(); return; }
+    var card = current ? buildCard(current, pile) : buildList(pile);
+    if (phone()) { closeCallout(); showBelow(card, shown); }
+    else { closeBelow(); showCallout(card, shown); }
   }
 
   // ---------- 5a. the callout ----------
@@ -775,13 +939,19 @@
       callout = L.popup({
         className: "beacon-callout", closeButton: false,
         minWidth: 280, maxWidth: 320, offset: [0, -CALLOUT_LIFT],
-        autoPan: true, autoPanPaddingTopLeft: [16, 12], autoPanPaddingBottomRight: [64, 12]
+        // Leaflet fits the window itself; the room under it (the tail and
+        // the pin it points at) is added to the bottom margin, so the pin
+        // stays on the map too.
+        autoPan: true, autoPanPaddingTopLeft: [16, 12],
+        autoPanPaddingBottomRight: [64, CALLOUT_LIFT + CALLOUT_FOOT + 12]
       });
       // Leaflet shuts the callout on a tap on the map or Escape: the flag
-      // is then no longer the selected one, and its pin stands down.
+      // (or the pile) is then no longer the chosen one, and its pin stands
+      // down.
       map.on("popupclose", function (event) {
-        if (event.popup !== callout || shutting || !selected) { return; }
+        if (event.popup !== callout || shutting || !(selected || listing)) { return; }
         selected = null;
+        listing = null;
         shownCard = "";
         renderMarkers();
       });
@@ -789,7 +959,7 @@
     // A long card scrolls inside the callout rather than growing it past
     // what fits over the flag: the flag and the tail stay in view.
     callout.options.maxHeight = Math.max(160, map.getSize().y - CALLOUT_LIFT - CALLOUT_FOOT - 28);
-    callout.setLatLng([flag.latitude, flag.longitude]);
+    callout.setLatLng(drawnAt(flag));
     callout.setContent(card);
     if (!callout.isOpen()) { callout.openOn(map); }
   }
@@ -800,106 +970,76 @@
     shutting = false;
   }
 
-  // ---------- 5b. the sheet (phones) ----------
-  function showSheet(card, flag) {
-    if (!sheet) {
-      sheet = node("div", "map-sheet");
-      sheet.hidden = true;
-      stage.appendChild(sheet);
-      swipeToClose(sheet);
+  // ---------- 5b. under the map (phones) ----------
+  // The card as its own window right under the map, where Post a meetup
+  // and Drop a flag stand; they step aside while it is open and come back
+  // when it shuts. The map keeps its size: the flag is moved to the foot
+  // of the map, just above the card, and the page scrolls so the two share
+  // the screen.
+  function showBelow(card, flag) {
+    if (!below) {
+      below = node("div", "map-below");
+      below.hidden = true;
+      var pane = root.querySelector(".map-pane-act");
+      pane.insertBefore(below, pane.firstChild);
     }
-    var was = !sheet.hidden;
-    if (sheetMoving) { sheetMoving.cancel(); sheetMoving = null; }
-    sheet.replaceChildren(card);
-    sheet.hidden = false;
-    var band = sizeSheet();
-    if (!was && !still()) {
-      sheetMoving = sheet.animate([{ transform: "translateY(100%)" }, { transform: "translateY(0)" }],
-                                  { duration: SHEET_MS, easing: "ease-out" });
-      sheetMoving.onfinish = function () { sheetMoving = null; };
+    var was = !below.hidden;
+    // What the window now holds: a pile's list, or one flag's card. Moving
+    // from one to the other (a row, the back key) scrolls again, since the
+    // two are not the same height; a refresh of the same one does not.
+    var holds = (card.classList.contains("flag-pile") ? "pile:" : "card:") + flag.id;
+    var moved = was && holds !== belowHolds;
+    belowHolds = holds;
+    below.replaceChildren(card);
+    below.hidden = false;
+    el.drop.parentNode.hidden = true;
+    if (moved) {
+      var foot = map.latLngToContainerPoint(drawnAt(flag)).y;
+      window.requestAnimationFrame(function () { showTogether(foot); });
     }
-    // The flag into the band of map left above the sheet, its foot near
-    // the band's bottom so the whole pin shows (the map keeps its top edge
-    // still while it grows, so this holds once it has).
-    if (!was && !flying) {
-      var want = L.point(map.getSize().x / 2, Math.max(60, band - 14));
-      var by = map.latLngToContainerPoint([flag.latitude, flag.longitude]).subtract(want);
+    if (was) { return; }
+    if (!still()) {
+      below.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+                    { duration: 180, easing: "ease-out" });
+    }
+    // The flag's foot low in the map, so it stands right above its card.
+    var size = map.getSize();
+    var want = L.point(size.x / 2, Math.max(70, size.y - 40));
+    if (!flying) {
+      var by = map.latLngToContainerPoint(drawnAt(flag)).subtract(want);
       if (Math.abs(by.x) > 2 || Math.abs(by.y) > 2) { map.panBy(by, { animate: !still() }); }
     }
-    // The page scrolls so the sheet's foot is clear of the tab bar.
-    if (!was) { window.requestAnimationFrame(clearTabBar); }
+    window.requestAnimationFrame(function () { showTogether(want.y); });
   }
-  function clearTabBar() {
+  // Scroll so the whole card is above the tab bar, but never so far that
+  // the flag (its foot `footY` px down the map) goes under the top bar.
+  function showTogether(footY) {
     var bar = document.querySelector("nav.tabbar");
     var floor = bar && getComputedStyle(bar).position === "fixed"
       ? bar.getBoundingClientRect().top : window.innerHeight;
-    // The map's height as it will be once it has grown, not as it is
-    // mid-growth.
-    var box = map.getContainer();
-    var tall = parseFloat(box.style.height) || box.getBoundingClientRect().height;
-    var foot = stage.getBoundingClientRect().top + tall;
-    if (foot + 8 > floor) { window.scrollBy({ top: foot + 8 - floor, behavior: still() ? "auto" : "smooth" }); }
+    var head = document.querySelector(".topbar");
+    var ceiling = head && /sticky|fixed/.test(getComputedStyle(head).position)
+      ? head.getBoundingClientRect().bottom : 0;
+    var pinTop = map.getContainer().getBoundingClientRect().top + footY - 64;
+    var down = below.getBoundingClientRect().bottom + 8 - floor;   // to show the whole card
+    var most = pinTop - (ceiling + 8);                             // before the flag goes under
+    var by = Math.min(Math.max(down, 0), most);
+    if (Math.abs(by) > 2) { window.scrollBy({ top: by, behavior: still() ? "auto" : "smooth" }); }
   }
-  function closeSheet() {
-    if (!sheet || sheet.hidden) { return; }
-    if (sheetMoving) { sheetMoving.cancel(); sheetMoving = null; }
-    var done = function () { sheet.hidden = true; sheet.replaceChildren(); sizeSheet(); };
-    if (still()) { done(); return; }
-    sheetMoving = sheet.animate([{ transform: "translateY(0)" }, { transform: "translateY(100%)" }],
-                                { duration: SHEET_MS, easing: "ease-in" });
-    sheetMoving.onfinish = function () { sheetMoving = null; done(); };
+  function closeBelow() {
+    if (!below || below.hidden) { return; }
+    below.hidden = true;
+    below.replaceChildren();
+    belowHolds = "";
+    el.drop.parentNode.hidden = mode === "draft" || mode === "pick";
   }
-  // Sizes the map to its sheet: tall enough to show the whole card with a
-  // band of map above it, up to most of the screen (the card scrolls past
-  // that). Tells the stage how tall the sheet is (--sheet-h: the status
-  // line moves up out of its way) and gives back the band's height.
-  function sizeSheet() {
-    var box = map.getContainer();
-    var natural = 0;
-    if (sheet && !sheet.hidden) {
-      sheet.style.maxHeight = "none";
-      natural = sheet.offsetHeight;
-      sheet.style.maxHeight = "";
-    }
-    if (!natural) {
-      sheetHeight = sheetBand = mapBase = mapTall = 0;
-      stage.style.removeProperty("--sheet-h");
-      box.style.height = "";
-      root.classList.remove("showing");
-      return 0;
-    }
-    if (!mapBase) { mapBase = box.getBoundingClientRect().height; }
-    // 96px of map above the sheet: room for the whole pin and a little
-    // around it.
-    mapTall = Math.max(mapBase, Math.min(natural + 96, window.innerHeight * 0.7));
-    sheetHeight = Math.min(natural, mapTall - 56);
-    sheetBand = mapTall - sheetHeight;
-    stage.style.setProperty("--sheet-h", sheetHeight + "px");
-    root.classList.add("showing");
-    box.style.height = mapTall + "px";
-    return sheetBand;
-  }
-  // A finger drawn down the sheet's title bar puts it away.
-  function swipeToClose(box) {
-    var startY = null;
-    box.addEventListener("touchstart", function (event) {
-      var bar = event.target.closest ? event.target.closest(".fd-bar") : null;
-      startY = bar && event.touches.length === 1 ? event.touches[0].clientY : null;
-    }, { passive: true });
-    box.addEventListener("touchend", function (event) {
-      if (startY === null) { return; }
-      var dy = event.changedTouches[0].clientY - startY;
-      startY = null;
-      if (dy > 50) { select(null); }
-    }, { passive: true });
-  }
-  // Escape puts the card away. Leaflet does this for its popup only while
-  // the map itself has focus, which a tap inside the callout never gives
-  // it, so it is done here for both homes.
+  // Escape puts the card or the list away. Leaflet shuts its popup on
+  // Escape only while the map itself has focus, which a tap inside the
+  // callout never gives it, so it is done here for both homes.
   document.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape" || !selected) { return; }
-    if ((sheet && !sheet.hidden) || (callout && callout.isOpen())) { select(null); }
-  });
+    if (event.key !== "Escape" || mode !== "idle" || !(selected || listing)) { return; }
+    if ((below && !below.hidden) || (callout && callout.isOpen())) { select(null); }
+  }, true);
   // Crossing the phone width moves the card from one home to the other.
   // (addListener: Safari before 14 has no addEventListener here.)
   (PHONE.addEventListener ? PHONE.addEventListener.bind(PHONE, "change") : PHONE.addListener.bind(PHONE))(
@@ -941,12 +1081,14 @@
   // ---------- 6. the draft ----------
   function setMode(next) {
     mode = next;
+    if (mode !== "idle") { listing = null; }   // placing or posting shuts a pile's list
     root.classList.toggle("placing", mode !== "idle");
     el.form.hidden = mode !== "draft";
     // The meetup form opens under the map while its pin is being placed,
-    // and the keys under the map step aside for whichever form is open.
+    // and the keys under the map step aside for whichever form is open (or
+    // a flag's card there, on a phone).
     if (el.meetForm) { el.meetForm.hidden = mode !== "pick"; }
-    el.drop.parentNode.hidden = mode === "draft" || mode === "pick";
+    el.drop.parentNode.hidden = mode === "draft" || mode === "pick" || !!(below && !below.hidden);
     if (el.meet) { el.meet.hidden = !ready || mode !== "idle"; }
     el.drop.classList.toggle("cancel", mode === "placing");
     el.drop.querySelector("span").textContent = mode === "placing" ? "Cancel" : "Drop a flag";
@@ -1243,7 +1385,7 @@
     flag.latitude = latlng.lat; flag.longitude = latlng.lng;   // stay put while saving
     sendJSON(flagUrl(flag.id), "PATCH", { latitude: latlng.lat, longitude: latlng.lng })
       .then(function () {
-        announce("Flag moved. Everyone who can see it sees the new spot.", "success");
+        announce("Flag moved.", "success");
         return loadFlags(true);
       })
       .catch(function (error) { announce(error.message, "error"); loadFlags(true); });
@@ -1289,7 +1431,7 @@
       if (selected && !findFlag(selected)) { selected = null; }
       // A "See on map" link names a flag: open it once it has loaded.
       var focus = focusId ? findFlag(focusId) : null;
-      if (focus) { selected = focus.id; focusId = ""; }
+      if (focus) { selected = focus.id; listing = null; focusId = ""; }
       renderCount();
       if (!dragging) { renderMarkers(); }
       // The flag first, then its card, which nudges the map to fit it. Not
@@ -1297,7 +1439,10 @@
       // where it was aiming, undoing the card's nudge.
       if (focus) { map.setView([focus.latitude, focus.longitude], 18, { animate: false }); }
       if (mode === "idle") { renderDetail(); }
-      if (!quiet) {
+      // The first load's hint. Not over an error already on the line (the
+      // locate key refused on an insecure page, say): an error outlasts a
+      // hint.
+      if (!quiet && !el.status.classList.contains("error")) {
         announce(focus ? "" : info.flags.length
           ? "Tap a flag to see what's happening." : "No flags yet. Drop the first one.");
       }
@@ -1378,7 +1523,7 @@
     // the site opened by its LAN address on a phone, say -- the request is
     // refused before anybody is asked, so do not make it.
     if (!window.isSecureContext) {
-      announce("Showing your location needs the site's secure (https) address.", "error");
+      announce("Location only works on the secure (https) version of the site.", "error");
       return;
     }
     el.locate.disabled = true;

@@ -58,8 +58,7 @@
 {% block main %}
   <div class="pagehead">
     <h1>Your account</h1>
-    <p class="lede">Your name, how you are introduced, and what the
-      matcher reads.</p>
+    <p class="lede">Your name, pronouns, and the answers we use for suggestions.</p>
   </div>
 
   <section class="win sec-place">
@@ -78,8 +77,7 @@
           {% endfor %}
         </select>
       </label>
-      <p class="hint">Your email address cannot be changed &mdash; it is how
-        you sign in, and it proves you are at UMass Boston.</p>
+      <p class="hint">This is the email you sign in with. It can't be changed.</p>
       <div class="row"><button type="submit">Save</button></div>
     </form>
   </section>
@@ -88,38 +86,36 @@
     <div class="bar">{{ ui.icon("sparkle") }}<span class="bar-title">Your interests</span><span class="grip"></span></div>
     <form class="acct" method="post" action="{{ url_for('account') }}">
       <input type="hidden" name="section" value="answers" />
-      <p class="hint">These are what you are matched on. Changing them
-        changes who you are suggested, and who is suggested you.</p>
+      <p class="hint">We use these answers to suggest people and clubs. You can update them any time.</p>
       {% include "_questions.html" %}
       <div class="row"><button type="submit">Save answers</button></div>
     </form>
   </section>
 
   <section class="win sec-place">
-    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Leaving</span><span class="grip"></span></div>
+    <div class="bar">{{ ui.icon("lock") }}<span class="bar-title">Delete account</span><span class="grip"></span></div>
     <div class="acct leaving">
       <h3>Delete your account</h3>
       <p class="heavy">This cannot be undone. Deleting your account removes:</p>
       <ul>
-        <li>your answers, and your place in every hub</li>
+        <li>your answers and club memberships</li>
         <li>{{ counts.friends }} friendship{{ "" if counts.friends == 1 else "s" }},
             and the conversation with each of them</li>
         <li>{{ counts.messages }} message{{ "" if counts.messages == 1 else "s" }} you have
-            written, including in hub and group chats</li>
+            written, including in club and group chats</li>
         <li>{{ counts.meetups }} meetup{{ "" if counts.meetups == 1 else "s" }} you posted
             and {{ counts.pins }} map pin{{ "" if counts.pins == 1 else "s" }}</li>
         {# Said plainly because it is the one consequence that reaches
            somebody else and nobody would guess it. #}
-        <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played
-            &mdash; <span class="heavy">these disappear from the other
-            player's history too</span></li>
+        <li>{{ counts.games }} game{{ "" if counts.games == 1 else "s" }} you played.
+            <span class="heavy">They disappear from the other
+            player's history too.</span></li>
       </ul>
 
       {% if counts.passing %}
         <p class="keeps">
           {{ "These group chats" if counts.passing | length > 1 else "This group chat" }}
-          will carry on without you, managed by whoever has been in
-          {{ "them" if counts.passing | length > 1 else "it" }} longest:
+          will stay open. The longest-standing member becomes the owner:
           <b>{{ counts.passing | join(", ") }}</b>.
         </p>
       {% endif %}
@@ -131,8 +127,7 @@
           <b>{{ counts.closing | join(", ") }}</b>.
         </p>
       {% endif %}
-      <p class="keeps">What other people wrote in hub, group and campus
-        chats stays where it is. Your name comes off anything you reported.</p>
+      <p class="keeps">Messages other people sent will stay. Your name is removed from any reports you made.</p>
 
       <form class="acct" method="post" action="{{ url_for('account_delete') }}">
         {# The password, not the email: shell.html prints your address on

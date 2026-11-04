@@ -3,44 +3,116 @@
 {% block title %}Your friends{% endblock %}
 
 {% block appstyle %}
-      /* ---------- the heading panel, with three counts ---------- */
-      .hero {
-        padding: 14px 16px 16px;
-        background: rgba(255, 255, 255, .86);
-        -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+      /* ---------- the heading: the title, the way back, and counts ---------- */
+      .fc-head { display: grid; gap: 12px; }
+      .fc-head .lede { margin-top: .3rem; }
+      @media (min-width: 700px) {
+        .fc-head { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+        .fc-head > .continue { margin-top: 4px; }
+        .fc-head > .counts { grid-column: 1 / -1; }
+      }
+
+      /* The way back into the app, at the top and at the foot. */
+      .continue {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        min-height: 52px; padding: 0 16px;
+        background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
+        box-shadow: var(--drop);
+        font-weight: 700; text-align: center;
       }
-      .stats {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
-        margin-top: 14px;
-      }
-      .stat {
-        padding: 8px 10px;
-        background: #fff;
+      .continue:hover { text-decoration: none; background: var(--paper); }
+      .continue:active { transform: translate(4px, 4px); box-shadow: none; }
+
+      /* Each count is a key to its window; on a phone it opens the fold. */
+      .counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .counts.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      @media (min-width: 700px) { .counts.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+      .counts a {
+        display: block; padding: 8px 10px;
+        background: #fff; color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r);
-        box-shadow: 3px 3px 0 var(--navy);
+        box-shadow: 0 3px 0 var(--navy); text-decoration: none;
       }
-      .stat b { display: block; font: 400 31px/1.08 var(--title); }
-      .stat em {
+      .counts a:hover { background: var(--paper); }
+      .counts a:active { transform: translateY(3px); box-shadow: none; }
+      .counts a.asked, .counts a.asked:hover { background: var(--gold); }
+      .counts b { display: block; font: 400 31px/1.08 var(--title); }
+      .counts em {
         display: block; margin-top: 2px; font-style: normal;
         color: var(--muted); font-size: .76rem; font-weight: 700;
         letter-spacing: .05em; text-transform: uppercase;
       }
+      .counts a.asked em { color: var(--navy); }
 
+      /* ---------- two panes: people on the left, clubs on the right ---------- */
+      .fc { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); margin-top: 24px; }
+      .pane > section:first-child { margin-top: 0; }
+      @media (min-width: 900px) {
+        .fc { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+      }
+
+      /* ---------- tiles: one row each ----------
+         Laid out by the width of the list, not of the screen. The clubs
+         pane is the narrow one, and a row there left a club's name a few
+         letters a line beside its keys; in it, the keys go under. */
+      .pane .grid { container-type: inline-size; }
+      .card.row .hobbies { margin-top: 6px; }
+      .actions .btn { min-height: 40px; padding: .35rem .9rem; font-size: .92rem; }
+      @container (min-width: 460px) {
+        .card.row { display: flex; align-items: center; gap: 12px; }
+        .card.row > .card-top { flex: 1 1 auto; min-width: 0; }
+        .card.row > .actions { flex: none; margin-top: 0; }
+        /* An open question takes the whole row. */
+        .card.row:has(.confirm[open]) { flex-wrap: wrap; }
+        .card.row:has(.confirm[open]) > .actions { flex: 1 1 100%; }
+      }
       /* Someone is waiting on an answer, so it should catch the eye. */
       section .card.asked {
         border-color: var(--navy);
         box-shadow: inset 6px 0 0 var(--gold), 3px 3px 0 var(--navy);
       }
 
+      /* Removing a friend or leaving a club is asked about first. A
+         <details>, so it needs no script; the enhancer closes .confirm-no. */
+      .confirm { margin: 0; }
+      .confirm > summary {
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 6px;
+        list-style: none; cursor: pointer;
+        color: var(--muted); font-size: .9rem; font-weight: 700; text-decoration: underline;
+      }
+      .confirm > summary::-webkit-details-marker { display: none; }
+      .confirm > summary:hover { color: var(--danger); }
+      .actions .confirm[open] { flex: 1 1 100%; }
+      .confirm-body {
+        display: block; margin-top: 8px; padding: 10px 12px;
+        background: #fff;
+        border: 2px solid var(--danger); border-radius: var(--r);
+      }
+      .confirm-ask { display: block; margin-bottom: 8px; color: var(--navy); font-size: .92rem; line-height: 1.35; }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .confirm-row form { margin: 0; }
+      button.confirm-yes, button.confirm-yes:hover { background: var(--danger); color: #fff; border-color: var(--navy); }
+      button.confirm-yes:hover { background: #8a2119; }
+      button.confirm-no {
+        min-height: 40px; padding: 0 14px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-weight: 700;
+      }
+      button.confirm-no:hover { background: var(--paper); }
+
       .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
 
-      /* "Your clubs" shown as "Clubs": the words in the markup stay for the
-         test that splits the page on them, and screen readers still read
-         them; only the screen shows the shorter title. */
+      /* The joined clubs' title reads "Clubs" on screen; the words in the
+         markup stay for the test that splits the page on them, and screen
+         readers still read them. */
       .short-clubs > .sec h2 { font-size: 0; }
       .short-clubs > .sec h2::before { content: "Clubs" / ""; font-size: 24px; }
+
+      /* ---------- the foot ---------- */
+      .fc-foot { margin-top: 24px; }
+      .fc-foot .nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 {% endblock %}
 
 {#
@@ -48,189 +120,228 @@
 
   A test splits the body on the exact string "<h2>Your clubs</h2>" and requires
   that nothing before it carries match scores or shared-answer markup. So the
-  two club bands -- the only things here that legitimately show a score and the
-  answers behind it -- have to stay last, and the three people bands above them
-  stay free of .score and .shared. Reordering the bands moves a privacy
-  assertion, not just some headings.
+  two club windows -- the only things here that legitimately show a score and
+  the answers behind it -- stay last in the markup (the right-hand pane), and
+  the three people windows above them stay free of .score and .shared. Moving
+  a window moves a privacy assertion, not just a heading.
 
   The <h1> also has to keep reading "friends" and the title "friend": the
   browser harness lands here from /clubs and recognises the page by both.
+
+  Every tile is a <div class="card ..."> with one .card-top ahead of the name
+  and nothing else whose class starts with "card": a test slices a person's
+  tile between those strings to read the hobbies on it.
 #}
 {% block main %}
-  <div class="hero">
-    {# Shows "Friends and Clubs"; the hidden words keep the h1 reading
-       "friends" for the browser harness (see the note above). #}
-    <h1><span class="vh">Your friends and clubs</span><span aria-hidden="true">Friends and Clubs</span></h1>
-    <p class="lede">
-      Worked out from the answers you gave.
-      <a href="{{ url_for('onboarding') }}">Change your answers</a>
-      &middot;
-      <a href="{{ url_for('people') }}">Find someone yourself</a>
-    </p>
-    <div class="stats">
-      <span class="stat"><b>{{ matches | length }}</b><em>Friends</em></span>
-      <span class="stat"><b>{{ joined | length }}</b><em>Clubs joined</em></span>
-      <span class="stat"><b>{{ clubs | length }}</b><em>Suggested</em></span>
+  <div class="pagehead fc-head">
+    <div>
+      {# Shows "Friends and Clubs"; the hidden words keep the h1 reading
+         "friends" for the browser harness (see the note above). #}
+      <h1><span class="vh">Your friends and clubs</span><span aria-hidden="true">Friends and Clubs</span></h1>
+      <p class="lede">
+        Suggestions are based on your answers.
+        <a href="{{ url_for('onboarding') }}">Update your answers</a>
+        &middot;
+        <a href="{{ url_for('people') }}">Search for people</a>
+      </p>
+    </div>
+    <a class="continue" href="{{ url_for('index') }}">Continue to Beacons Connect {{ ui.icon("arrow") }}</a>
+    {# Each count jumps to its window; _fold.html opens a folded one. #}
+    <nav class="counts{% if requests %} four{% endif %}" aria-label="On this page">
+      {% if requests %}
+        <a class="asked" href="#requests"><b>{{ requests | length }}</b><em>Requests</em></a>
+      {% endif %}
+      <a href="#friends"><b>{{ matches | length }}</b><em>Friends</em></a>
+      <a href="#clubs"><b>{{ joined | length }}</b><em>Clubs joined</em></a>
+      <a href="#clubs-suggested"><b>{{ clubs | length }}</b><em>Clubs to try</em></a>
+    </nav>
+  </div>
+
+  <div class="fc">
+    <div class="pane people">
+      {% if requests %}
+        <section class="sec-friend" id="requests" data-fold="open">
+          {{ ui.section("Friend requests", "friend", "people", requests | length) }}
+          <div class="grid">
+            {% for person in requests %}
+              <div class="card row asked">
+                <div class="card-top">
+                  {{ ui.avatar(person.name, person.user_id) }}
+                  <div class="grow">
+                    <h3>{{ person.name }}
+                      {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
+                    </h3>
+                    <span class="why">Sent you a friend request</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <form method="post"
+                        action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
+                    <button type="submit">Accept</button>
+                  </form>
+                  <form method="post"
+                        action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
+                    <button type="submit" class="ghost">Decline</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="sec-friend" id="friends" data-fold="open">
+        {{ ui.section("Friends", "friend", "user", matches | length) }}
+        <div class="grid">
+          {% for match in matches %}
+            <div class="card row">
+              <div class="card-top">
+                {{ ui.avatar(match.name, match.user_id) }}
+                <div class="grow">
+                  <h3>{{ match.name }}
+                    {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
+                  </h3>
+                  {{ ui.both_like(match.hobbies) }}
+                </div>
+              </div>
+              <div class="actions">
+                <a class="btn" href="{{ url_for('chat', kind='match', target_id=match.user_id) }}">Chat</a>
+                <details class="confirm">
+                  <summary>Remove friend</summary>
+                  <div class="confirm-body">
+                    <span class="confirm-ask">Remove {{ match.name }} from your friends?
+                      You can send a request again later.</span>
+                    <span class="confirm-row">
+                      <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
+                        <button type="submit" class="confirm-yes">Yes, remove</button>
+                      </form>
+                      <button type="button" class="confirm-no">Keep</button>
+                    </span>
+                  </div>
+                </details>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty">
+              <b>No friends yet.</b> Send a request to someone below, or
+              <a href="{{ url_for('people') }}">search by name</a>.
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="sec-friend" id="suggested">
+        {{ ui.section("People you might know", "friend", "search") }}
+        <div class="grid">
+          {% for rec in recs %}
+            <div class="card row">
+              <div class="card-top">
+                {{ ui.avatar(rec.name, rec.user_id) }}
+                <div class="grow">
+                  <h3>{{ rec.name }}
+                    {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
+                  </h3>
+                  {{ ui.both_like(rec.hobbies) }}
+                </div>
+              </div>
+              <div class="actions">
+                <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
+                  <button type="submit">Send friend request</button>
+                </form>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty">
+              No suggestions right now.
+              <a href="{{ url_for('people') }}">Search by name</a> instead.
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    {# Everything below this line may show scores and shared answers. #}
+    <div class="pane clubs">
+      {# Still "Your clubs" in the markup, which a test splits the page on
+         (see the note above); .short-clubs shows it as "Clubs". #}
+      <section class="sec-club short-clubs" id="clubs">
+        {{ ui.section("Your clubs", "club", "club", joined | length) }}
+        <div class="grid">
+          {% for club in joined %}
+            <div class="card row">
+              <div class="card-top">
+                {{ ui.club_badge(club.name, club.description) }}
+                <div class="grow">
+                  <h3>{{ club.name }}</h3>
+                  <span class="why">{{ club.description }}</span>
+                </div>
+              </div>
+              <div class="actions">
+                <a class="btn" href="{{ url_for('chat', kind='club', target_id=club.id) }}">Club space</a>
+                <details class="confirm">
+                  <summary>Leave</summary>
+                  <div class="confirm-body">
+                    <span class="confirm-ask">Leave {{ club.name }}? You can join again
+                      from the clubs page.</span>
+                    <span class="confirm-row">
+                      <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
+                        <input type="hidden" name="back" value="matches" />
+                        <button type="submit" class="confirm-yes">Yes, leave</button>
+                      </form>
+                      <button type="button" class="confirm-no">Stay</button>
+                    </span>
+                  </div>
+                </details>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty">
+              You haven't joined any clubs yet.
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="sec-club" id="clubs-suggested">
+        {{ ui.section("Clubs you might like", "club", "star") }}
+        <div class="grid">
+          {% for club in clubs %}
+            <div class="card">
+              <div class="card-top">
+                {{ ui.club_badge(club.name, club.description) }}
+                <div class="grow">
+                  <h3>{{ club.name }}</h3>
+                  <span class="why">{{ club.description }}</span>
+                </div>
+                {# How many of your picks the club answers to, rather than the
+                   weighted number behind the ranking, which meant nothing to
+                   anyone reading it. #}
+                <span class="score">{{ club.shared | length }} shared interest{{ "" if club.shared | length == 1 else "s" }}</span>
+              </div>
+              <p class="why-lead">Suggested because you picked:</p>
+              <div class="shared">
+                {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
+              </div>
+              <div class="actions">
+                <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
+                  <input type="hidden" name="back" value="matches" />
+                  <button type="submit">Join</button>
+                </form>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty">No new suggestions right now.</div>
+          {% endfor %}
+        </div>
+      </section>
     </div>
   </div>
 
-  {% if requests %}
-    <section class="sec-friend">
-      {{ ui.section("Friend requests", "friend", "people", requests | length) }}
-      <div class="grid">
-        {% for person in requests %}
-          <div class="card asked">
-            <div class="card-top">
-              {{ ui.avatar(person.name, person.user_id) }}
-              <div class="grow">
-                <h3>{{ person.name }}
-                  {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
-                </h3>
-                <span class="why">Wants to be friends</span>
-              </div>
-            </div>
-            <div class="actions">
-              <form method="post"
-                    action="{{ url_for('match_respond', other_id=person.user_id, action='accept') }}">
-                <button type="submit">Accept</button>
-              </form>
-              <form method="post"
-                    action="{{ url_for('match_respond', other_id=person.user_id, action='decline') }}">
-                <button type="submit" class="ghost">Decline</button>
-              </form>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
-    </section>
-  {% endif %}
-
-  <section class="sec-friend">
-    {{ ui.section("Friends", "friend", "user", matches | length) }}
-    <div class="grid two">
-      {% for match in matches %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.avatar(match.name, match.user_id) }}
-            <div class="grow">
-              <h3>{{ match.name }}
-                {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
-              </h3>
-            </div>
-          </div>
-          {{ ui.both_like(match.hobbies) }}
-          <div class="actions">
-            <form method="get"
-                  action="{{ url_for('chat', kind='match', target_id=match.user_id) }}">
-              <button type="submit">Chat</button>
-            </form>
-            <form method="post" action="{{ url_for('unmatch', other_id=match.user_id) }}">
-              <button type="submit" class="ghost">Remove friend</button>
-            </form>
-          </div>
-        </div>
-      {% else %}
-        <div class="empty">
-          <b>No friends yet.</b> Send a request to someone below, or
-          <a href="{{ url_for('people') }}">search by name</a>.
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="sec-friend">
-    {{ ui.section("People you might know", "friend", "search") }}
-    <div class="grid two">
-      {% for rec in recs %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.avatar(rec.name, rec.user_id) }}
-            <div class="grow">
-              <h3>{{ rec.name }}
-                {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}
-              </h3>
-            </div>
-          </div>
-          {{ ui.both_like(rec.hobbies) }}
-          <div class="actions">
-            <form method="post" action="{{ url_for('match_ask', other_id=rec.user_id) }}">
-              <button type="submit">Send friend request</button>
-            </form>
-          </div>
-        </div>
-      {% else %}
-        <div class="empty">
-          No suggestions from your answers right now.
-          <a href="{{ url_for('people') }}">Search by name</a> instead.
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-
-  {# Everything below this line may show scores and shared answers. #}
-  {# Still "Your clubs" in the markup, which a test splits the page on (see
-     the note above); .short-clubs shows it as "Clubs". #}
-  <section class="sec-club short-clubs">
-    {{ ui.section("Your clubs", "club", "club", joined | length) }}
-    <div class="grid two">
-      {% for club in joined %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.club_badge(club.name, club.description) }}
-            <div class="grow">
-              <h3>{{ club.name }}</h3>
-              <span class="why">{{ club.description }}</span>
-            </div>
-          </div>
-          <div class="actions">
-            <form method="get"
-                  action="{{ url_for('chat', kind='club', target_id=club.id) }}">
-              <button type="submit">Club space</button>
-            </form>
-            <form method="post" action="{{ url_for('leave_club', club_id=club.id) }}">
-              <input type="hidden" name="back" value="matches" />
-              <button type="submit" class="ghost">Leave</button>
-            </form>
-          </div>
-        </div>
-      {% else %}
-        <div class="empty">
-          You haven't joined any clubs yet. Try one of the suggestions below.
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="sec-club">
-    {{ ui.section("Clubs you might like", "club", "star") }}
-    <div class="grid two">
-      {% for club in clubs %}
-        <div class="card">
-          <div class="card-top">
-            {{ ui.club_badge(club.name, club.description) }}
-            <div class="grow">
-              <h3>{{ club.name }}</h3>
-              <span class="why">{{ club.description }}</span>
-            </div>
-            <span class="score">{{ "%g" % club.score }}</span>
-          </div>
-          <p class="why-lead">Suggested because you picked:</p>
-          <div class="shared">
-            {% for item in club.shared %}<i>{{ item }}</i>{% endfor %}
-          </div>
-          <div class="actions">
-            <form method="post" action="{{ url_for('join_club', club_id=club.club_id) }}">
-              <input type="hidden" name="back" value="matches" />
-              <button type="submit">Join</button>
-            </form>
-          </div>
-        </div>
-      {% else %}
-        <div class="empty">No new suggestions from your answers right now.</div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <p class="nav"><a href="{{ url_for('clubs') }}">Browse all clubs &rarr;</a></p>
-
+  <div class="fc-foot">
+    <a class="continue" href="{{ url_for('index') }}">Continue to Beacons Connect {{ ui.icon("arrow") }}</a>
+    <p class="nav">
+      <a href="{{ url_for('clubs') }}">Browse all clubs &rarr;</a>
+      <a href="{{ url_for('people') }}">Find people &rarr;</a>
+    </p>
+  </div>
 {% endblock %}

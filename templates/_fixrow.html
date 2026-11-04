@@ -45,10 +45,10 @@
              placeholder="Clark Athletic Center" autocomplete="off" />
     </label>
     {# When it appears: empty means the moment it is saved. #}
-    <label>Appears on <span class="hint">(empty: now)</span>
+    <label>Publish on <span class="hint">(leave blank to publish now)</span>
       <input name="appear_on" type="date" value="{{ row.appear_on }}" />
     </label>
-    <label>Appears at
+    <label>Publish at
       <span class="clock">
         <select name="appear_hour" aria-label="Hour it appears">
           <option value="">Hour</option>
@@ -74,7 +74,7 @@
         <input name="sport" type="text" maxlength="60" value="{{ row.sport }}"
                placeholder="Men's Basketball" autocomplete="off" />
       </label>
-      <label>Playing (optional)
+      <label>Opponent (optional)
         <input name="opponent" type="text" maxlength="80" value="{{ row.opponent }}"
                placeholder="Salem State" autocomplete="off" />
       </label>

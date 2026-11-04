@@ -178,7 +178,7 @@
               from {{ said.filed_by_name or "a student who has since left" }}
               {%- if said.seen_in %}, in {{ said.seen_in }}{% endif %}
               {%- if said.kind == "abuse" and seen_before.get(said.about_user_id, 0) > 1 %}
-                &mdash; reported {{ seen_before[said.about_user_id] }} times
+                (reported {{ seen_before[said.about_user_id] }} times)
               {%- endif %}
             </span>
           </div>
@@ -211,7 +211,7 @@
         {# Said once, here, so nobody expects the buttons to do more than
            they do. There is no hide-this-content mechanism in the app. #}
         <p class="done">Closing a report records that you looked at it. To
-          act, use the tools themselves &mdash; a chat owner can remove a
+          act, use the tools themselves: a chat owner can remove a
           member, and an account can be deleted from Site tools below.</p>
       {% endif %}
     </div>
@@ -226,7 +226,7 @@
             <b>{%- if said.kind == "abuse" %}{{ said.about_name }}
                {%- elif said.kind == "bug" %}A problem
                {%- else %}A message{% endif -%}</b>
-            &mdash; {{ said.status }}
+            ({{ said.status }})
             {%- if said.note %}: {{ said.note }}{% endif %}
           </p>
         {% endfor %}
@@ -279,7 +279,7 @@
       <div class="grid">
         {% for ask in decided %}
           <p class="done">
-            <b>{{ ask.name }}</b> &mdash; {{ ask.status }}
+            <b>{{ ask.name }}</b> ({{ ask.status }})
             {%- if ask.note %}: {{ ask.note }}{% endif %}
           </p>
         {% endfor %}
@@ -378,8 +378,8 @@
     {% else %}
       <p class="dbwhere">
         These act on <b>{{ db_here }}</b>, the database this site is running
-        on{% if db_dev %} (a development copy){% else %} &mdash;
-        <span class="real">the real site</span>{% endif %}. Each one runs as
+        on{% if db_dev %} (a development copy){% else %}
+        (<span class="real">the real site</span>){% endif %}. Each one runs as
         soon as you press it; the ones that delete something ask you to press
         twice.
       </p>

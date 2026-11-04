@@ -21,7 +21,7 @@
 {% import "_ui.html" as ui %}
 <ul class="bell-list" id="bell-list">
   {% if not notice_rows %}
-    <li class="bell-empty">Nothing new. Anything that involves you turns up here.</li>
+    <li class="bell-empty">No notifications yet.</li>
   {% endif %}
 
   {% for n in notice_rows %}

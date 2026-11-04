@@ -1043,7 +1043,7 @@
        On a phone they give way to the people icon and the count. #}
     {% if kind == "club" or group %}
       <button type="button" class="headkey memkey" aria-controls="memwin" aria-expanded="false"
-              data-count="{{ members | length }}">{{ ui.icon("people") }}<span class="rtext">Who is in here &middot; <span class="memcount">{{ members | length }}</span></span></button>
+              data-count="{{ members | length }}">{{ ui.icon("people") }}<span class="rtext">Members &middot; <span class="memcount">{{ members | length }}</span></span></button>
     {% endif %}
 
     {# The person a queue put you with. A pair chat is the one one-on-one
@@ -1098,8 +1098,7 @@
         <div class="confirm-body">
           <span class="confirm-ask">
             {% if kind == "club" %}
-              Leave {{ title }}? You will lose this hub and have to join the
-              club again to get it back.
+              Leave {{ title }}? You'll need to rejoin the club to come back.
             {% else %}
               Close this chat? It closes for the other person too, and
               neither of you will be able to open it again.
@@ -1145,9 +1144,9 @@
        then it slides down from the top of the conversation, over the
        messages, the way the Meet up drawer rises from the foot. Nothing
        else moves. #}
-    <section class="memwin" id="memwin" hidden aria-label="Who is in here">
+    <section class="memwin" id="memwin" hidden aria-label="Members">
       <div class="membar">
-        {{ ui.icon("people") }}<span class="membar-title">Who is in here</span>
+        {{ ui.icon("people") }}<span class="membar-title">Members</span>
         <span class="grip"></span>
         <span class="count memcount">{{ members | length }}</span>
         <button type="button" class="winbtn memclose" aria-label="Close the member list"></button>
@@ -1162,8 +1161,7 @@
             <summary class="leave">Leave club</summary>
             <div class="confirm-body">
               <span class="confirm-ask">
-                Leave {{ title }}? You will lose this hub and have to join the
-                club again to get it back.
+                Leave {{ title }}? You'll need to rejoin the club to come back.
               </span>
               <span class="confirm-row">
                 <form method="post" action="{{ url_for('leave_club', club_id=target_id) }}">
@@ -1326,12 +1324,15 @@
      what somebody said they would bring. The server refuses a post either
      way -- the composer going away is the courtesy, not the rule. #}
   {% if ended %}
-    <p class="chat-ended">This meetup has ended, so its chat is closed.</p>
+    <p class="chat-ended">{% if kind == "pair" %}This game is over, so its chat is closed.{% else %}This meetup has ended, so its chat is closed.{% endif %}</p>
   {% else %}
   <form class="composer" method="post">
     {# Set by Reply on a message. The server checks it is in this chat and
-       copies the quote from the stored row; a send swaps the page, which
-       clears it. #}
+       copies the quote from the stored row. Cleared by endReply() once the
+       message is sent, by the chip's cancel key, and when the quoted message
+       is deleted -- not by form.reset(): a hidden field's value IS its
+       attribute, so a reset puts the same id back. A page swap (no
+       JavaScript, or a non-live answer) clears it too. #}
     <input type="hidden" name="reply_to" id="reply-to" value="" />
     {# Focused on arrival -- except beside a game, where the board is what
        you came for, and focusing a field at the foot of a screen-tall chat
@@ -2462,6 +2463,17 @@
         f.submit();
       });
     }
+    // The reply let go of: the field empty and the chip down. Called once
+    // the message is sent, from the chip's cancel key, and when the quoted
+    // message is deleted. form.reset() cannot do it -- a hidden field's
+    // value is its attribute, so a reset puts the same id back, and every
+    // later message would quote what the last reply did.
+    function endReply() {
+      var chip = document.getElementById("replying");
+      var field = document.getElementById("reply-to");
+      if (field) { field.value = ""; }
+      if (chip) { chip.hidden = true; }
+    }
     function startReply(row) {
       closeBar();
       var chip = document.getElementById("replying");
@@ -2526,10 +2538,7 @@
         q.replaceChildren(span("quote-text", "Deleted message"));
       });
       var field = document.getElementById("reply-to");
-      if (field && field.value === String(id)) {
-        field.value = "";
-        document.getElementById("replying").hidden = true;
-      }
+      if (field && field.value === String(id)) { endReply(); }
     }
 
     // Two taps: the first asks, the second deletes. There is nothing to
@@ -2598,13 +2607,7 @@
       if (e.key === "Escape") { closeBar(); }
     });
     var cancel = document.querySelector("#replying .replying-cancel");
-    if (cancel) {
-      cancel.addEventListener("click", function () {
-        var field = document.getElementById("reply-to");
-        if (field) { field.value = ""; }
-        document.getElementById("replying").hidden = true;
-      });
-    }
+    if (cancel) { cancel.addEventListener("click", endReply); }
 
     // Chess is the one board that needs a client: pick a piece up and put it
     // down (static/chess-board.js). Mounted again after every swap, because a
@@ -2721,16 +2724,15 @@
     // the channel brings the message, the move, the card. Two forms need a
     // word afterwards.
     //
-    // The composer: the reply chip goes once the message is sent, and the
-    // field keeps focus. Refused (too long, say), the text stays.
+    // The composer: the reply goes once the message is sent -- its chip and
+    // its field, which the enhancer's form.reset() leaves as it was -- and
+    // the text field keeps focus. Refused (too long, say), the text and the
+    // reply both stay.
     var composer = document.querySelector("form.composer");
     if (composer) {
       composer.addEventListener("beacon:done", function (ev) {
         var refused = !!(ev.detail && ev.detail.refused);
-        if (!refused) {
-          var chip = document.getElementById("replying");
-          if (chip) { chip.hidden = true; }
-        }
+        if (!refused) { endReply(); }
         var field = composer.querySelector("input[name=body]");
         if (field) { field.focus({ preventScroll: true }); }
       });

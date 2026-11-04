@@ -1,12 +1,15 @@
 {#
   One conversation, as a row in a list of them.
 
-  Drawn here rather than in each page that lists chats: home shows the five
-  most recent and /chats/all shows every one, and two copies of this markup
-  would be two chances for the two pages to disagree about what a
-  conversation looks like.
+  Drawn here rather than in each page that lists chats: home shows the most
+  recent few under each heading and /chats/all shows every one, and two
+  copies of this markup would be two chances for the two pages to disagree
+  about what a conversation looks like.
 
-  Takes `chat`, one entry from chat_list().
+  Takes `chat`, one entry from chat_list(). The line under the name is the
+  last message and the time on the right is when it came, the way a
+  messenger shows a conversation; a conversation with no message yet shows
+  what kind it is instead.
 #}
 {%- import "_ui.html" as ui -%}
 {%- set waiting = chat.unread or 0 -%}
@@ -19,8 +22,11 @@
     {{ ui.avatar(chat.title, chat.avatar_id or chat.target_id) }}
   {% endif %}
   <span class="mid">
-    <span class="name">{{ chat.title }}</span>
-    <span class="last">{{ chat.subtitle }}</span>
+    <span class="top">
+      <span class="name">{{ chat.title }}</span>
+      {% if chat.when %}<span class="when">{{ chat.when | short_ago }}</span>{% endif %}
+    </span>
+    <span class="last">{{ chat.preview | truncate(70) if chat.preview else chat.subtitle }}</span>
   </span>
   <span class="tag {{ chat.kind }}">{{ chat.tag }}</span>
   {# What is waiting in here: unread messages, plus any invite or meetup

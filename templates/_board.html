@@ -44,7 +44,7 @@
     {% if payload.outcome == "draw" %}
       A draw.
     {% elif payload.outcome == "resigned" and payload.you_won %}
-      {{ payload.opponent }} resigned &mdash; you win.
+      {{ payload.opponent }} resigned, so you win.
     {% elif payload.outcome == "resigned" %}
       You resigned.
     {% elif payload.you_won %}
@@ -55,7 +55,7 @@
   {% elif game.kind == "battleship" and state.phase == "placing" %}
     Placing fleets.
   {% elif payload.your_turn %}
-    Your turn{% if game.kind in ("tictactoe", "connect4") %} &mdash; you are {{ marks[payload.seat] }}{% endif %}.
+    Your turn.{% if game.kind in ("tictactoe", "connect4") %} You are {{ marks[payload.seat] }}.{% endif %}
   {% else %}
     Waiting for {{ payload.opponent }}.
   {% endif %}

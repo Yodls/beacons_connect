@@ -35,10 +35,10 @@ pip install -r requirements.txt
 
 The app reads its settings (database, mail server, secret key) from a file called `.env` in the project folder. You have two options:
 
-**Option A — You were given a `.env` file:**
+**Option A (you were given a `.env` file):**
 Just move it into the `beacons_connect` folder and skip to step 5.
 
-**Option B — Create your own:**
+**Option B (create your own):**
 
 1. Open `.env.example` and fill in your own values:
 
