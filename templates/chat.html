@@ -1261,12 +1261,12 @@
            are added in the JS builder below as well -- a message that could
            only be answered until the next live update would be worse than
            one that could not be answered at all. #}
-        {# Delete is on your own words only, at any time -- including once a
-           meetup's chat has closed. Never on a meetup card: that is
-           cancelled from the card. Mine and theirs never meet, so Report
-           and Delete never share a row. #}
+        {# Delete is on your own words, at any time -- including once a
+           meetup's chat has closed -- and, for an admin, on anybody's.
+           Never on a meetup card: that is cancelled from the card. An
+           admin's row for somebody else reads "Report · Delete". #}
         {% set answerable = not ended and not message.post %}
-        {% set deletable = message.mine and not message.post %}
+        {% set deletable = (message.mine or current_user.is_admin) and not message.post %}
         {% if answerable or not message.mine or deletable %}
           <span class="row-acts">
             {%- if answerable -%}
@@ -1280,6 +1280,9 @@
             {%- if not message.mine -%}
               <a class="report-link"
                  href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
+            {%- endif -%}
+            {%- if not message.mine and deletable -%}
+              <span class="act-sep" aria-hidden="true">&middot;</span>
             {%- endif -%}
             {%- if deletable -%}
               <button type="button" class="act-delete"
@@ -2181,6 +2184,7 @@
     if (!log || !window.fetch) { return; }
 
     var me = {{ current_user.id | tojson }};
+    var admin = {{ current_user.is_admin | tojson }};
     var slot = document.getElementById("gamepane-slot");
     var wrap = document.getElementById("gamewrap");
     var launch = document.querySelector(".pickgame");
@@ -2409,7 +2413,8 @@
       // than pasted as markup: this file is checked file-wide for innerHTML.
       var answerable = !closed && !message.post;
       var theirs = message.user_id !== me;
-      var deletable = !theirs && !message.post;
+      // Your own words, or anybody's for an admin; never a meetup card.
+      var deletable = (!theirs || admin) && !message.post;
       if (answerable || theirs || deletable) {
         var acts = span("row-acts", "");
         if (answerable) {
@@ -2418,17 +2423,18 @@
           acts.appendChild(actButton("act-reply", "Reply"));
         }
         if (answerable && (theirs || deletable)) { acts.appendChild(actSep()); }
-        if (deletable) {
-          var gone = actButton("act-delete", "Delete");
-          gone.dataset.url = "/messages/" + encodeURIComponent(message.id) + "/delete";
-          acts.appendChild(gone);
-        }
         if (theirs) {
           var tell = document.createElement("a");
           tell.className = "report-link";
           tell.href = "/report?kind=abuse&message=" + encodeURIComponent(message.id);
           tell.textContent = "Report";
           acts.appendChild(tell);
+        }
+        if (theirs && deletable) { acts.appendChild(actSep()); }
+        if (deletable) {
+          var gone = actButton("act-delete", "Delete");
+          gone.dataset.url = "/messages/" + encodeURIComponent(message.id) + "/delete";
+          acts.appendChild(gone);
         }
         p.appendChild(acts);
       }

@@ -2439,7 +2439,8 @@ def message_react(message_id):
 @app.route("/messages/<int:message_id>/delete", methods=["POST"])
 @login_required
 def message_delete(message_id):
-    """Delete one of your own messages, for everybody, at any time.
+    """Delete a message, for everybody, at any time: your own, or anyone's
+    if you are an admin.
 
     Gone without a trace: the row goes, and its reactions with it (CASCADE).
     Replies to it keep their own words, but the copy of it each one carries
@@ -2448,9 +2449,12 @@ def message_delete(message_id):
     its own snapshot (Report.message_id is SET NULL), so deleting cannot
     take back what has already been reported.
 
-    Only words: a meetup card is cancelled, not deleted, and a game's notes
-    are the game's. Answered as JSON for the page's fetch, like
-    message_react; without JavaScript it is a form and a redirect.
+    An admin reaches a message by its id alone, chat or no chat: most of
+    what gets reported comes from conversations the admin is not in, and
+    the reports queue offers this on each one. Only words: a meetup card is
+    cancelled, not deleted, and a game's notes are the game's. Answered as
+    JSON for the page's fetch, like message_react; without JavaScript it is
+    a form and a redirect, back to the chat or (back=admin) to the queue.
     """
     fetched = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
@@ -2466,9 +2470,9 @@ def message_delete(message_id):
     if message is None:
         return refuse("That message is not available to you.")
     kind, target_id, _, _ = message_chat(message)
-    if kind is None:
+    if kind is None and not current_user.is_admin:
         return refuse("That message is not available to you.")
-    if message.user_id != current_user.id:
+    if message.user_id != current_user.id and not current_user.is_admin:
         return refuse("You can only delete your own messages.")
     if message.event or message.post_id:
         return refuse("To remove a meetup, cancel it from its card.", 400)
@@ -2480,6 +2484,9 @@ def message_delete(message_id):
     db.session.commit()
     if fetched:
         return jsonify({"deleted": message_id})
+    if request.form.get("back") == "admin" or kind is None:
+        flash("Message deleted.")
+        return redirect(url_for("admin"))
     return redirect(url_for("chat", kind=kind, target_id=target_id))
 
 

@@ -38,6 +38,39 @@
         border: 2px solid var(--navy); border-radius: var(--r-sm);
       }
       .ask legend { padding: 0 6px; font-size: .88rem; font-weight: 700; }
+      /* Deleting a reported message asks first (the meetup cards' look,
+         find.html). Qualified with the element, because base draws every
+         submit button as a raised blue key: tie on specificity, win on
+         order. */
+      .confirm { margin: 10px 0 0; }
+      .confirm > summary {
+        display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px;
+        list-style: none; cursor: pointer;
+        background: var(--danger-bg); color: var(--danger);
+        border: 2px solid var(--danger); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--danger);
+        font-size: .92rem; font-weight: 700;
+      }
+      .confirm > summary::-webkit-details-marker { display: none; }
+      .confirm > summary:hover { background: #fbdcd8; }
+      .confirm[open] > summary { transform: translateY(3px); box-shadow: none; }
+      .confirm-body {
+        display: block; margin-top: 10px; padding: 10px 12px;
+        background: #fff;
+        border: 2px solid var(--danger); border-radius: var(--r);
+      }
+      .confirm-ask { display: block; margin-bottom: 8px; color: var(--navy); font-size: .92rem; line-height: 1.35; }
+      .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .confirm-row form { margin: 0; }
+      button.confirm-yes, button.confirm-yes:hover { background: var(--danger); color: #fff; border-color: var(--navy); }
+      button.confirm-yes:hover { background: #8a2119; }
+      button.confirm-no {
+        min-height: 40px; padding: 0 14px;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy); font-weight: 700;
+      }
+      button.confirm-no:hover { background: var(--paper); }
       .picks { display: flex; flex-wrap: wrap; gap: 8px; }
       .picks label {
         display: inline-flex; align-items: center; gap: 6px;
@@ -188,6 +221,24 @@
                message or the person has since gone. #}
             <p class="pitch">{{ said.quoted }}</p>
           {% endif %}
+          {# While the message is still there, it can be deleted from here:
+             most reported messages are in conversations the admin cannot
+             open. Asked first; the report keeps its own copy (SET NULL). #}
+          {% if said.message_id %}
+            <details class="confirm">
+              <summary>Delete message</summary>
+              <div class="confirm-body">
+                <span class="confirm-ask">Delete this message for everyone? The report keeps its copy.</span>
+                <span class="confirm-row">
+                  <form method="post" action="{{ url_for('message_delete', message_id=said.message_id) }}">
+                    <input type="hidden" name="back" value="admin" />
+                    <button type="submit" class="confirm-yes">Yes, delete</button>
+                  </form>
+                  <button type="button" class="confirm-no">Keep</button>
+                </span>
+              </div>
+            </details>
+          {% endif %}
           <p class="pitch">{{ said.detail }}</p>
 
           <form method="post"
@@ -211,8 +262,9 @@
         {# Said once, here, so nobody expects the buttons to do more than
            they do. There is no hide-this-content mechanism in the app. #}
         <p class="done">Closing a report records that you looked at it. To
-          act, use the tools themselves: a chat owner can remove a
-          member, and an account can be deleted from Site tools below.</p>
+          act, delete the reported message above, or use the tools
+          themselves: a chat owner can remove a member, and an account can
+          be deleted from Site tools below.</p>
       {% endif %}
     </div>
   </section>
