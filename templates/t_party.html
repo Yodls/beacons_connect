@@ -9,10 +9,11 @@
   static/t-party.js, which boots on #t-party and hands its cleanup to
   Beacon.live so a page swap stops it.
 
-  data-standalone="true" keeps the game to practice with bots. Party rooms
-  need the room server at /api/t-party (create, join, start, sync, leave,
-  current), which the app does not have yet; when it does, drop the
-  attribute and the room keys turn on.
+  Party rooms run on the server: the /api/t-party routes in app.py and the
+  rules in tparty.py. Practice with three bots runs in the browser. Putting
+  data-standalone="true" back on #t-party turns the room buttons off again.
+  The train's layout (tp-world-data) is tparty.WORLD, rendered in below, so
+  the page and the server always ride the same train.
 #}
 
 {% block appstyle %}{% raw %}
@@ -243,6 +244,48 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
 @media (prefers-reduced-motion:reduce) {
   #t-party .tp-pad.can-act .tp-btn.b,.tp-pad.can-up .tp-dpad .up,.tp-pad.can-down .tp-dpad .down,.tp-led.warn {animation:none}
 }
+
+/* ---------- lost hearts ----------
+   A lost heart carries the class "empty", which the site's stylesheet also
+   uses for its dashed empty-state panels (padding, dashed border, paper
+   fill). Keep that look off the hearts, so a lost one stays a pale heart
+   the size of a full one and the HUD's buttons keep their place. */
+#t-party .tp-heart.empty {padding:0;background:none;border:0;border-radius:0}
+
+/* ---------- the message line ----------
+   Taken out: the HUD, the warning banner and the overlays already say what
+   matters, and on a phone the picture gets the room. */
+#t-party .tp-message {display:none}
+
+/* ---------- A and B on the thumb pad ----------
+   Side by side at the same height, at the top of the pad, so the notice a
+   phone shows along the bottom on going full screen does not cover them.
+   Landscape keeps its own column of buttons. */
+@media (orientation:portrait), (min-height:601px) {
+  #t-party .tp-pad-r {align-self:flex-start;align-items:center;padding-top:0}
+  #t-party .tp-btn.b {transform:none}
+  #t-party .tp-btn.b.is-down {transform:translateY(5px)}
+}
+
+/* ---------- the site's bottom bar during a ride ----------
+   The ride covers the whole screen on a phone. Without the Fullscreen API
+   (a rider who joined starts with no tap to ask with, and iPhones never
+   grant it) the site's tab bar stayed on top of the thumb pad, so it steps
+   aside while the screen is the ride's. */
+html.tp-locked .tabbar {display:none}
+
+/* ---------- the legend under the game ---------- */
+#t-party .tp-legend {grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+#t-party .tp-legend > div {padding:16px}
+.tp-legend h3 {font:400 24px/1 var(--px);color:var(--navy);margin:0}
+.tp-keylist {list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.tp-hurts .tp-keylist {grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.tp-keylist li {display:flex;align-items:center;gap:10px;min-height:46px;font-size:13px;line-height:1.35;color:var(--navy)}
+.tp-ico {flex:none;width:60px;height:46px;display:grid;place-items:center;background:#e9eef5;border:2px solid var(--navy);border-radius:5px}
+.tp-ico canvas {display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+#t-party .tp-legend p {margin-top:12px;font-size:12px;line-height:1.5;color:var(--muted)}
+@media (max-width:860px) {#t-party .tp-legend {grid-template-columns:minmax(0,1fr)}}
+@media (max-width:600px) {#t-party .tp-legend > div {padding:14px}}
 {% endraw %}{% endblock %}
 
 {% block main %}
@@ -259,7 +302,7 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
     <li><b>2 to 8</b> riders</li><li><b>5 min</b> or 90 s</li>
   </ul>
 </div>
-<div id="t-party" data-standalone="true" data-api="/api/t-party" data-name="{{ current_user.name.split(' ')[0] }}"><div class="tp-grid">
+<div id="t-party" data-api="/api/t-party" data-name="{{ current_user.name.split(' ')[0] }}"><div class="tp-grid">
   <section class="sec-game tp-window" id="tp-stage" aria-label="The T Party game">
     <div class="sec sec-game tp-titlebar">
       <span class="tp-trainmark" aria-hidden="true">T</span>
@@ -349,27 +392,30 @@ html.tp-locked,html.tp-locked body {overflow:hidden!important;overscroll-behavio
     </section>
   </aside>
 </div>
-<div class="tp-rules" id="tp-rules">
-  <div><span class="tp-rule-num">01</span><h3>Mind the aisle.</h3><p>Barking dogs, cats in carriers and very touchy wild turkeys guard the aisle, while e-bikes, scooters and loose furniture roll back at you. <span class="tp-kbd-only">Jump with Space</span><span class="tp-touch-only">Jump with A</span> or take the other deck.</p></div>
-  <div><span class="tp-rule-num">02</span><h3>Find your seat.</h3><p>When the warning goes up, empty seats wear a green arrow. <span class="tp-kbd-only">Press E</span><span class="tp-touch-only">Tap B</span> beside one; each seat fits one rider.</p></div>
-  <div><span class="tp-rule-num">03</span><h3>Six hits. One twinkle.</h3><p>Lose your last heart and the ride pauses while everyone watches you sail off into the sky. Then it's back to the race.</p></div>
+<div class="tp-rules tp-legend" id="tp-rules">
+  <div class="tp-hurts">
+    <h3>Things that hurt</h3>
+    <ul class="tp-keylist">
+      <li><span class="tp-ico"><canvas data-tp-icon="dog" aria-hidden="true"></canvas></span><span>Dogs on a leash</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="cat" aria-hidden="true"></canvas></span><span>Cats in carriers</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="turkey" aria-hidden="true"></canvas></span><span>Wild turkeys</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="scooter" aria-hidden="true"></canvas></span><span>E-scooters</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="bike" aria-hidden="true"></canvas></span><span>E-bikes</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="armchair" aria-hidden="true"></canvas></span><span>Flying furniture</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="cart" aria-hidden="true"></canvas></span><span>Luggage carts</span></li>
+    </ul>
+    <p>Jump them (<span class="tp-kbd-only">Space</span><span class="tp-touch-only">A</span>) or take the other deck. Brake checks and rough track hurt too, unless you're seated. Six hits and you're out.</p>
+  </div>
+  <div class="tp-howto">
+    <h3>Getting to the front</h3>
+    <ul class="tp-keylist">
+      <li><span class="tp-ico"><canvas data-tp-icon="door" aria-hidden="true"></canvas></span><span><b>Doors</b> open on a timer. Wait, then keep heading right.</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="seat" aria-hidden="true"></canvas></span><span><b>Seats:</b> when the warning shows, sit in one with a green arrow (<span class="tp-kbd-only">E</span><span class="tp-touch-only">B</span>).</span></li>
+      <li><span class="tp-ico"><canvas data-tp-icon="button" aria-hidden="true"></canvas></span><span><b>Exit button:</b> in the front car, press the green button (<span class="tp-kbd-only">E</span><span class="tp-touch-only">B</span>) to get off first and win.</span></li>
+    </ul>
+  </div>
 </div></div>
 <footer class="tp-foot"><span>THE T PARTY / BEACON GAMES</span><span>Beacon OS · commuter chaos · no personal space</span></footer>
-{% raw %}<script type="application/json" id="tp-world-data">{
-  "carWidth": 1120,
-  "carCount": 8,
-  "duration": 300,
-  "gateInterval": 38.5,
-  "speed": 134,
-  "gravity": 640,
-  "jumpVelocity": 300,
-  "maxHealth": 6,
-  "cinematicSeconds": 4.8,
-  "capacity": 8,
-  "carNames": ["All aboard", "Personal space", "Wheel trouble", "The quiet car", "Moving furniture", "Seat scramble", "Last call", "The big green button"],
-  "colors": ["#FF791F", "#78AFE9", "#FEDE42", "#B99DD8", "#51C6B1", "#F28CA8", "#8CD879", "#FFFFFF"],
-  "seatOffsets": [150, 270, 390, 510, 630, 750, 870, 990]
-}
-</script>{% endraw %}
+<script type="application/json" id="tp-world-data">{{ tp_world|tojson }}</script>
 <script src="{{ url_for('static', filename='t-party.js') }}"></script>
 {% endblock %}
