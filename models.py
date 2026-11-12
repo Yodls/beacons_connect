@@ -1355,3 +1355,49 @@ class SiteSetting(db.Model):
     # Who flipped it last. Kept as null if that admin's account is deleted.
     updated_by = db.Column(
         db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
+
+
+class TPartyRoom(db.Model):
+    """One T Party room: up to eight students on one train, played online.
+
+    Not a Game row. Game is two seats taking turns, and its CHECKs say so;
+    a ride is two to eight riders moving at once, twenty times a second.
+    The whole ride lives in `state` (tparty.py's shape, which is the shape
+    static/t-party.js draws), and every sync takes this row with FOR UPDATE,
+    so riders landing at the same moment queue up rather than overwrite one
+    another.
+    """
+
+    __tablename__ = "tparty_rooms"
+
+    # Six characters, A-Z and 2-9, read out loud to whoever is boarding.
+    code = db.Column(db.String(6), primary_key=True)
+    # db.JSON does not notice in-place edits: always reassign a fresh object.
+    state = db.Column(db.JSON, nullable=False)
+    # Wall-clock seconds the ride has been run up to. The ride only moves
+    # when a rider syncs, and catches up to now first; with nobody syncing
+    # it stands still rather than finishing without anyone watching.
+    clock = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (db.Index("ix_tparty_rooms_updated", "updated_at"),)
+
+
+class TPartyRider(db.Model):
+    """Which room a student is aboard. One at a time, like GameSeek's queue:
+    boarding another train takes you off the last one. It is what lets a
+    reloaded page find its way back to the ride it was in."""
+
+    __tablename__ = "tparty_riders"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    room_code = db.Column(
+        db.String(6), db.ForeignKey("tparty_rooms.code", ondelete="CASCADE"),
+        nullable=False,
+    )
+    joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (db.Index("ix_tparty_riders_room", "room_code"),)

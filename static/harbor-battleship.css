@@ -1,0 +1,356 @@
+/* Beacons Connect Battleship: Boston Harbor, 1776.
+   Scoped to .bs-harbor (templates/_battleship_board.html), so nothing else on
+   the chat page changes. Its squares are .bs-cell rather than .cell, so the
+   generic board-button rules in chat.html do not reach them.
+
+   All the art is pixel art drawn at one CSS pixel to the art pixel and scaled
+   up whole, like the Harborwalk behind the page. The scene and the charts
+   keep separate scales: --ks for the scene (2, or 3 from 480px of room) and
+   --kg for the charts (2, so two charts fit side by side beside the chat).
+   --us and --ug are one art pixel at each scale.
+
+   Layout: the scene across the top, then enemy waters and your fleet, side
+   by side where there is room for both charts and stacked where there is
+   not. Before the battle your fleet comes first. */
+
+.bs-harbor { container: bs / inline-size; width: 100%; }
+.bs-in {
+  --ks: 2; --kg: 2;
+  --us: calc(var(--ks) * 1px);
+  --ug: calc(var(--kg) * 1px);
+  --hz: 26px;                       /* the horizon, in scene art pixels */
+}
+@container bs (min-width: 480px) { .bs-in { --ks: 3; } }
+@container bs (max-width: 322px) { .bs-in { --kg: 1.75; } }
+
+/* The pane's usual padding and centring are for fixed-size boards; this one
+   fills the window edge to edge. */
+.boardwrap:has(.bs-harbor) { display: block; padding: 0; overflow: hidden; }
+#board-area:has(.bs-harbor) { width: 100%; }
+
+/* ---------- the harbor, 1776 ---------- */
+.bs-scene {
+  position: relative; isolation: isolate; overflow: hidden;
+  height: calc(var(--us) * 36);
+  background: #4583C3;
+  border-bottom: 2px solid var(--navy);
+}
+.bs-art {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  width: calc(100% / var(--ks)); height: calc(100% / var(--ks));
+  transform: scale(var(--ks)); transform-origin: 0 0;
+  shape-rendering: crispEdges;
+}
+.bs-art i, .bs-art svg { position: absolute; display: block; }
+.bs-sky, .bs-sky-n, .bs-stars { left: 0; top: 0; width: 100%; height: var(--hz); }
+.bs-sky {
+  background:
+    linear-gradient(to top, #D3E6F8 0 2px, #C3DDF6 2px 5px, #B1D3F4 5px 9px, #9FC9F1 9px 14px, rgba(159, 201, 241, 0) 14px),
+    linear-gradient(to bottom, #4A8EDE, #69A5E6 45%, #93C2EF);
+}
+.bs-sky-n {
+  background:
+    linear-gradient(to top, #3A4F80 0 2px, #33477A 2px 5px, #2C4072 5px 9px, #26396A 9px 14px, rgba(38, 57, 106, 0) 14px),
+    linear-gradient(to bottom, #0A1430, #13234C 50%, #26396A);
+}
+.bs-sky-n, .bs-stars, .bs-moon, .bs-art .lit, .bs-tint { opacity: 0; }
+.bs-moon { left: 46%; top: 4px; }
+.bs-cloud.c1 { left: 2%; top: 3px; }
+.bs-cloud.c2 { left: 52%; top: 1px; }
+.bs-cloud.c3 { left: 27%; top: 13px; }
+.bs-shore { left: 0; top: calc(var(--hz) - 11px); }
+.bs-water {
+  left: 0; top: var(--hz); bottom: 0; width: 100%;
+  background: linear-gradient(to bottom, #9CC6EA 0 2px, #84B6E2 2px 5px, #70A8DB 5px 10px, #5E9AD3 10px);
+}
+.bs-water svg { left: 0; top: 0; }
+.bs-tint {
+  left: 0; top: calc(var(--hz) - 11px); bottom: 0; width: 100%;
+  background: linear-gradient(to bottom, #3E5079, #2E3F62);
+  mix-blend-mode: multiply;
+}
+/* the two ships ride the swell a pixel at a time, out of step */
+.bs-boat svg { left: 0; top: 0; }
+.bs-mow { left: calc(40% - 18px); top: 4px; width: 36px; height: 27px; animation: bs-ride 3.2s steps(1, end) infinite; }
+.bs-schooner { left: 5%; top: 9px; width: 26px; height: 21px; animation: bs-ride 2.6s steps(1, end) -1.1s infinite; }
+/* Castle William on its island, at the right; the Union flag on the east
+   bastion is two frames of wind */
+.bs-castle { right: 2px; top: 0; width: 92px; height: 28px; }
+.bs-castle svg { left: 0; top: 0; }
+.bs-colors { left: 72px; top: -1px; width: 8px; height: 6px; }
+.bs-colors svg { left: 0; top: 0; }
+.bs-colors .a { animation: bs-wave-a 1.4s steps(1, end) infinite; }
+.bs-colors .b { animation: bs-wave-b 1.4s steps(1, end) infinite; }
+.bs-gull { left: 31%; top: 7px; width: 9px; height: 4px; animation: bs-glide 6s ease-in-out infinite alternate; }
+.bs-gull svg { left: 0; top: 0; }
+.bs-gull .up { animation: bs-beat-up 4.4s steps(1, end) infinite; }
+.bs-gull .flat { animation: bs-beat-flat 4.4s steps(1, end) infinite; }
+
+/* Narrow: the schooner stays in port, the ship of the line moves left, and
+   the island slides a little off the right edge to make room. */
+@container bs (max-width: 419px) {
+  .bs-art .bs-schooner { display: none; }
+  .bs-mow { left: calc(37% - 18px); }
+  .bs-castle { right: -6px; }
+  .bs-gull { left: 8%; top: 18px; }
+}
+
+.bs-caption {
+  position: absolute; z-index: 2; left: 8px; top: 6px; margin: 0;
+  padding: 2px 7px 1px;
+  background: #fff; color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r-sm);
+  box-shadow: 2px 2px 0 var(--navy);
+  font: 400 15px/1.1 var(--title); letter-spacing: .02em; white-space: nowrap;
+}
+/* On a phone the strip is small and the ships need the room. */
+@container bs (max-width: 419px) { .bs-caption { display: none; } }
+
+/* the result, over the scene, when the battle is over */
+.bs-result {
+  position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 24px); padding: 6px 14px 6px 10px;
+  background: #fff; color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r);
+  box-shadow: 3px 3px 0 var(--navy);
+}
+.bs-result.won { background: var(--gold); }
+.bs-result .bs-flag { width: 42px; height: 30px; flex: none; }
+.bs-result b { display: block; font: 400 28px/1 var(--title); }
+.bs-result small { display: block; font: 700 .85rem/1.25 var(--sans); }
+@container bs (max-width: 419px) {
+  .bs-result { padding: 4px 10px 4px 8px; gap: 8px; }
+  .bs-result .bs-flag { width: 28px; height: 20px; }
+  .bs-result b { font-size: 22px; }
+  .bs-result small { font-size: .78rem; }
+}
+
+/* ---------- the two charts ---------- */
+.bs-body {
+  display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center;
+  gap: 22px; padding: 14px 10px 18px;
+  background: #fff;
+}
+@container bs (min-width: 632px) {
+  .bs-body { grid-template-columns: repeat(2, max-content); justify-content: center; align-items: start; column-gap: 16px; }
+}
+.bs-sec {
+  width: calc(var(--ug) * 149); max-width: 100%; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.bs-harbor.placing:not(.over) .bs-own { order: -1; }
+
+.bs-head { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.bs-head .grow { flex: 1 1 auto; min-width: 0; }
+.bs-head h4 { margin: 0; color: var(--navy); font: 400 23px/1 var(--title); letter-spacing: .01em; white-space: nowrap; }
+.bs-head small { display: block; margin-top: 3px; color: var(--muted); font: 700 .74rem/1.2 var(--sans); text-transform: uppercase; letter-spacing: .05em; }
+.bs-flag { display: block; flex: none; width: 42px; height: 30px; shape-rendering: crispEdges; }
+
+.bs-chart {
+  display: grid;
+  grid-template-columns: calc(var(--ug) * 7) calc(var(--ug) * 142);
+  grid-template-rows: calc(var(--ug) * 7) calc(var(--ug) * 142);
+}
+.bs-cols, .bs-rows { display: grid; color: var(--navy); font: 400 calc(var(--ug) * 6.5)/1 var(--title); }
+.bs-cols {
+  grid-column: 2; grid-row: 1;
+  grid-template-columns: repeat(10, calc(var(--ug) * 14));
+  padding-left: var(--ug); align-items: end; justify-items: center;
+  padding-bottom: var(--ug);
+}
+.bs-rows {
+  grid-column: 1; grid-row: 2;
+  grid-template-rows: repeat(10, calc(var(--ug) * 14));
+  padding-top: var(--ug); align-items: center; justify-items: end;
+  padding-right: calc(var(--ug) * 1.5);
+}
+.bs-board {
+  grid-column: 2; grid-row: 2; position: relative;
+  width: calc(var(--ug) * 142); height: calc(var(--ug) * 142);
+  box-shadow: 3px 3px 0 var(--navy);
+}
+.bs-sea, .bs-ships, .bs-cells { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.bs-sea { display: block; shape-rendering: crispEdges; }
+.bs-ships { pointer-events: none; }
+.bs-ship {
+  position: absolute; display: block; shape-rendering: crispEdges;
+  left: calc(var(--ug) * (1 + 14 * var(--c)));
+  top: calc(var(--ug) * (1 + 14 * var(--r)));
+  width: calc(var(--ug) * 14 * var(--len));
+  height: calc(var(--ug) * 14);
+}
+/* down the chart: turned a quarter about its top left corner, then slid back
+   into its column, so the bow points south */
+.bs-ship.v { transform-origin: 0 0; transform: translateX(calc(var(--ug) * 14)) rotate(90deg); }
+.bs-ship.sunk { filter: saturate(.3) brightness(.72); }
+
+.bs-cells {
+  left: var(--ug); top: var(--ug); width: auto; height: auto;
+  display: grid;
+  grid-template-columns: repeat(10, calc(var(--ug) * 14));
+  grid-template-rows: repeat(10, calc(var(--ug) * 14));
+}
+.bs-harbor .bs-cell,
+.bs-harbor button.bs-cell,
+.bs-harbor button.bs-cell:hover,
+.bs-harbor button.bs-cell:active,
+.bs-harbor button.bs-cell[disabled],
+.bs-harbor button.bs-cell[disabled]:hover,
+.bs-harbor button.bs-cell[disabled]:active {
+  position: relative; display: block;
+  width: 100%; height: 100%; min-height: 0; min-width: 0;
+  margin: 0; padding: 0;
+  background: transparent; color: inherit;
+  border: 0; border-radius: 0; box-shadow: none; transform: none;
+  cursor: default;
+}
+.bs-harbor.yours button.bs-cell:not([disabled]) { cursor: crosshair; touch-action: manipulation; }
+.bs-harbor.yours button.bs-cell:not([disabled]):hover {
+  background: rgba(255, 255, 255, .24);
+  box-shadow: inset 0 0 0 var(--ug) rgba(224, 50, 43, .75);
+}
+.bs-harbor button.bs-cell:focus-visible { outline: 3px solid var(--orange); outline-offset: -3px; z-index: 2; }
+.bs-cell .mk {
+  position: absolute; left: 0; top: 0; display: block;
+  width: calc(var(--ug) * 14); height: calc(var(--ug) * 14);
+  shape-rendering: crispEdges; pointer-events: none;
+}
+.bs-cell .mk.fl .a { animation: bs-flick-a .7s steps(1, end) infinite; }
+.bs-cell .mk.fl .b { animation: bs-flick-b .7s steps(1, end) infinite; }
+/* the aimed square: the reticle, placed by the script */
+.bs-reticle {
+  position: absolute; z-index: 3; display: block; pointer-events: none;
+  left: calc(var(--ug) * (1 + 14 * var(--c, 0)));
+  top: calc(var(--ug) * (1 + 14 * var(--r, 0)));
+  width: calc(var(--ug) * 14); height: calc(var(--ug) * 14);
+  shape-rendering: crispEdges;
+  animation: bs-blink 1.1s steps(1, end) infinite;
+}
+.bs-reticle[hidden] { display: none; }
+
+/* Before the battle their chart is fog, with a word about how they are
+   getting on. On a narrow pane the fog goes and only the word stays. */
+.bs-wait { position: relative; }
+.bs-wait .bs-board { filter: saturate(.25) brightness(1.08); }
+.bs-wait .bs-note {
+  position: absolute; left: calc(var(--ug) * 7 + 12px); right: 12px; top: 50%; transform: translateY(-50%);
+}
+.bs-note {
+  display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 12px;
+  background: #fff; color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r);
+  box-shadow: 3px 3px 0 var(--navy);
+  font: 700 .95rem/1.35 var(--sans);
+}
+.bs-note .bs-flag { width: 28px; height: 20px; }
+@container bs (max-width: 631px) {
+  .bs-wait .bs-chart { display: none; }
+  .bs-wait .bs-note { position: static; transform: none; }
+}
+
+/* ---------- the bar under a chart: what is happening, and the keys ---------- */
+.bs-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+  padding: 8px 8px 8px 12px;
+  background: var(--paper); color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r);
+}
+.bs-bar.go { background: #fff8d1; }
+.bs-say { flex: 1 1 10rem; min-width: 0; margin: 0; font: 700 .92rem/1.35 var(--sans); }
+.bs-news:not(:empty) { display: block; margin-bottom: 2px; color: var(--beacon); }
+.bs-news.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bs-harbor:not(.over) .bs-shot .bs-say { font: 400 26px/1 var(--title); letter-spacing: .02em; }
+.bs-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.bs-acts form { margin: 0; }
+.bs-acts button { min-height: 42px; }
+.bs-harbor button.bs-fire {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; margin: 0; padding: 4px 16px 4px 10px;
+  background: var(--orange); color: var(--navy);
+  border: 2px solid var(--navy); border-radius: var(--r);
+  box-shadow: 0 4px 0 var(--navy);
+  font: 400 24px/1 var(--title); letter-spacing: .04em; text-transform: uppercase;
+}
+.bs-harbor button.bs-fire:hover { background: #ff8f45; }
+.bs-harbor button.bs-fire:active { transform: translateY(4px); box-shadow: 0 0 0 var(--navy); }
+.bs-harbor button.bs-fire[disabled], .bs-harbor button.bs-fire[disabled]:hover {
+  background: var(--paper); color: var(--muted); border-color: var(--line-2);
+  box-shadow: none; transform: none; cursor: not-allowed;
+}
+.bs-fire svg { width: 28px; height: 28px; margin: -4px -2px; shape-rendering: crispEdges; }
+.bs-fire[disabled] svg { opacity: .45; }
+
+/* the fleets: yours with a pip for every square and the hits in it, theirs
+   with the ones you have sunk */
+.bs-fleet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bs-fleet li {
+  display: flex; align-items: center; gap: 7px;
+  min-height: 32px; padding: 4px 8px;
+  background: #fff; color: var(--navy);
+  border: 2px solid var(--line); border-radius: var(--r-sm);
+  font: 700 .82rem/1.2 var(--sans);
+}
+.bs-own .bs-fleet { flex-direction: column; }
+.bs-own .bs-fleet li { justify-content: flex-start; }
+.bs-own .bs-fleet .nm { flex: 1 1 auto; }
+.bs-mini { display: block; flex: none; width: calc(14px * var(--len)); height: 14px; shape-rendering: crispEdges; }
+.bs-fleet li.sunk { background: var(--paper); color: var(--muted); }
+.bs-fleet li.sunk .nm { text-decoration: line-through; }
+.bs-fleet li.sunk .bs-mini { filter: saturate(.3) brightness(.72); }
+.bs-fleet .tag-sunk { padding: 1px 5px; background: var(--navy); color: #fff; border-radius: 4px; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+.pips { display: inline-flex; gap: 3px; }
+.pips i { width: 9px; height: 9px; background: #fff; border: 2px solid var(--navy); }
+.pips i.hit { background: var(--orange); }
+.bs-fleet li.sunk .pips i { background: var(--muted); border-color: var(--muted); }
+.bs-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; color: var(--muted); font: 700 .78rem/1 var(--sans); }
+.bs-key span { display: inline-flex; align-items: center; gap: 4px; }
+.bs-key svg { width: 21px; height: 21px; shape-rendering: crispEdges; }
+
+/* ---------- the shot that has just landed (added by the script) ---------- */
+.bs-fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; shape-rendering: crispEdges; z-index: 3; }
+.bs-fx.ball { animation: bs-fall .42s steps(6, end) both; }
+.bs-fx.burst, .bs-fx.splash { opacity: 0; animation: bs-flash .7s steps(1, end) .42s both; }
+.bs-cell.fresh .mk { animation: bs-arrive .3s steps(3, end) .5s both; }
+.bs-cell.fresh .mk.fl .a, .bs-cell.fresh .mk.fl .b { animation-delay: .5s; }
+
+/* ---------- night ---------- */
+.bs-sky-n, .bs-tint { transition: opacity 3.2s ease-in-out .4s; }
+.bs-stars, .bs-moon { transition: opacity .9s ease; }
+.bs-art .lit { transition: opacity .5s ease; }
+.bs-art .bs-cloud, .bs-shore, .bs-castle > svg:first-child, .bs-boat > svg:first-child { transition: filter 3.2s ease-in-out .4s; }
+.bs-sea, .bs-ship { transition: filter 3.2s ease-in-out .4s; }
+html[data-sky="night"] .bs-sky-n,
+html[data-sky="night"] .bs-tint { opacity: 1; transition-delay: 0s; }
+html[data-sky="night"] .bs-stars,
+html[data-sky="night"] .bs-moon { opacity: 1; transition: opacity 1.8s ease 1.8s; }
+html[data-sky="night"] .bs-art .lit { opacity: 1; transition: opacity .8s ease 1.4s; }
+html[data-sky="night"] .bs-art .bs-cloud { filter: brightness(.45) saturate(.75); transition-delay: 0s; }
+html[data-sky="night"] .bs-shore { filter: brightness(.42) saturate(.6); transition-delay: 0s; }
+html[data-sky="night"] :is(.bs-castle > svg:first-child, .bs-boat > svg:first-child) { filter: brightness(.6) saturate(.8); transition-delay: 0s; }
+html[data-sky="night"] .bs-shore.lit { filter: none; }
+html[data-sky="night"] .bs-sea { filter: brightness(.86) saturate(.95); transition-delay: 0s; }
+
+/* ---------- motion ---------- */
+@keyframes bs-ride { 0% { transform: none; } 50% { transform: translateY(1px); } }
+@keyframes bs-wave-a { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes bs-wave-b { 0%, 49% { opacity: 0; } 50%, 100% { opacity: 1; } }
+@keyframes bs-flick-a { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes bs-flick-b { 0%, 49% { opacity: 0; } 50%, 100% { opacity: 1; } }
+@keyframes bs-blink { 0%, 64% { opacity: 1; } 65%, 100% { opacity: .35; } }
+@keyframes bs-glide { from { transform: translate(0, 0); } to { transform: translate(7px, 2px); } }
+@keyframes bs-beat-up { 0%, 6%, 12% { opacity: 1; } 3%, 9%, 15%, 100% { opacity: 0; } }
+@keyframes bs-beat-flat { 0%, 6%, 12% { opacity: 0; } 3%, 9%, 15%, 100% { opacity: 1; } }
+@keyframes bs-fall {
+  0% { transform: translate(calc(var(--ug) * -10), calc(var(--ug) * -30)); opacity: 1; }
+  99% { transform: translate(0, 0); opacity: 1; }
+  100% { transform: translate(0, 0); opacity: 0; }
+}
+@keyframes bs-flash { 0% { opacity: 1; } 55% { opacity: .6; } 100% { opacity: 0; } }
+@keyframes bs-arrive { 0% { opacity: 0; transform: scale(.5); } 100% { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-harbor *, .bs-harbor *::before, .bs-harbor *::after { animation: none !important; }
+  .bs-harbor * { transition-delay: 0s !important; }
+  .bs-colors .b, .bs-gull .flat, .bs-cell .mk.fl .b, .bs-fx { display: none; }
+}

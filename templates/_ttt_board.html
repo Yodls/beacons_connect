@@ -1,0 +1,136 @@
+{#
+  Tic-Tac-Toe on the harbour. Included by _board.html for a tictactoe game
+  when harbor_look is on (the switch at the top of _board.html).
+
+  The board is a floating dock seen from above: wooden beams round the edge,
+  ropes between the squares, pilings where the ropes cross, harbour water in
+  every square. Seat 0 plays the oars (the old X), seat 1 the life preserver
+  (the old O). Behind it is the view off the Harborwalk: sky, the far shore,
+  the lighthouse island, boats and a channel buoy, and at night the same
+  dark sky and lit windows as the page behind it.
+
+  Still drawings come from one cached file, static/harbor-tictactoe.svg, so a
+  live swap carries only this markup. The clouds, boats, shore and ripples
+  are the Harborwalk's own symbols from _harborwalk.html (always on the page,
+  outside #live), and the tower is #icon-lighthouse from _icons.html.
+  Styles: static/harbor-tictactoe.css, scoped to .ttt-harbor.
+
+  Every square is still a plain form with a submit button, so a move works
+  exactly as before, with or without JavaScript.
+#}
+{% set state = payload.state %}
+{% set cells = state.board %}
+{% set sprite = url_for('static', filename='harbor-tictactoe.svg') %}
+{% set art = ["oars", "ring"] %}
+{% set called = ["the oars", "the life preserver"] %}
+{% set spots = ["Top left", "Top middle", "Top right", "Middle left", "Centre",
+                "Middle right", "Bottom left", "Bottom middle", "Bottom right"] %}
+{% set mine = payload.seat %}
+{% set yours = payload.your_turn %}
+{% set over = game.status == "finished" %}
+{# The winning line, worked out from the board so the rules need not store it. #}
+{% set ns = namespace(line=[]) %}
+{% if over %}
+  {% for a, b, c in [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)] %}
+    {% if not ns.line and cells[a] is not none and cells[a] == cells[b] and cells[b] == cells[c] %}
+      {% set ns.line = [a, b, c] %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+<section class="ttt-harbor{% if yours %} yours{% endif %}{% if over %} over{% endif %}{% if ns.line %} has-line{% endif %}"
+         aria-label="Tic-Tac-Toe on the harbour">
+  <div class="ttt-scene">
+    <div class="ttt-art" aria-hidden="true">
+      <i class="ttt-sky"></i>
+      <i class="ttt-sky-n"></i>
+      <i class="ttt-stars"><i class="hw-star l white tw" style="left:6%;top:5px"></i><i class="hw-star s white" style="left:14%;top:19px"></i><i class="hw-star p blue" style="left:23%;top:9px"></i><i class="hw-star s gold tw" style="left:31%;top:24px;--tw:-1.2s"></i><i class="hw-star m gold" style="left:70%;top:6px"></i><i class="hw-star s white" style="left:77%;top:21px"></i><i class="hw-star p white tw" style="left:85%;top:11px;--tw:-2.1s"></i><i class="hw-star s blue" style="left:93%;top:4px"></i><i class="hw-star s white tw" style="left:48%;top:3px;--tw:-.6s"></i></i>
+      <svg class="ttt-cloud c1" width="70" height="9" focusable="false"><use href="#hw-cloud-e"/></svg>
+      <svg class="ttt-cloud c2" width="30" height="13" focusable="false"><use href="#hw-cloud-d" transform="matrix(-1 0 0 1 30 0)"/></svg>
+      <svg class="ttt-cloud c3" width="42" height="7" focusable="false"><use href="#hw-cloud-f"/></svg>
+      <svg class="ttt-cloud c4" width="54" height="22" focusable="false"><use href="#hw-cloud-b"/></svg>
+      <i class="ttt-gull"><svg class="up" width="9" height="4" focusable="false"><use href="{{ sprite }}#ttt-gull-up"/></svg><svg class="flat" width="9" height="4" focusable="false"><use href="{{ sprite }}#ttt-gull-flat"/></svg></i>
+      <svg class="ttt-shore" width="100%" height="20" focusable="false"><rect width="100%" height="20" fill="url(#hw-shore)"/></svg>
+      <svg class="ttt-lit a" width="100%" height="20" focusable="false"><rect width="100%" height="20" fill="url(#hw-lit-a)"/></svg>
+      <svg class="ttt-lit b" width="100%" height="20" focusable="false"><rect width="100%" height="20" fill="url(#hw-lit-b)"/></svg>
+      <i class="ttt-water">
+        <svg class="ttt-ripples" width="100%" height="100%" focusable="false"><rect width="100%" height="56" fill="url(#hw-rip-far)"/><rect y="56" width="100%" height="100%" fill="url(#hw-rip-near)"/></svg>
+        <svg class="ttt-boat" style="left:4%;top:1px" width="5" height="4" focusable="false"><use href="#hw-boat-far"/></svg>
+        <svg class="ttt-boat" style="left:13%;top:3px" width="7" height="3" focusable="false"><use href="#hw-boat-motor"/></svg>
+        <svg class="ttt-boat" style="left:26%;top:2px" width="5" height="3" focusable="false"><use href="#hw-boat-fardark"/></svg>
+        <svg class="ttt-boat" style="left:71%;top:2px" width="5" height="4" focusable="false"><use href="#hw-boat-far"/></svg>
+        <svg class="ttt-boat" style="left:96%;top:3px" width="5" height="3" focusable="false"><use href="#hw-boat-fardark"/></svg>
+        <svg class="ttt-boat bob" style="left:9%;top:12px;animation-delay:-1.3s" width="9" height="9" focusable="false"><use href="#hw-boat-mid"/></svg>
+        <svg class="ttt-boat bob" style="left:88%;top:34px;animation-delay:-.4s" width="9" height="9" focusable="false"><use href="#hw-boat-mid"/></svg>
+        <svg class="ttt-boat bob near" style="animation-delay:-1.8s" width="13" height="14" focusable="false"><use href="#hw-boat-near"/></svg>
+      </i>
+      <i class="ttt-tint"></i>
+      <i class="ttt-isle">
+        <i class="ttt-beam l"></i><i class="ttt-beam r"></i><i class="ttt-glow"></i>
+        <svg class="rock" width="36" height="38" focusable="false"><use href="{{ sprite }}#ttt-isle"/></svg>
+        <svg class="tower" width="16" height="24" focusable="false"><use href="#icon-lighthouse"/></svg>
+        <i class="ttt-surf"><svg class="f1" width="40" height="3" focusable="false"><use href="{{ sprite }}#ttt-surf-a"/></svg><svg class="f2" width="40" height="3" focusable="false"><use href="{{ sprite }}#ttt-surf-b"/></svg></i>
+      </i>
+      <i class="ttt-buoy"><svg width="7" height="13" focusable="false"><use href="{{ sprite }}#ttt-buoy"/></svg><i class="lamp"></i></i>
+    </div>
+
+    <div class="ttt-dock">
+      <svg class="ttt-boardart" viewBox="0 0 108 108" focusable="false" aria-hidden="true"><use href="{{ sprite }}#ttt-board"/><path class="ttt-glint g0" d="M13 30h1v1h-1zM78 29h1v1h-1zM26 53h1v1h-1zM92 63h1v1h-1zM15 76h1v1h-1zM83 95h1v1h-1z"/><path class="ttt-glint g1" d="M15 19h1v1h-1zM58 30h1v1h-1zM24 55h1v1h-1zM48 57h1v1h-1zM30 80h1v1h-1zM59 81h1v1h-1z"/><path class="ttt-glint g2" d="M58 23h1v1h-1zM89 13h1v1h-1zM61 52h1v1h-1zM86 48h1v1h-1zM60 76h1v1h-1zM92 86h1v1h-1z"/></svg>
+      {# Keeps the "board ttt" classes, so anything that measures the board
+         still finds it; its squares are .spot rather than .cell, so the
+         generic board-button rules in chat.html leave them alone. #}
+      <div class="board ttt">
+        {% for cell in cells %}
+          {% set i = loop.index0 %}
+          <form method="post" action="{{ url_for('game_move', game_id=game.id) }}">
+            <input type="hidden" name="move" value="{{ i }}" />
+            <button class="spot{% if cell is not none %} p{{ cell }}{% endif %}{% if i in ns.line %} win{% endif %}"
+                    type="submit"
+                    aria-label="{{ spots[i] }}: {{ called[cell] if cell is not none else 'empty' }}"
+                    {% if cell is not none or not yours %}disabled{% endif %}>
+              {%- if cell is not none -%}
+                <svg class="piece" style="--n:{{ i }}" viewBox="0 0 23 23" focusable="false" aria-hidden="true"><use href="{{ sprite }}#ttt-{{ art[cell] }}"/></svg>
+              {%- elif yours -%}
+                {# Your own piece, faint, shown on hover and focus: where it would land. #}
+                <svg class="piece ghost" viewBox="0 0 23 23" focusable="false" aria-hidden="true"><use href="{{ sprite }}#ttt-{{ art[mine] }}"/></svg>
+              {%- endif -%}
+            </button>
+          </form>
+        {% endfor %}
+      </div>
+      <svg class="ttt-posts" viewBox="0 0 108 108" focusable="false" aria-hidden="true"><use href="{{ sprite }}#ttt-pilings"/></svg>
+    </div>
+
+    {# Whose turn, as _board.html says it for the other games, with the
+       pieces named. The little picture is your piece while the game is on,
+       and the winner's once it is over. #}
+    {% if over %}
+      {% set shown = (none if payload.outcome == "draw" else (mine if payload.you_won else 1 - mine)) %}
+    {% else %}
+      {% set shown = mine %}
+    {% endif %}
+    <p class="status{% if yours %} yours{% endif %}{% if over and payload.you_won %} won{% endif %}">
+      {%- if shown is not none -%}
+        <svg class="mark" viewBox="0 0 23 23" focusable="false" aria-hidden="true"><use href="{{ sprite }}#ttt-{{ art[shown] }}"/></svg>
+      {%- endif -%}
+      <span>
+      {%- if over -%}
+        {%- if payload.outcome == "draw" -%}
+          A draw. Nobody went overboard.
+        {%- elif payload.outcome == "resigned" and payload.you_won -%}
+          {{ payload.opponent }} resigned, so you win.
+        {%- elif payload.outcome == "resigned" -%}
+          You resigned.
+        {%- elif payload.you_won -%}
+          You won with {{ called[mine] }}.
+        {%- else -%}
+          {{ payload.opponent }} won with {{ called[1 - mine] }}.
+        {%- endif -%}
+      {%- elif yours -%}
+        Your turn. You're {{ called[mine] }}.
+      {%- else -%}
+        Waiting for {{ payload.opponent }}. You're {{ called[mine] }}.
+      {%- endif -%}
+      </span>
+    </p>
+  </div>
+</section>

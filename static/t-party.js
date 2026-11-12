@@ -2239,6 +2239,42 @@
     /* ---------- the HUD and the side windows ---------- */
     const heartSvg = '<svg viewBox="0 0 9 8" aria-hidden="true" focusable="false"><path class="o" d="M1 0h2v1h1v1h1V1h1V0h2v1h1v3H8v1H7v1H6v1H5v1H4V7H3V6H2V5H1V4H0V1h1z"/><path class="f" d="M1 1h2v1h1v1h1V2h1V1h2v3H7v1H6v1H5v1H4V6H3V5H2V4H1z"/><path class="h" d="M2 2h1v1H2z"/></svg>';
     (function hearts() { const box = $("tp-health"); for (let i = 0; i < w.maxHealth; i++) { const h = document.createElement("i"); h.className = "tp-heart"; h.innerHTML = heartSvg; box.append(h); } })();
+    /* the legend under the game: each thing that hurts, and the door, seat
+       and green button, drawn from the game's own sprites at a whole scale */
+    (function legendIcons() {
+      const sketch = (wd, ht, draw) => { const c = canvasOf(wd, ht), g = pen(c); draw((x, y, a, b, col) => { g.fillStyle = col; g.fillRect(x, y, a, b); }); return c; };
+      /* the door between cars, shutter down and padlocked, as paintGates draws it */
+      const door = () => sketch(11, 17, R => {
+        R(0, 0, 11, 17, INK); R(1, 1, 9, 15, "#8c98a2");
+        for (let y = 1; y < 16; y += 3) R(1, y, 9, 1, "#a9b3bb");
+        for (let k = 0; k < 9; k++) R(1 + k, 16, 1, 1, k % 2 ? INK : PAL.gold);
+        R(4, 5, 3, 1, INK); R(4, 6, 1, 2, INK); R(6, 6, 1, 2, INK); R(3, 8, 5, 4, PAL.gold); R(5, 9, 1, 1, INK);
+      });
+      /* the green button on its pedestal in the cab, as paintCab draws it */
+      const button = () => sketch(15, 16, R => {
+        R(0, 0, 15, 16, INK); R(1, 1, 13, 15, "#506879"); R(1, 12, 13, 1, "#3a4a5a");
+        R(3, 4, 9, 6, "#163e31"); R(4, 3, 7, 5, PAL.green); R(5, 3, 3, 1, PAL.greenHi);
+      });
+      const icons = {
+        dog: () => dogArt(0).idle.l, cat: () => catArt(0).carrier, turkey: () => turkeyArt().idle.l,
+        scooter: () => fixed.scooter, bike: () => fixed.bike, armchair: () => fixed.armchair, cart: () => fixed.cart,
+        seat: () => fixed.seat, door, button
+      };
+      root.querySelectorAll("canvas[data-tp-icon]").forEach(c => {
+        const make = icons[c.dataset.tpIcon];
+        if (!make) return;
+        /* trim the sprite's empty margin, so small ones (the turkey) read */
+        const src = make(), px = pen(src).getImageData(0, 0, src.width, src.height).data;
+        let x0 = src.width, y0 = src.height, x1 = -1, y1 = -1;
+        for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) {
+          if (px[(y * src.width + x) * 4 + 3]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        }
+        if (x1 < 0) return;
+        const sw = x1 - x0 + 1, sh = y1 - y0 + 1, k = Math.max(1, Math.min(Math.floor(50 / sw), Math.floor(36 / sh)));
+        c.width = sw * k; c.height = sh * k;
+        const g = pen(c); g.drawImage(src, x0, y0, sw, sh, 0, 0, c.width, c.height);
+      });
+    })();
     function avatar(p) {
       const art = riderArt(lookOf(p.id, p.color)), src = art.stand.r;
       const c = canvasOf(src.width * 2, src.height * 2), g = pen(c);
