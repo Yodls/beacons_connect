@@ -1,0 +1,52 @@
+{#
+  "Matched with ..." -- the window over a game board the moment it starts, so
+  the board does not just appear. Drawn from app.match_splash().
+
+  Used two ways, from this one macro:
+    - chat.html draws it on the page (first=true, class ms-first) the first
+      time a player opens a board they have never seen: a matchmaking match,
+      or an invite accepted from the bell or the lobby;
+    - _gamepane.html keeps it in a <template class="ms-tpl"> inside the pane,
+      and the chat page's script clones it when an invite turns into a board
+      live, in an open chat.
+
+  It leaves by itself: CSS plays it out after a delay and leaves it hidden
+  and click-through, so it works with no JavaScript. The script lets a tap or
+  a key close it early and takes the node away. Styles are in chat.html.
+
+  No heading element in here: tests slice pages on <h2>, and this is a
+  moment, not a section. The title is a <p class="bar-title">.
+#}
+{%- import "_ui.html" as ui -%}
+{#
+  go_url set means the /games popup: it holds five seconds and then the page
+  loads that board (the script), so the whole window carries data-go and the
+  hint is a real link to it, which still reaches the board with no
+  JavaScript. Unset means the window over the board in a chat, which plays
+  itself out. first adds ms-first, the marker the page binds on load.
+#}
+{%- macro window(splash, me, first=false, go_url=None) -%}
+<div class="matchsplash{% if first %} ms-first{% endif %}{% if go_url %} ms-hold{% endif %}" role="status"
+     {%- if go_url %} data-go="{{ go_url }}"{% endif %}>
+  <div class="ms-win">
+    <div class="bar ms-bar">
+      {{ ui.icon("game") }}<p class="bar-title">{{ splash.title }}</p><span class="grip"></span>
+    </div>
+    <div class="ms-body">
+      <div class="ms-vs">
+        <span class="ms-side ms-me">{{ ui.avatar(me.name, me.id) }}<b>You</b></span>
+        <span class="ms-badge" aria-hidden="true">VS</span>
+        <span class="ms-side ms-them">{{ ui.avatar(splash.opponent, splash.opponent_id) }}<b>{{ splash.opponent }}</b></span>
+      </div>
+      <p class="ms-line">{{ splash.lead }} <b>{{ splash.opponent }}</b></p>
+      <p class="ms-meta">
+        <span class="ms-game">{{ splash.label }}</span>
+        {%- if splash.turn %} <span class="ms-turn">{{ splash.turn }}</span>{% endif %}
+      </p>
+      <span class="ms-fill" aria-hidden="true"><span></span></span>
+      {% if go_url %}<a class="ms-hint" href="{{ go_url }}">Tap to play now{{ ui.icon("arrow") }}</a>
+      {%- else %}<p class="ms-hint">Tap anywhere to play</p>{% endif %}
+    </div>
+  </div>
+</div>
+{%- endmacro -%}

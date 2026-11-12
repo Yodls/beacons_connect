@@ -1,5 +1,6 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
+{% import "_matchsplash.html" as ms %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block appstyle %}
@@ -1027,6 +1028,8 @@
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: var(--drop);
       }
+
+      {% include "_matchsplash.css" %}
 {% endblock %}
 
 {% block main %}
@@ -1418,9 +1421,60 @@
       }
     })();
   </script>
+
+  {# The first time this player opens a board that has just started:
+     "Matched with ..." or "Game on with ..." over it (_matchsplash.html).
+     app.chat() asks before it stamps the board as seen, so a reload does
+     not bring it back. #}
+  {% if show_splash and splash %}{{ ms.window(splash, current_user, first=true) }}{% endif %}
 {% endblock %}
 
 {% block script %}
+<script>
+  // The "Matched with ..." window (_matchsplash.html). CSS plays it in and,
+  // 2.4 seconds later, out; this lets a tap or a key close it sooner and
+  // takes the node away once it has gone, with a timer in case no animation
+  // ever ends. It never takes focus, so a key pressed to close it still does
+  // what it would have done.
+  (function () {
+    function bind(node) {
+      if (!node || node.dataset.bound) { return; }
+      node.dataset.bound = "1";
+      var done = false;
+      function gone() {
+        if (done) { return; }
+        done = true;
+        document.removeEventListener("keydown", close, true);
+        node.remove();
+      }
+      function close() {
+        if (node.classList.contains("ms-going")) { return; }
+        node.classList.add("ms-going");
+        setTimeout(gone, 400);
+      }
+      node.addEventListener("click", close);
+      node.addEventListener("animationend", function (event) {
+        if (event.target === node && event.animationName === "ms-out") { gone(); }
+      });
+      document.addEventListener("keydown", close, true);
+      setTimeout(gone, 3200);
+    }
+    window.BeaconSplash = {
+      bind: bind,
+      // A board that has just arrived live: the window kept in its pane,
+      // cloned onto the page. Not over one already showing.
+      show: function (scope) {
+        var tpl = scope && scope.querySelector("template.ms-tpl");
+        if (!tpl || !tpl.content || !tpl.content.firstElementChild) { return; }
+        if (document.querySelector(".matchsplash")) { return; }
+        var node = tpl.content.firstElementChild.cloneNode(true);
+        (document.querySelector("main.page") || document.body).appendChild(node);
+        bind(node);
+      }
+    };
+    document.querySelectorAll(".matchsplash.ms-first").forEach(bind);
+  })();
+</script>
 <script src="{{ url_for('static', filename='naval-battleship.js') }}"></script>
 <script src="{{ url_for('static', filename='chess-board.js') }}"></script>
 {# The small map in the Meet up drawer. Mounted when the drawer opens. #}
@@ -2711,18 +2765,21 @@
 
       var pane = data.game;
       if (pane && slot && wrap && pane.token !== token) {
+        var was = token;
         token = pane.token;
         // Not under a chess player's finger: a piece in the hand, or one
         // chosen, waits for the swap until it is put down.
         if (window.BeaconChess && window.BeaconChess.busy()) {
-          window.BeaconChess.whenIdle(function () { swapPane(pane); });
+          window.BeaconChess.whenIdle(function () { swapPane(pane, was); });
         } else {
-          swapPane(pane);
+          swapPane(pane, was);
         }
       }
     }
 
-    function swapPane(pane) {
+    // `was` is the pane's token before this swap. Given only by the live
+    // channel; a resync after a refused move leaves it out.
+    function swapPane(pane, was) {
       // DOMParser rather than innerHTML. This markup is server-rendered and
       // already escaped, but chat.html is checked file-wide for innerHTML
       // assignment -- the guard that keeps a message body from ever being
@@ -2744,6 +2801,17 @@
       bindChess();
       // Live updates replace the board DOM; bind the naval controls again.
       if (window.BeaconNaval) { window.BeaconNaval.mountMultiplayer(); }
+      // A game that has just started in front of them (an invite accepted,
+      // a rematch, a match made while this chat was open): the window over
+      // the new board. After the swap, so it never holds the board back.
+      // Tokens are "id:version:status...": not for the same game already
+      // under way, which is every move and every coming and going.
+      if (was !== undefined && window.BeaconSplash) {
+        var old = String(was).split(":"), cur = String(pane.token).split(":");
+        if (cur[2] === "active" && (old[0] !== cur[0] || old[2] !== "active")) {
+          window.BeaconSplash.show(slot);
+        }
+      }
     }
 
     bindChess();

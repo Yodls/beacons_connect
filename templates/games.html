@@ -1,5 +1,6 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
+{% import "_matchsplash.html" as ms %}
 {% block title %}Games{% endblock %}
 
 {#
@@ -165,6 +166,7 @@
       .pill.inv  { background: var(--sky); }
       .pill.done { background: var(--beacon); color: #fff; }
       .pill.dead { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+      {% include "_matchsplash.css" %}
 {% endblock %}
 
 {#
@@ -405,6 +407,11 @@
       {% endif %}
     </div>
   </div>
+
+  {# Just matched (?matched=<id>): the "Matched with ..." window over the
+     lobby. The script holds it a few seconds and then loads the board; the
+     hint is a link there, so it works with no JavaScript. #}
+  {% if matched_splash and matched_url %}{{ ms.window(matched_splash, current_user, go_url=matched_url) }}{% endif %}
 {% endblock %}
 
 {% block script %}
@@ -425,6 +432,36 @@
     }
     form.addEventListener("change", sync);
     sync();
+  })();
+</script>
+<script>
+  // The "Matched with ..." window on /games (_matchsplash.html). It holds
+  // five seconds and then loads the board (data-go); a tap, click or key
+  // goes at once. One binder for both students: the one who pressed Find a
+  // player gets the window server rendered on the page (ms-first), and the
+  // one who was waiting has it handed over by the live channel below.
+  (function () {
+    var HOLD = 5000;
+    function bind(node) {
+      if (!node || node.dataset.bound) { return; }
+      node.dataset.bound = "1";
+      var url = node.dataset.go;
+      if (!url) { return; }
+      var went = false;
+      function go() {
+        if (went) { return; }
+        went = true;
+        document.removeEventListener("keydown", go, true);
+        window.location.assign(url);
+      }
+      var timer = setTimeout(go, HOLD);
+      // A tap anywhere skips the wait. The hint is a link to the same board,
+      // so a click lands there with or without this.
+      node.addEventListener("click", function () { clearTimeout(timer); go(); });
+      document.addEventListener("keydown", go, true);
+    }
+    window.BeaconMatch = { bind: bind };
+    document.querySelectorAll(".matchsplash[data-go]").forEach(bind);
   })();
 </script>
 {% if seeking %}
@@ -453,13 +490,29 @@
       apply: function (data) {
         var seek = data && data.seek;
         if (!seek || !seek.url) { return; }
-        // Recorded on the box before leaving, the way the game pane records
-        // its token: it makes the decision observable, which matters because
-        // the browser harness cannot perform a navigation.
+        // Recorded on the box the moment it is known, the way the game pane
+        // records its token: it makes the decision observable, which matters
+        // because the browser harness cannot perform a navigation.
         var box = document.getElementById("seekbox");
         if (box) { box.dataset.found = seek.url; }
-        // A full load rather than a swap: the board is a different page with
-        // its own stylesheet and its own live registration.
+        // One window only, even if the channel answers again in the hold.
+        if (document.querySelector(".matchsplash")) { return; }
+        // The "Matched with ..." window, handed over ready: show it, and the
+        // binder holds it five seconds and then loads the board. Without the
+        // markup (or JavaScript to parse it) the board loads straight away,
+        // the way it always did.
+        if (seek.html && window.BeaconMatch && window.DOMParser) {
+          // DOMParser rather than innerHTML: the markup is server rendered
+          // and already escaped, but parsing it this way keeps the page free
+          // of innerHTML assignment, as chat.html is.
+          var parsed = new DOMParser().parseFromString(seek.html, "text/html");
+          var node = parsed.body.firstElementChild;
+          if (node) {
+            (document.querySelector("main.page") || document.body).appendChild(node);
+            window.BeaconMatch.bind(node);
+            return;
+          }
+        }
         window.location.assign(seek.url);
       }
     });

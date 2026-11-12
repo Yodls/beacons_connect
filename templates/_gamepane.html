@@ -24,6 +24,7 @@
   markup would throw away a half-made move.
 #}
 {%- import "_ui.html" as ui -%}
+{%- import "_matchsplash.html" as ms -%}
 <div class="paneset" data-token="{{ game_token }}">
   {% if invite %}
     <div class="invitebar">
@@ -125,5 +126,14 @@
       </div>
     </div>
   </div>
+  {% endif %}
+
+  {# The "Game on ..." window for this game (_matchsplash.html), inert until
+     the chat page clones it: that happens when the pane turns from an invite
+     into a board live, in an open chat. Only for an accepted invite, which
+     is the only thing that swaps in live here; a match shows its window on
+     /games instead, so its board stays plain. #}
+  {% if splash and splash.invited and game and game.status == "active" %}
+    <template class="ms-tpl">{{ ms.window(splash, current_user) }}</template>
   {% endif %}
 </div>

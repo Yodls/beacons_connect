@@ -22,6 +22,7 @@ from flask import (
     jsonify,
     redirect,
     render_template,
+    render_template_string,
     request,
     session,
     url_for,
@@ -2557,6 +2558,15 @@ def chat(kind, target_id):
                          meetup_ask_for(kind, parent), kind, target_id)
             if opponent_id else {})
     game_seat = game.seat_of(current_user.id) if game is not None else None
+    # The first time this player opens this board: never stamped as seen.
+    # Asked before mark_present stamps it, and that stamp is what keeps the
+    # "Matched with ..." window to this one opening. Only for an accepted
+    # invite now: a match shows its window on /games before the board, so
+    # the board arrives plain (match_splash carries the "invited" flag).
+    splash = pane.get("splash")
+    first_look = (game is not None and game.status == "active"
+                  and game_seat is not None and game.seen_for(game_seat) is None
+                  and splash is not None and splash.get("invited"))
 
     # Opening the board counts as being at it, the same as the live request
     # that follows a moment later. Has to come after the game is resolved --
@@ -2648,6 +2658,8 @@ def chat(kind, target_id):
         meetup_ask=pane.get("meetup_ask"),
         meet_kind=pane.get("meet_kind"),
         meet_id=pane.get("meet_id"),
+        splash=splash,
+        show_splash=first_look,
         # Asked of live_game_with rather than the pane: an invite is a message
         # now, so the pane does not see it, and offering to start a second
         # game during one would be wrong.
@@ -2738,6 +2750,42 @@ def pane_token(game, seat, invite, meetup=None):
     return token
 
 
+def match_splash(game, seat):
+    """What the window over a newly started board says (_matchsplash.html):
+    who you are playing, at what, and whose move it is.
+
+    "Game on" when an invite stands behind the game: game_event writes an
+    "invited" line for every invite, rematches included. "Matched" when
+    matchmaking made it, which starts the game with no invite at all.
+    None unless the game is under way and you have a seat at it."""
+    if game is None or game.status != "active" or seat is None:
+        return None
+    other_id = game.player_b if seat == 0 else game.player_a
+    other = db.session.get(User, other_id)
+    name = other.name if other else "Opponent"
+    invited = db.session.scalar(
+        db.select(Message.id)
+        .where(Message.game_id == game.id, Message.event == "invited")
+        .limit(1)) is not None
+    mover = rules.turn_seat(game.kind, game.state)
+    if mover is None:
+        # Battleship, both fleets still being set: there is no first move.
+        turn = ("Set your fleet to start."
+                if rules.can_move(game.kind, game.state, seat)
+                else f"{name} is setting their fleet.")
+    elif mover == seat:
+        turn = "You go first." if game.version == 0 else "Your turn."
+    else:
+        turn = f"{name} goes first." if game.version == 0 else f"{name}'s turn."
+    return {"title": "Game on!" if invited else "Matched!",
+            "lead": "Game on with" if invited else "Matched with",
+            "opponent": name, "opponent_id": other_id,
+            "label": rules.LABELS.get(game.kind, game.kind), "turn": turn,
+            # An accepted invite still shows its window over the board; a
+            # match shows it on /games instead, so the board stays plain.
+            "invited": invited}
+
+
 def pane_context(other_id, game, invite, meetup=None, kind=None, target_id=None):
     """What _gamepane.html is drawn from, for the page and for the poller.
     `kind`/`target_id` name this chat, for the meetup banner's form to come
@@ -2747,6 +2795,9 @@ def pane_context(other_id, game, invite, meetup=None, kind=None, target_id=None)
     return {
         "game": game, "seat": seat,
         "payload": game_payload(game, seat) if game is not None else None,
+        # The "Matched with ..." window, kept in the pane as a <template> so
+        # the page can show it when an invite turns into a board live.
+        "splash": match_splash(game, seat),
         "game_token": pane_token(game, seat, invite, meetup),
         "invite": invite,
         "invite_from": other.name if other else "Somebody",
@@ -3044,14 +3095,26 @@ def notice_slice(user_id, seen, skip_url=None):
     }
 
 
+def match_splash_html(splash, go_url):
+    """The "Matched with ..." window as markup, for the /games popup: the
+    same macro the page uses, rendered here so the waiting student's channel
+    can hand the window over ready to show."""
+    return render_template_string(
+        '{% import "_matchsplash.html" as ms %}'
+        "{{ ms.window(splash, current_user, go_url=go_url) }}",
+        splash=splash, go_url=go_url)
+
+
 def seek_answer(user_id):
     """Whether a waiting player has been matched, and where their board is.
 
     Only asked for on the answering branch, which the notice written by
     start_random_game has already woken: there is nothing extra to probe for.
+    Once matched it carries the "Matched with ..." window (html) too, which
+    the page holds for a few seconds before it loads the board.
     """
     if seek_row(user_id) is not None:
-        return {"waiting": True, "url": None}
+        return {"waiting": True, "url": None, "html": None}
 
     # No longer queued, so either they were matched or they cancelled. A live
     # game is the difference.
@@ -3062,11 +3125,14 @@ def seek_answer(user_id):
         .order_by(Game.updated_at.desc(), Game.id.desc())
     )
     if game is None:
-        return {"waiting": False, "url": None}
+        return {"waiting": False, "url": None, "html": None}
 
-    kind, target_id = game_home(game, game.seat_of(user_id))
-    return {"waiting": False,
-            "url": url_for("chat", kind=kind, target_id=target_id)}
+    seat = game.seat_of(user_id)
+    kind, target_id = game_home(game, seat)
+    url = url_for("chat", kind=kind, target_id=target_id)
+    splash = match_splash(game, seat)
+    return {"waiting": False, "url": url,
+            "html": match_splash_html(splash, url) if splash else None}
 
 
 def live_reply(kind, target_id):
@@ -3968,6 +4034,21 @@ def game_lobby():
         })
 
     waiting = seek_row()
+    # Just matched (?matched=<id>, from game_seek): the "Matched with ..."
+    # window over the lobby, which holds a few seconds and then loads the
+    # board. Only for a game of theirs that is active and that they have not
+    # opened yet, so a stale or copied link just shows the normal lobby.
+    matched_splash = matched_url = None
+    matched_id = request.args.get("matched", type=int)
+    if matched_id is not None:
+        fresh = db.session.get(Game, matched_id)
+        seat = fresh.seat_of(current_user.id) if fresh is not None else None
+        if (fresh is not None and seat is not None
+                and fresh.status == "active" and fresh.seen_for(seat) is None):
+            kind, target_id = game_home(fresh, seat)
+            matched_url = url_for("chat", kind=kind, target_id=target_id)
+            matched_splash = match_splash(fresh, seat)
+
     # The Scoreboard: who has won the most finished games, every kind
     # together. Names follow the rule every list of people here does
     # (visible_people): an unlisted account shows only to its friends and
@@ -3999,6 +4080,8 @@ def game_lobby():
                        if waiting else None),
         opponents=matching.active_matches(current_user.id),
         kinds=[(k, rules.LABELS[k]) for k in rules.PLAYABLE],
+        matched_splash=matched_splash,
+        matched_url=matched_url,
     )
 
 
@@ -4127,9 +4210,12 @@ def game_seek():
         db.session.execute(
             db.delete(GameSeek).where(GameSeek.user_id == current_user.id))
         game, where, partner = start_random_game(kind, partner_id)
-        flash(f"Matched with {partner.name if partner else 'another student'}. "
-              "Open the chat to play.")
-        return redirect(url_for("chat", kind=where[0], target_id=where[1]))
+        # Not straight to the board: back to /games, where the "Matched
+        # with ..." window (_matchsplash.html) holds a few seconds and then
+        # loads the board. The waiting student gets the same window through
+        # their live channel (seek_answer). No flash: the window says who
+        # and what.
+        return redirect(url_for("game_lobby", matched=game.id))
 
     # Nobody about: wait. Re-picking a different game replaces the slot rather
     # than adding a second, because the table holds one row per student.
