@@ -18,6 +18,25 @@
         .home { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
         .hello, .home > .waiting, .quick { grid-column: 1 / -1; }
         .home .grid.two { grid-template-columns: minmax(0, 1fr); }
+
+        /* The suggestions fill their window exactly. The list is given a
+           basis of 0, so it adds nothing to the window's own height and the
+           chats go on setting the row as they always did; it then grows
+           into whatever room is left and cuts off what will not fit. What
+           used to happen instead was that the script dropped any card that
+           would not fit whole, and the few hundred pixels left over after
+           the last one stayed as blank white panel. */
+        .home > section.sec-friend { display: flex; flex-direction: column; }
+        .home .sec-friend > .grid { flex: 1 1 0; min-height: 0; overflow: hidden; }
+        /* Faded into the bottom edge, but only when a card is really cut:
+           otherwise the last one would fade for no reason. */
+        .home .sec-friend.is-clipped > .grid {
+          -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent);
+                  mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent);
+        }
+        /* Half a form is not something to press. The script also takes it
+           out of the tab order and hides it from a screen reader. */
+        .home .sec-friend .card.peek { pointer-events: none; }
       }
 
       /* ---------- the welcome window: a night harbour ----------
@@ -370,9 +389,15 @@
       @media (max-width: 370px) { .quick-label { font-size: .8rem; padding: 4px 6px; } }
 
       /* ---------- People you might like: as many as fit ----------
-         Every suggestion is drawn; beside the chats the script at the foot
-         of the page hides the ones that would not fit in the chats' height.
-         On a phone, and without it, the stylesheet shows five. */
+         Every suggestion is drawn; beside the chats the window takes the
+         room that is left (the rule in the layout block above) and the one
+         card that will not fit whole is left cut off and faded, as the
+         reason to press See all. The script at the foot of the page marks
+         that card and drops the ones below it.
+
+         On a phone, and with no JavaScript, the stylesheet shows five: the
+         script's own inline display is what lifts this cap on a wide
+         screen, so it must go on setting one. */
       .home .sec-friend .grid > .card:nth-child(n+6) { display: none; }
       .home .sec-friend .seeall { font-size: .9rem; font-weight: 700; }
 
@@ -529,40 +554,63 @@
   </section>
 </div>
 
-{# Beside the chats on a wide screen, the suggestions fill their window to
-   the chats' height and no further: every card is drawn, and this hides the
-   ones that would not fit, so the two windows always end on the same line
-   with the chats setting it. Measured again when the window is resized. It
-   polls nothing (see the note above the markup). Below 900px the stylesheet
-   shows five. #}
+{# Beside the chats on a wide screen, the suggestions fill their window
+   exactly: the stylesheet above gives the list the room that is left and
+   cuts off what will not fit, and this marks the one card that got cut, so
+   it can be faded into the bottom edge and taken out of reach, and hides
+   the ones below it. The two windows still end on the same line, with the
+   chats setting it, and the leftover is somebody to meet rather than blank
+   panel. Measured again when the window is resized. It polls nothing (see
+   the note above the markup). Below 900px the stylesheet shows five. #}
 <script>
   (function () {
-    // section, not .sec-chat alone: the welcome window above is a .win
-    // with the same colour class.
-    var chats = document.querySelector(".home > section.sec-chat");
     var win = document.querySelector(".home > section.sec-friend");
-    if (!chats || !win) { return; }
-    var cards = Array.prototype.slice.call(win.querySelectorAll(".grid > .card"));
-    var foot = win.querySelector(".seeall");
+    var grid = win ? win.querySelector(".grid") : null;
+    if (!grid) { return; }
+    var cards = Array.prototype.slice.call(grid.children).filter(
+      function (c) { return c.classList.contains("card"); });
+    if (!cards.length) { return; }
     var wide = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
+    // A sliver of a card reads as a rendering fault. This much of one reads
+    // as there being more to see.
+    var PEEK = 64;
+
+    function plain(c, shown) {
+      // display:block rather than "", because an inline style is what
+      // overrides the five-card cap in the stylesheet above.
+      c.style.display = shown ? "block" : "";
+      c.classList.remove("peek");
+      c.removeAttribute("aria-hidden");
+      c.querySelectorAll("a, button, input, select, textarea").forEach(
+        function (el) { el.removeAttribute("tabindex"); });
+    }
+
     function fit() {
       if (!document.contains(win)) { window.removeEventListener("resize", later); return; }
-      if (!wide || !wide.matches) {
-        cards.forEach(function (c) { c.style.display = ""; });
-        return;
-      }
-      cards.forEach(function (c) { c.style.display = "block"; });
-      // The chats' own height, with this window out of the row so the
-      // grid's stretch cannot inflate it.
-      win.style.display = "none";
-      var room = chats.getBoundingClientRect().height;
-      win.style.display = "";
-      var top = win.getBoundingClientRect().top;
-      var tail = (foot ? foot.getBoundingClientRect().height : 0) + 28;
-      // All measured before any is hidden: hiding one moves the rest up.
-      var bottoms = cards.map(function (c) { return c.getBoundingClientRect().bottom - top + tail; });
+      var open = !!wide && wide.matches;
+      cards.forEach(function (c) { plain(c, open); });
+      win.classList.remove("is-clipped");
+      if (!open) { return; }
+      // The window's own room, not the chats' height: the list is a flex
+      // item with a basis of 0, so this box is exactly what is left after
+      // the title bar and the link, however tall the row turned out.
+      var floor = grid.getBoundingClientRect().bottom;
+      var cut = false;
       cards.forEach(function (c, i) {
-        c.style.display = (i === 0 || bottoms[i] <= room) ? "block" : "none";
+        if (cut) { c.style.display = "none"; return; }
+        var box = c.getBoundingClientRect();
+        // Whole, or the only one there is room to show at all.
+        if (i === 0 || box.bottom <= floor + 1) { return; }
+        cut = true;
+        if (box.top <= floor - PEEK) {
+          c.classList.add("peek");
+          c.setAttribute("aria-hidden", "true");
+          c.querySelectorAll("a, button, input, select, textarea").forEach(
+            function (el) { el.setAttribute("tabindex", "-1"); });
+          win.classList.add("is-clipped");
+        } else {
+          c.style.display = "none";
+        }
       });
     }
     var timer = null;

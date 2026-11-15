@@ -606,7 +606,8 @@ ALERT_FIRST = 15            # and before the first
 # Which notices are alerted, and which chats a message alert is for: a
 # group, a club or the campus room is a room of people, and one post there
 # would mail all of them.
-ALERT_KINDS = {"message": "message", "meetup": "meetup", "game_invite": "game"}
+ALERT_KINDS = {"message": "message", "meetup": "meetup", "game_invite": "game",
+               "paired": "paired"}
 ALERT_CHATS = ("/chats/match/%", "/chats/pair/%")
 EMAIL_TYPES = ("alerts", "digest")
 # Where the two switches live: Profile Settings, Account and safety.
@@ -703,11 +704,16 @@ def claim_alert(notice_id, now):
 def alert_what(notice):
     """What the alert names, read back out of the notice's own sentence: the
     plan for a meetup ("asked to meet up: Chess · Fri 6 PM · Healey"), the
-    game for a challenge ("challenged you to Chess")."""
+    game for a challenge ("challenged you to Chess"), the activity for a
+    pairing ("Ann is up for Basketball too. You have been paired")."""
     body = notice.body.rstrip(".")
     for kind, cut in (("meetup", ": "), ("game_invite", " challenged you to ")):
         if notice.kind == kind and cut in body:
             return body.split(cut, 1)[1]
+    # This one is in the middle of the sentence rather than at the end of it,
+    # because the bell's wording reads better that way round.
+    if notice.kind == "paired" and " is up for " in body:
+        return body.split(" is up for ", 1)[1].split(" too", 1)[0]
     return None
 
 
@@ -2784,9 +2790,29 @@ def match_splash(game, seat):
             "lead": "Game on with" if invited else "Matched with",
             "opponent": name, "opponent_id": other_id,
             "label": rules.LABELS.get(game.kind, game.kind), "turn": turn,
+            # The game is named by the chip, not in the sentence: an
+            # in-person pairing is the other way round (pair_splash).
+            "what": None,
             # An accepted invite still shows its window over the board; a
             # match shows it on /games instead, so the board stays plain.
             "invited": invited}
+
+
+def pair_splash(pairing, me_id):
+    """What the window over /find says when the in-person queue pairs two
+    students: who they were matched with, and what for.
+
+    The same shape match_splash() gives, so one macro draws both. A pairing
+    has no board, so there is no game chip and no turn; the activity goes in
+    the sentence instead ("Matched with Jon for Basketball").
+    """
+    other_id = pairing.user_hi if pairing.user_lo == me_id else pairing.user_lo
+    other = db.session.get(User, other_id)
+    return {"title": "Matched!", "lead": "Matched with",
+            "opponent": other.name if other else "Somebody",
+            "opponent_id": other_id,
+            "what": pairing_label(pairing),
+            "label": None, "turn": None, "invited": False}
 
 
 def pane_context(other_id, game, invite, meetup=None, kind=None, target_id=None):
@@ -3098,14 +3124,17 @@ def notice_slice(user_id, seen, skip_url=None):
     }
 
 
-def match_splash_html(splash, go_url):
-    """The "Matched with ..." window as markup, for the /games popup: the
-    same macro the page uses, rendered here so the waiting student's channel
-    can hand the window over ready to show."""
+def match_splash_html(splash, go_url, stay_url=None):
+    """The "Matched with ..." window as markup, for the /games and /find
+    popups: the same macro the page uses, rendered here so the waiting
+    student's channel can hand the window over ready to show.
+
+    stay_url makes it the /find one, which asks rather than counting down.
+    """
     return render_template_string(
         '{% import "_matchsplash.html" as ms %}'
-        "{{ ms.window(splash, current_user, go_url=go_url) }}",
-        splash=splash, go_url=go_url)
+        "{{ ms.window(splash, current_user, go_url=go_url, stay_url=stay_url) }}",
+        splash=splash, go_url=go_url, stay_url=stay_url)
 
 
 def seek_answer(user_id):
@@ -3136,6 +3165,37 @@ def seek_answer(user_id):
     splash = match_splash(game, seat)
     return {"waiting": False, "url": url,
             "html": match_splash_html(splash, url) if splash else None}
+
+
+def pair_answer(user_id, after_id):
+    """Whether the in-person queue has paired this student since their page
+    last looked, and where that conversation is.
+
+    The answer for /find, as seek_answer is the answer for /games. It needs
+    no probe of its own in the waiting loop: pairing writes the `paired`
+    notice in the same commit, so the student's held request is already
+    coming back.
+
+    `after_id` is the highest pairing the page knows about, the way the
+    meetup cards carry their token. A pairing older than that has been seen,
+    so a reload never pops a window a second time, and leaving the queue
+    answers nothing at all.
+    """
+    pairing = db.session.scalars(
+        db.select(GamePairing)
+        .where(db.or_(GamePairing.user_lo == user_id,
+                      GamePairing.user_hi == user_id),
+               GamePairing.mode == "inperson",
+               GamePairing.status == "open",
+               GamePairing.id > after_id)
+        .order_by(GamePairing.id)
+    ).first()
+    if pairing is None:
+        return None
+    url = url_for("chat", kind="pair", target_id=pairing.id)
+    return {"id": pairing.id, "url": url,
+            "html": match_splash_html(pair_splash(pairing, user_id), url,
+                                      stay_url=url_for("find_game"))}
 
 
 def live_reply(kind, target_id):
@@ -3206,6 +3266,11 @@ def live_reply(kind, target_id):
     # campus room, so without this the "2 of 4 going" on a card sat stale
     # under whoever posted it until they reloaded.
     card_token = request.args.get("cards", "")
+    # The highest in-person pairing /find already knows about, so that page
+    # is told when the queue pairs the student. None from every other page,
+    # which is how a page that knows nothing of this is never answered about
+    # it; 0 from /find itself, meaning "any pairing at all is news to me".
+    paired_token = request.args.get("paired", type=int)
     # And the reactions it is showing, the same way: a reaction writes no
     # message, so nothing else here would wake for one. Only probed when the
     # page sent one -- an empty token is a page that does not show them, and
@@ -3364,6 +3429,8 @@ def live_reply(kind, target_id):
                     skip_url=notices.chat_url(kind, target_id) if watching
                     else None),
                 "seek": seek_answer(me) if seeking else None,
+                "pair": (pair_answer(me, paired_token)
+                         if paired_token is not None else None),
             })
 
         if time.monotonic() >= deadline:
@@ -4891,6 +4958,22 @@ def find_game():
             "other": other.name if other else "Partner",
         })
 
+    # The highest one they already have, for the live channel to start from:
+    # anything newer than this is a pairing made while the page was open.
+    paired_token = max((row["id"] for row in pairings), default=0)
+
+    # The window for a pairing just made, shown once. find_queue leaves the
+    # id here rather than in the address because the enhancer swaps only the
+    # region a form names, so a redirect to the same path never navigates and
+    # a query string would be read by nobody. Popped, so a reload is quiet.
+    shown = session.pop("paired_window", None)
+    paired_splash = paired_url = None
+    fresh = db.session.get(GamePairing, shown) if shown else None
+    if (fresh is not None and fresh.status == "open"
+            and current_user.id in (fresh.user_lo, fresh.user_hi)):
+        paired_splash = pair_splash(fresh, current_user.id)
+        paired_url = url_for("chat", kind="pair", target_id=fresh.id)
+
     # How many others are waiting per activity, so the page is honest about
     # odds. Keyed by the folded name, because "Chess" and "chess" are one
     # queue now and counting them apart would say otherwise.
@@ -4931,8 +5014,13 @@ def find_game():
         custom_max=CUSTOM_GAME_MAX,
         posts=[post_payload(p, chats=rooms, flags=pins) for p in posts],
         pairings=pairings,
-        # What the board starts from, so the first live round is quiet.
+        # The "Matched with ..." window, for the student who was just paired.
+        paired_splash=paired_splash,
+        paired_url=paired_url,
+        # What the board and the queue start from, so the first live round
+        # is quiet.
         card_token=live_cards_token(),
+        paired_token=paired_token,
         # Where each preset place is, so the meetup form can say "Near …"
         # and the map can put the pin there before anybody moves it.
         place_points=place_points(),
@@ -4992,13 +5080,20 @@ def find_queue():
             db.session.add(pairing)
             db.session.flush()
             # Only the person who was already waiting gets told. Whoever
-            # arrived second is being redirected into the chat a line below, so
-            # a notice would be about the page they are looking at.
+            # arrived second is being shown the window on the page they are
+            # on, a line below, so a notice would be about what is already
+            # in front of them. It is also what wakes the other one's held
+            # request, which is how their window arrives.
             notices.paired(partner.user_id, current_user,
                            notices.chat_url("pair", pairing.id), game)
             db.session.commit()
-            flash(f"Paired for {game}. Say hello.")
-            return redirect(url_for("chat", kind="pair", target_id=pairing.id))
+            # Both of them are left where they are and asked. Neither is
+            # dropped into a conversation they did not choose: the window
+            # offers it, and "Stay here" leaves the pairing in the bell and
+            # the chat list. No flash with it -- the window says this, and
+            # two of them at once is noise.
+            session["paired_window"] = pairing.id
+            return redirect(url_for("find_game"))
 
     existing = db.session.get(GameQueue, current_user.id)
     if existing is None:

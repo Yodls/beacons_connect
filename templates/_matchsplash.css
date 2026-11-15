@@ -4,13 +4,17 @@
    page's appstyle block, the way _community_map.css is, so the head
    stylesheet stays byte-identical across pages.
 
-   Two ways it ends, by the markup it is given:
+   Three ways it ends, by the markup it is given:
      - over the board (chat.html, no go_url): it plays in, holds, and plays
        itself out at 2.4s, ending hidden and so click-through, with no
        script needed; the script only lets a tap or a key close it sooner.
      - on /games before the board (ms-hold, with a data-go url): it holds
        five seconds and the page then loads the board, so there is no fade
        to play out. The fill bar runs the five seconds as a countdown.
+     - on /find when the in-person queue pairs two students (ms-ask): it
+       waits to be answered, so it has no fill bar and no fade. Its two
+       buttons are real links, and the page's script closes it in place
+       when the quiet one is pressed.
 
    Under reduced motion the site's rule shortens every animation but keeps
    the delays, so the window shows still; the over-the-board one still goes
@@ -28,6 +32,11 @@
 .matchsplash.ms-going { animation: ms-out .25s ease-in forwards; }
 /* The /games one does not fade: a navigation ends it. It only dims in. */
 .matchsplash.ms-hold { animation: ms-dim .2s ease-out both; }
+/* The /find one waits to be answered, so it does not fade either. It is
+   also the one window here that has to be pressed, so it goes above the
+   toasts rather than below them: on a phone they sit at the bottom of the
+   screen, which is exactly where its two buttons are. */
+.matchsplash.ms-ask { z-index: 90; animation: ms-dim .2s ease-out both; }
 .ms-win {
   --kind: var(--game); --kind-ink: var(--game-ink);
   width: min(26rem, 100%);
@@ -105,6 +114,22 @@ a.ms-hint:hover { background: #ff8f45; color: var(--navy); text-decoration: none
 a.ms-hint:active { transform: translateY(4px); box-shadow: 0 0 0 var(--navy); }
 /* The site's orange focus ring would be lost on an orange button. */
 a.ms-hint:focus-visible { outline-color: var(--navy); }
+/* The /find window asks instead of counting down, so it has two of them:
+   on to the conversation, or back to the page. Side by side where there is
+   room, stacked on a narrow phone, and the quiet one is the white secondary
+   button the rest of the site uses. */
+/* A little wider than the countdown one, so "Continue to meetup chat" sits
+   on one line beside its quieter neighbour. */
+.ms-ask .ms-win { width: min(30rem, 100%); }
+.ms-acts { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 4px; }
+/* The basis is what decides the shape: side by side where both fit, and
+   stacked on a phone, where each then has the whole width to itself. The
+   first one is given twice the room, being the longer and the likelier. */
+.ms-acts a.ms-hint { flex: 2 1 14rem; width: auto; margin-top: 0; padding-inline: .75rem; }
+.ms-acts a.ms-hint.ms-stay { flex: 1 1 7rem; }
+a.ms-hint.ms-stay { background: #fff; color: var(--navy); }
+a.ms-hint.ms-stay:hover { background: var(--paper); color: var(--navy); }
+a.ms-hint.ms-stay:focus-visible { outline-color: var(--orange); }
 @keyframes ms-dim { from { opacity: 0; } }
 @keyframes ms-pop { from { opacity: 0; transform: scale(.82); } }
 @keyframes ms-left { from { opacity: 0; transform: translateX(-60px); } }

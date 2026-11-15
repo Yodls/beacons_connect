@@ -450,8 +450,16 @@ ALERTS = {
         "line": "{actor} challenged you to a game of {what}.",
         "button": "Answer the challenge",
     },
+    # The in-person queue, which pairs two students who asked for the same
+    # thing. They are not friends yet, so this one says why they are hearing
+    # from a stranger.
+    "paired": {
+        "subject": "{actor} is up for {what} too",
+        "line": "{actor} is up for {what} too, so we paired you up.",
+        "button": "Open the chat",
+    },
 }
-ALERT_REASON = ("You're getting this because a friend reached out to you on Beacons Connect while you were away.")
+ALERT_REASON = ("You're getting this because somebody reached out to you on Beacons Connect while you were away.")
 
 
 def alert(kind, name, actor, url, off_url, settings_url, what=None):

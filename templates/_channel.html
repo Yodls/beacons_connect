@@ -188,6 +188,13 @@
              // so a page that knows nothing about this field is not woken on
              // every round by a token it never sent.
              "&cards=" + encodeURIComponent(state.cards || "") +
+             // The highest in-person pairing the page knows about, on the
+             // same terms: /find sends it (0 when it has none), every other
+             // page sends nothing and is never answered about pairings.
+             // Compared against null rather than falsy: 0 is a real answer
+             // here ("I have none, so any pairing is news"), and an empty
+             // string is the page that never sent one.
+             "&paired=" + encodeURIComponent(state.paired == null ? "" : state.paired) +
              // The reactions it is showing, on the same terms.
              "&reacts=" + encodeURIComponent(state.reacts || "") +
              // And how many messages it holds, so a deleted one is noticed.

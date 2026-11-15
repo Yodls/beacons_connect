@@ -1,5 +1,6 @@
 {% extends "shell.html" %}
 {% import "_ui.html" as ui %}
+{% import "_matchsplash.html" as ms %}
 {% block title %}Meet up in person{% endblock %}
 
 {% block appstyle %}
@@ -188,6 +189,9 @@
 
       /* ---------- the campus map ---------- */
       {% include "_community_map.css" %}
+
+      /* ---------- the window for a pairing just made ---------- */
+      {% include "_matchsplash.css" %}
 {% endblock %}
 
 {#
@@ -219,7 +223,19 @@
 
   <section class="sec-place" id="matchmaking">
     {{ ui.section("Matchmaking", "place", "meet") }}
-    <div class="queuebox">
+    {#
+      The window for a pairing just made. Inside this section on purpose:
+      the queue forms below carry data-region="#matchmaking", so the
+      enhancer re-renders only this much of the page after one is sent, and
+      anything drawn outside it would never arrive. The binder lifts the
+      node out to the page before showing it, so where it is written has no
+      bearing on where it lands.
+    #}
+    {% if paired_splash and paired_url %}
+      {{ ms.window(paired_splash, current_user, go_url=paired_url,
+                   stay_url=url_for('find_game')) }}
+    {% endif %}
+    <div class="queuebox" id="queuebox">
       {% if waiting %}
         <h3>Waiting for {{ waiting.game }}</h3>
         <p>
@@ -279,7 +295,7 @@
     </div>
   </section>
 
-  <section class="sec-place">
+  <section class="sec-place" id="pairings">
     {{ ui.section("Your pairings", "place", "people", pairings | length) }}
     <div class="grid two">
       {% for pairing in pairings %}
@@ -389,11 +405,14 @@
   // a card whose own token is unchanged is kept, so an open "are you sure" stays
   // open, and the rest are replaced, added or dropped in the board's order.
   (function () {
+    if (typeof Beacon === "undefined" || !window.fetch) { return; }
     var grid = document.getElementById("meetups");
-    if (!grid || typeof Beacon === "undefined" || !window.fetch) { return; }
-    var deck = grid.dataset.cards || "none";
+    // From the page rather than the grid, so the channel is still told what
+    // this page holds on the day there is no board to draw.
+    var deck = "{{ card_token }}" || "none";
 
     function render(cards) {
+      if (!grid) { return; }
       var have = {};
       grid.querySelectorAll(".card[data-post]").forEach(function (c) { have[c.dataset.post] = c; });
       var next = document.createDocumentFragment();
@@ -421,14 +440,91 @@
       if (count) { count.textContent = String(cards.length); }
     }
 
+    // ---- the window for a pairing ----
+    //
+    // The in-person queue pairs two students inside one request, and both of
+    // them are on this page when it happens. Whoever pressed the button has
+    // the window rendered into #matchmaking by the server and swapped in with
+    // that region; whoever was waiting is handed it by the channel below,
+    // which their own `paired` notice has already woken. It asks rather than
+    // counting down, so nothing moves until they answer it.
+    //
+    // The watermark is the highest pairing this page knows about. It is moved
+    // on whenever one is answered for, drawn or not, so the channel offers
+    // each pairing once and a reload never re-opens a window.
+    var pairTok = {{ paired_token or 0 }};
+    var shown = false;
+
+    function bindPair(node) {
+      if (!node || node.dataset.bound) { return; }
+      node.dataset.bound = "1";
+      shown = true;
+      // Lifted out to the page: a fixed overlay written inside a section is
+      // at the mercy of any ancestor that happens to be transformed, and this
+      // page has a map in it.
+      (document.querySelector("main.page") || document.body).appendChild(node);
+
+      function close(e) {
+        if (e) { e.preventDefault(); }
+        document.removeEventListener("keydown", onKey, true);
+        node.remove();
+      }
+      function onKey(e) { if (e.key === "Escape") { close(e); } }
+
+      // "Stay here" is a real link back to this page, so it works with no
+      // JavaScript. With it, there is nothing to reload: the window goes and
+      // the page is left exactly as it was.
+      var stay = node.querySelector(".ms-stay");
+      if (stay) { stay.addEventListener("click", close); }
+      // The dimmed page behind it says the same thing. A press inside the
+      // window does not, or neither button could ever be reached.
+      node.addEventListener("click", function (e) {
+        if (e.target === node) { close(e); }
+      });
+      document.addEventListener("keydown", onKey, true);
+    }
+
+    function findPair(root) {
+      (root || document).querySelectorAll(".matchsplash.ms-ask").forEach(bindPair);
+    }
+    findPair(document);
+    // The queue forms re-render #matchmaking rather than navigating, so the
+    // window for whoever pressed one arrives with that swap.
+    document.addEventListener("beacon:refresh", function (e) { findPair(e.target); });
+
     Beacon.watch({
       here: "find:0",
-      state: function () { return {cards: deck}; },
+      state: function () { return {cards: deck, paired: pairTok}; },
       apply: function (data) {
         var deal = data && data.cards;
         if (deal && deal.token !== deck) {
           deck = deal.token;
           render(deal.cards || []);
+        }
+        var pair = data && data.pair;
+        if (pair && pair.id) {
+          pairTok = pair.id;
+          // Recorded the moment it is known, the way the lobby records its
+          // own: it makes the decision observable to the browser harness,
+          // which cannot watch for a navigation that never happens.
+          var box = document.getElementById("queuebox");
+          if (box) { box.dataset.found = pair.url; }
+          // The page behind the window was drawn while they were still in
+          // the queue. Being paired took them out of it, so left alone it
+          // would go on offering to leave a queue they are no longer in,
+          // and would not list the pairing they just got.
+          if (Beacon.refresh) {
+            Beacon.refresh("#matchmaking").then(function () {
+              return Beacon.refresh("#pairings");
+            });
+          }
+          if (!shown && pair.html && window.DOMParser) {
+            // DOMParser rather than innerHTML: the markup is server rendered
+            // and already escaped, but parsing it this way keeps the page
+            // free of innerHTML assignment, as chat.html is.
+            var parsed = new DOMParser().parseFromString(pair.html, "text/html");
+            bindPair(parsed.body.firstElementChild);
+          }
         }
       }
     });
