@@ -1115,8 +1115,13 @@
         }
         #log .msg:not(.has-card):not(.note) > * { grid-column: 1 / -1; }
         #log .msg:not(.has-card):not(.note) > .at { grid-column: 1; order: 1; margin-top: 1px; }
+        /* Beside a long time (a date and an hour) on the narrowest phones,
+           or with the text made larger, the actions can wrap. Each one's tap
+           area reaches 8-10px above and below its words, so wrapped lines
+           sit 20px apart: closer, and a tap on React landed on the Report
+           link under it. */
         #log .msg:not(.has-card):not(.note) > .row-acts {
-          grid-column: 2; order: 2; justify-self: end; margin-top: 1px;
+          grid-column: 2; order: 2; justify-self: end; margin-top: 1px; row-gap: 20px;
         }
 
         /* A game moment: the same window, a size smaller. */
