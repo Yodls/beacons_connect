@@ -57,10 +57,11 @@
       watching: null
     };
 
-    // The friends panel and the bell are <details>, so the browser leaves
-    // them open until their own summary is clicked again -- and a panel that
-    // stays put while you go and do something else is not behaving like a
-    // panel. Clicking anywhere outside one now shuts it.
+    // The friends panel, the bell and the account menu are <details>, so the
+    // browser leaves them open until their own summary is clicked again --
+    // and a panel that stays put while you go and do something else is not
+    // behaving like a panel. Clicking anywhere outside one now shuts it, and
+    // so does Escape.
     //
     // Here rather than with the panels themselves, for the reason this whole
     // file is here: the shell lives inside #live and is replaced on every
@@ -75,13 +76,24 @@
     // Capture, so that a click on something which removes itself from the
     // page -- a form row that submits and swaps -- is still inside the panel
     // at the moment this asks whether it was.
-    document.addEventListener("click", function (e) {
-      var open = document.querySelectorAll(
-        "details.dock[open], details.bell[open]");
-      Array.prototype.forEach.call(open, function (panel) {
+    var PANELS = "details.dock[open], details.bell[open], details.who[open]";
+    function shutOthers(e) {
+      Array.prototype.forEach.call(document.querySelectorAll(PANELS), function (panel) {
         if (!panel.contains(e.target)) { panel.removeAttribute("open"); }
       });
-    }, true);
+    }
+    document.addEventListener("click", shutOthers, true);
+    // And on the press itself. iOS Safari does not always send the page a
+    // click for a tap on plain content (a message, the background), so on an
+    // iPhone a tap away left the menu open; a pointer press always arrives.
+    // Shutting twice is harmless.
+    document.addEventListener("pointerdown", shutOthers, true);
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") { return; }
+      Array.prototype.forEach.call(document.querySelectorAll(PANELS), function (panel) {
+        panel.removeAttribute("open");
+      });
+    });
 
     if (!window.fetch || !window.history.pushState || !window.DOMParser) { return; }
 

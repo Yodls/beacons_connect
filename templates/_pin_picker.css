@@ -6,12 +6,13 @@
 
          Two shapes, decided by the drawer's own width (a container query:
          beside a game board the chat is narrow on a wide screen, and a
-         viewport query would get that wrong). Narrow, the form is three
-         steps -- What, Where, When -- one at a time, moved between by the
-         strip under the bar (chat.html's steps script keeps data-step on
-         the form); on a phone the drawer rises to fill the screen for
-         them. Wide, what and when stand beside the map, which takes the
-         drawer's whole height, and the strip is not shown. */
+         viewport query would get that wrong). Narrow, the form is two
+         steps -- What & when, then Where -- one at a time, moved between by
+         the strip under the bar (chat.html's steps script keeps data-step
+         on the form); on a phone the open window is a sheet over the whole
+         screen under the top bar (chat.html's is-sheet), and the steps have
+         all of it. Wide, what and when stand beside the map, which takes
+         the drawer's whole height, and the strip is not shown. */
       {% include "_map_chrome.css" %}
       .meetwin { container: meetwin / inline-size; }
       /* The fields' wrapper is not a box: the sections are the form's own
@@ -270,10 +271,11 @@
         .meetwin .meet-note textarea { flex: 1 1 48px; min-height: 48px; }
       }
       /* On a phone the steps have the screen's room, not the chat's, which
-         is a short window under the page's head: the open drawer rises from
-         the chat's foot to just under the top bar (--meet-rise and
-         --meet-screen, measured by the drawer's script), over the chat's
-         own head. (The script caps the form inline to the chat's room; only
+         is a short window under the page's head: the open window is a sheet
+         standing on the screen's foot and reaching to just under the top bar
+         (--meet-rise and --meet-screen, measured by the drawer's script, and
+         kept up to date as the toolbars and the keyboard come and go).
+         (The script caps the form inline to the chat's room; only
          !important beats an inline style.) */
       @media (max-width: 560px) {
         .meetwin { max-height: var(--meet-rise, calc(100dvh - 96px - var(--tabbar-h) - 16px)); }

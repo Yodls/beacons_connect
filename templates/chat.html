@@ -544,6 +544,28 @@
         border-radius: 0 0 6px 6px;
       }
       .meetwin[hidden] { display: none; }
+      /* Open on a phone it is a sheet (the script adds is-sheet, and only
+         while open): standing on the foot of the screen, over the composer
+         and the floating tab bar, and reaching up to the top bar. Wedged
+         between those it had a few hundred pixels, and the first step
+         scrolled. --meet-lift is the keyboard's height while one is up, so
+         the foot stays above it; the padding keeps it off the home
+         indicator. No top rule: the top bar's own rule is right above it.
+         Over the tab bar (25), under the top bar (30) and the toasts. */
+      @media (max-width: 560px) {
+        .meetwin.is-sheet {
+          position: fixed; left: 0; right: 0; bottom: var(--meet-lift, 0px);
+          z-index: 26;
+          border-top: 0; border-radius: 0;
+          padding-bottom: env(safe-area-inset-bottom);
+          background: var(--paper);
+        }
+        /* The page behind does not scroll when the form reaches its end,
+           and a drag on the bar does not scroll it either. */
+        .meetwin.is-sheet > .newmeet-menu,
+        .meetwin.is-sheet > .meet-about { overscroll-behavior: contain; }
+        .meetwin.is-sheet > .meetbar { touch-action: none; }
+      }
       /* Two views under the bar: the form (the Meet up key) and the
          arranged meetup itself (its strip, tapped). */
       .meetwin[data-view="about"] > form, .meetwin[data-view="form"] > .meet-about { display: none; }
@@ -1029,6 +1051,102 @@
         box-shadow: var(--drop);
       }
 
+      /* ---------- a conversation on a phone ----------
+         The screen is the conversation's. Between the site's top bar, the
+         page's margins, a window frame, the composer and the floating tab
+         bar, the log had a few hundred pixels on an iPhone SE, and a single
+         meetup card filled it. So on a phone a chat has no tab bar (the
+         header's back key is the way out), runs edge to edge under the top
+         bar with a slimmer header, and draws its messages and cards
+         tighter. The log sizer under the markup takes the room this leaves.
+         All in the page's own stylesheet, so it goes when the chat does,
+         and the tab bar is back on the next page. */
+      @media (max-width: 560px) {
+        nav.tabbar { display: none; }
+        /* base.html keeps room at the foot for the tab bar. Here the
+           composer's own bar runs to the foot of the screen instead, the
+           home indicator's inset inside it. */
+        body { padding-bottom: 0; }
+        main.page { padding: 0; }
+        /* Toasts cleared the tab bar; now they clear the composer. */
+        #toasts { bottom: calc(68px + env(safe-area-inset-bottom)); }
+
+        /* The header: the top bar's rule is right above it, so only its own
+           foot is drawn, and it is a row shorter. */
+        .chathead {
+          min-height: 56px; padding: 6px 8px 6px 10px;
+          border-width: 0 0 2px; border-radius: 0; box-shadow: none;
+        }
+        .chathead:has(+ .gamewrap:not(.playing)) { border-radius: 0; box-shadow: none; }
+        .chathead .avatar { width: 34px; height: 34px; font-size: 13px; }
+        .chathead h1 { font-size: 20px; }
+        .chathead .status { margin-top: 1px; font-size: .76rem; }
+
+        /* The log, edge to edge: no side rules, no corners, no shadow. */
+        #log {
+          padding: 10px;
+          border-left-width: 0; border-right-width: 0; border-radius: 0; box-shadow: none;
+        }
+        .chathead + .gamewrap:not(.playing) #log { border-radius: 0; }
+        /* The gold strip at its foot spans it, as the log now does. */
+        .meetwin:not(.is-sheet) { left: 0; right: 0; border-radius: 0; }
+        /* Under the log, a solid bar to the foot of the screen, white as the
+           top bar is: the composer (and a reply chip, when there is one)
+           sits on it rather than on the harbour behind the page. */
+        .talkcol { background: #fff; }
+        .sendrow { margin: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+        /* A board above the chat keeps a little margin and its own frame. */
+        .gamewrap.playing { margin-top: 8px; }
+        .gamewrap.playing #gamepane-slot { margin: 0 8px; }
+        .gamewrap.playing #log { border-top-width: 2px; }
+
+        /* Messages: the time and the React / Reply / Report line share a
+           line instead of taking one each, in a two-column grid that the
+           name, the quote and the words span, so a bubble is still as wide
+           as its words. The avatar and the reactions are placed absolutely
+           and sit outside the grid. */
+        #log .daymark { margin: 0 0 8px; padding: 2px 8px; font-size: .74rem; }
+        #log .msg:not(.note) { margin-bottom: 8px; }
+        #log .msg:not(.note):not(.mine) { margin-left: 38px; }
+        #log .msg > .avatar { left: -38px; }
+        #log .msg:not(.has-card):not(.note) {
+          display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: baseline;
+          max-width: 84%; padding: 5px 10px 4px;
+        }
+        #log .msg:not(.has-card):not(.note) > * { grid-column: 1 / -1; }
+        #log .msg:not(.has-card):not(.note) > .at { grid-column: 1; order: 1; margin-top: 1px; }
+        #log .msg:not(.has-card):not(.note) > .row-acts {
+          grid-column: 2; order: 2; justify-self: end; margin-top: 1px;
+        }
+
+        /* A game moment: the same window, a size smaller. */
+        #log .msg.note { margin: 2px 0 10px; }
+        #log .msg.note .body { padding: 6px 10px 0; font-size: .9rem; }
+        #log .msg.note .at { padding: 3px 10px 6px; }
+        #log .note-act { padding: 6px 10px 0; }
+
+        /* Cards in the log: a lower title bar, tighter panes. */
+        #log .cardbar { min-height: 32px; padding: 0 8px; font-size: 18px; }
+        #log .msg.has-card { width: min(100% - 38px, 24rem); }
+        #log .msg.has-card.mine { width: min(100%, 24rem); }
+        #log .msg.has-card .who { margin-bottom: 2px; }
+        #log .msg.has-card .at { margin-top: 3px; }
+        #log :is(.post, .flagcard) .cardpane { padding: 8px 10px 10px; }
+        #log .post .cardpane b { font-size: 1rem; }
+        #log .post .cardpane .meta { font-size: .85rem; }
+        #log .post .cardpane .meta.going { margin-top: 6px; padding: 2px 7px; font-size: .76rem; }
+        /* A meetup's keys on one row where they fit: smaller words, closer
+           together, still 40px tall for a thumb. The meetup's own view in
+           the Meet up sheet is not in #log, and keeps them full size. */
+        #log .post .post-actions { gap: 6px; margin-top: 8px; padding-top: 8px; }
+        #log .post .post-actions button[type="submit"],
+        #log .post .post-actions .confirm > summary,
+        #log .post .post-actions .maplink { padding: 0 8px; font-size: .8rem; }
+        #log .post .post-actions > form:first-child:has(> button:not(.ghost)) button {
+          min-height: 40px; font-size: .92rem;
+        }
+      }
+
       {% include "_matchsplash.css" %}
 {% endblock %}
 
@@ -1396,13 +1514,21 @@
         // without one), the foot of the window.
         var root = document.documentElement;
         var bar = document.querySelector("nav.tabbar");
-        var floor = bar && getComputedStyle(bar).position === "fixed"
+        // On a phone this page hides the tab bar (its stylesheet's phone
+        // block), and a hidden bar reports its top as 0, which would floor
+        // the log at its minimum. Then the floor is the foot of the screen:
+        // the composer's bar runs to it, carrying its own padding and the
+        // home indicator's inset, so the only gap is whatever the body
+        // still keeps at its foot (none, in that layout).
+        var hidden = !!bar && getComputedStyle(bar).display === "none";
+        var floor = bar && !hidden && getComputedStyle(bar).position === "fixed"
           ? bar.getBoundingClientRect().top : root.clientHeight;
+        var gap = hidden ? px(document.body, "paddingBottom") : 16;
         var chip = document.getElementById("replying");
         var under = row.offsetHeight + px(row, "marginTop")
                   + (chip && !chip.hidden ? chip.offsetHeight + px(chip, "marginTop") : 0);
         var top = log.getBoundingClientRect().top + window.pageYOffset;
-        var want = Math.floor(floor - 16 - top - under);
+        var want = Math.floor(floor - gap - top - under);
         var was = log.style.height;
         var next = Math.max(want, 256) + "px";
         log.style.height = next;
@@ -1687,6 +1813,22 @@
     var expecting = false;   // we just posted one; adopt its card when it lands
 
     function arranged() { return win.dataset.arranged === "yes"; }
+    // On a phone the open window is a sheet: it rises from the foot of the
+    // screen, over the composer and the tab bar, to just under the top bar,
+    // instead of being squeezed between them. Folded to its gold strip it
+    // is back at the chat's foot, where the strip belongs.
+    var phone = window.matchMedia ? window.matchMedia("(max-width: 560px)") : null;
+    function sheetWanted() { return !!phone && phone.matches; }
+    function sheetOn() { return win.classList.contains("is-sheet"); }
+    // iOS opens a select's picker the moment a tap focuses it, so a tap on
+    // a touch-first screen leaves focus where it is. A keyboard (a click
+    // with detail 0) and a mouse still land in the activity menu, which is
+    // what moving focus there was for.
+    var touchFirst = window.matchMedia
+      ? window.matchMedia("(hover: none) and (pointer: coarse)") : null;
+    function intoForm(event) {
+      return (!!event && event.detail === 0) || !(touchFirst && touchFirst.matches);
+    }
     function reflect() {
       var showing = win.open && !win.hidden;
       key.setAttribute("aria-expanded", showing && win.dataset.view !== "about" ? "true" : "false");
@@ -1755,14 +1897,63 @@
       // rising from the chat's foot to just under the top bar
       // (--meet-rise, its height then), over the chat's own head.
       form.style.setProperty("--meet-room", cap);
-      // The meetup's own view is capped the same way.
-      if (about) { about.style.maxHeight = cap; }
       var head = document.querySelector(".topbar, header");
       var headBottom = head ? head.getBoundingClientRect().bottom : 96;
-      var foot = (wrap || log).getBoundingClientRect().bottom - 2;
-      var rise = Math.max(160, Math.floor(foot - headBottom - 8));
+      var foot, gap = 8, lift = 0, pad = 0;
+      if (sheetOn()) {
+        // A sheet stands on the bottom of what can be seen: the screen's
+        // foot, or the top of the keyboard while one is up, which iOS
+        // draws over the page rather than shrinking it. It reaches up to
+        // the top bar, or to the top of what shows if the view has been
+        // panned. The bottom padding keeps its foot off the home indicator.
+        var vv = window.visualViewport;
+        var floor = vv ? vv.offsetTop + vv.height : window.innerHeight;
+        lift = Math.max(0, Math.round(window.innerHeight - floor));
+        pad = parseFloat(getComputedStyle(win).paddingBottom) || 0;
+        foot = floor;
+        headBottom = Math.max(headBottom, vv ? vv.offsetTop : 0);
+        gap = 0;
+      } else {
+        foot = (wrap || log).getBoundingClientRect().bottom - 2;
+      }
+      win.style.setProperty("--meet-lift", lift + "px");
+      var rise = Math.max(160, Math.floor(foot - headBottom - gap));
+      var rule = parseFloat(getComputedStyle(win).borderTopWidth) || 0;
+      var screenRoom = Math.max(120, rise - bar.offsetHeight - rule - pad);
       win.style.setProperty("--meet-rise", rise + "px");
-      form.style.setProperty("--meet-screen", Math.max(120, rise - bar.offsetHeight - 2) + "px");
+      form.style.setProperty("--meet-screen", screenRoom + "px");
+      // The meetup's own view is capped the same way: by the chat, or as a
+      // sheet by the screen.
+      if (about) { about.style.maxHeight = sheetOn() ? screenRoom + "px" : cap; }
+    }
+    // Kept to the screen while open: Safari's toolbars come and go, the
+    // phone turns (crossing the phone width puts the sheet on or off), and
+    // the keyboard comes up for the note. Once a frame at most, and gone
+    // with the page when the enhancer swaps it out.
+    var queued = false;
+    function place() {
+      queued = false;
+      if (!document.contains(win)) {
+        window.removeEventListener("resize", later);
+        if (window.visualViewport) {
+          window.visualViewport.removeEventListener("resize", later);
+          window.visualViewport.removeEventListener("scroll", later);
+        }
+        return;
+      }
+      if (win.hidden || !win.open || moving) { return; }
+      if (sheetWanted() !== sheetOn()) { win.classList.toggle("is-sheet", sheetWanted()); }
+      capForm();
+    }
+    function later() {
+      if (queued) { return; }
+      queued = true;
+      requestAnimationFrame(place);
+    }
+    window.addEventListener("resize", later);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", later);
+      window.visualViewport.addEventListener("scroll", later);
     }
     // The drawer's foot is the chat's; if that is behind the floating tab
     // bar, the page scrolls by the overlap and no more.
@@ -1775,11 +1966,15 @@
     // `view`: "form" (plan a meetup, what the Meet up key opens) or "about"
     // (the arranged meetup, what tapping its strip opens). Called while
     // already open, it changes the view and slides to the new height.
-    function show(view) {
+    function show(view, event) {
       view = view === "about" && fillAbout() ? "about" : "form";
       if (window.beaconMemFold) { window.beaconMemFold(); }
-      var from = heightNow();
+      var sheet = sheetWanted();
+      // Becoming a sheet it moves from the chat's foot to the screen's, so
+      // it rises from nothing there rather than from the strip's height.
+      var from = sheet && !sheetOn() ? 0 : heightNow();
       stop();
+      win.classList.toggle("is-sheet", sheet);
       win.dataset.view = view;
       win.hidden = false;
       win.open = true;
@@ -1792,8 +1987,9 @@
       // it sits right under the chat, so it opens where the reader is
       // looking -- except under a game on a narrow screen, where the chat
       // can sit partly behind the floating tab bar: then the page moves
-      // just enough to show the whole drawer, smoothly.
-      clearTabBar();
+      // just enough to show the whole drawer, smoothly. A sheet is over the
+      // tab bar already, so nothing moves at all.
+      if (!sheet) { clearTabBar(); }
       slide(from, to, function () {});
       // The view fades in over the last part of the slide, so it doesn't
       // show before there is room for it.
@@ -1802,8 +1998,12 @@
         shown.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }],
                       { duration: SLIDE_MS, easing: "ease-out" });
       }
+      // Into the activity menu, for a keyboard or a mouse; never from a tap
+      // on a phone, where focusing it opens its picker over everything.
       var first = view === "form" ? win.querySelector(".act") : null;
-      if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+      if (first && intoForm(event)) {
+        try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); }
+      }
     }
     function fold() {
       var from = heightNow();
@@ -1811,15 +2011,26 @@
       // Down to the gold strip when there is a meetup to name (or one was
       // just posted and its card is on its way), otherwise out of sight.
       var keep = arranged() || expecting;
+      // A sheet sinks into the foot of the screen, and the strip then rises
+      // at the chat's foot: two short moves rather than one long jump.
+      var sheet = sheetOn();
       // The open bar's height (with its bottom rule) is the folded strip's
       // (bar plus the drawer's top rule), so it lands without a twitch.
-      var to = keep ? bar.offsetHeight : 0;
+      var to = keep && !sheet ? bar.offsetHeight : 0;
       win.hidden = false;
       win.open = true;   // stays open while it sinks; closed once it lands
       slide(from, to, function () {
         win.open = false;
         // Folded, it opens on the form next unless its strip is tapped.
         win.dataset.view = "form";
+        if (sheet) {
+          win.classList.remove("is-sheet");
+          if (arranged() || expecting) {
+            stop();
+            slide(0, win.getBoundingClientRect().height, function () {});
+            return;
+          }
+        }
         if (!arranged() && !expecting) { win.hidden = true; }
       });
     }
@@ -1920,24 +2131,27 @@
 
     // The Meet up key plans a meetup: it opens the form, folds it again, and
     // from the meetup's own view goes to the form.
-    key.addEventListener("click", function () {
-      if (win.open && !win.hidden && win.dataset.view === "form") { fold(); } else { show("form"); }
+    key.addEventListener("click", function (event) {
+      if (win.open && !win.hidden && win.dataset.view === "form") { fold(); } else { show("form", event); }
     });
     // The bar is the <summary>. Left to the browser it would snap open and
     // shut; it slides the same way the key does instead. Folded to a strip
-    // naming a meetup, it opens that meetup; otherwise the form.
+    // naming a meetup, it opens that meetup; otherwise the form. Opened as
+    // a sheet on a phone, its "−" is what closes it: the key is under it.
     win.querySelector(".meetbar").addEventListener("click", function (event) {
       event.preventDefault();
-      if (win.open) { fold(); } else { show(arranged() ? "about" : "form"); }
+      if (win.open) { fold(); } else { show(arranged() ? "about" : "form", event); }
     });
     if (about) {
-      about.querySelector(".about-new").addEventListener("click", function () { show("form"); });
+      about.querySelector(".about-new").addEventListener("click", function (event) { show("form", event); });
     }
     // Anything else that closes the <details> (keyboard, the browser):
-    // a folded window with nothing to name goes away. Not mid-slide, when
-    // the slide decides.
+    // a folded window with nothing to name goes away, and is no longer a
+    // sheet, so a strip that comes back later is back at the chat's foot.
+    // Not mid-slide, when the slide decides.
     win.addEventListener("toggle", function () {
       if (moving) { return; }
+      if (!win.open) { win.classList.remove("is-sheet"); }
       if (!win.open && !arranged() && !expecting) { win.hidden = true; }
       reflect();
     });
@@ -2035,9 +2249,17 @@
       }
     }
 
+    // Back to What & when puts focus in the activity menu for a keyboard or
+    // a mouse, but not from a tap on a phone, where focusing a select opens
+    // its picker at once (the drawer's own script says the same).
+    var touchFirst = window.matchMedia
+      ? window.matchMedia("(hover: none) and (pointer: coarse)") : null;
+    function intoForm(event) {
+      return (!!event && event.detail === 0) || !(touchFirst && touchFirst.matches);
+    }
     form.addEventListener("click", function (event) {
       var key = event.target.closest("[data-go]");
-      if (key && form.contains(key)) { go(key.dataset.go, true); }
+      if (key && form.contains(key)) { go(key.dataset.go, intoForm(event)); }
     });
     // Enter in a field on an early step moves on rather than posting.
     form.addEventListener("keydown", function (event) {
