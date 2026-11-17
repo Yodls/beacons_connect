@@ -1,0 +1,25 @@
+{#
+  The foot of every page, signed in or not (included once, by base.html):
+  what Beacons Connect is, who to write to, where the code lives, and the
+  version that is running. The version is BEACON_VERSION, which the deploy
+  script sets from the release tag it starts, and the contact address is
+  SITE_CONTACT_EMAIL from .env (app.inject_site_foot). No address is ever
+  written here: this file is in the public repository.
+
+  No heading in here, deliberately: tests slice pages on their <h2>s, and a
+  footer is not a section of the page.
+
+  A conversation that fits its window hides this (chat.html), because there
+  the page must have nothing to scroll.
+#}
+<footer class="sitefoot">
+  <p class="sitefoot-about">Beacons Connect is a capstone project for IT485 at UMass Boston.</p>
+  <p class="sitefoot-row">
+    {% if contact_email %}<span>Contact us: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>{% endif %}
+    <span><a class="sitefoot-gh" href="https://github.com/Yodls/beacons_connect" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#icon-github" /></svg>Beacons Connect on GitHub</a></span>
+  </p>
+  <p class="sitefoot-row sitefoot-fine">
+    <span>&copy; {{ site_year }} Beacons Connect. All rights reserved.</span>
+    <span class="sitefoot-version">Version {{ app_version }}</span>
+  </p>
+</footer>

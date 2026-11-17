@@ -1067,6 +1067,10 @@
          the chat) the mark is off and the page scrolls as any page does,
          with its room at the foot, so the composer can clear the tab bar. */
       body:has(.gamewrap.fits) { min-height: 0; padding-bottom: 0; }
+      /* The site's footer (_sitefoot.html) too: under a conversation that
+         fills the window it would be the one thing left to scroll to. It is
+         on every other page, and on a chat that does not fit. */
+      body:has(.gamewrap.fits) .sitefoot { display: none; }
       /* Nothing to scroll, so nothing to stretch or pull to refresh either,
          where the browser honours it. */
       html:has(.gamewrap.fits), body:has(.gamewrap.fits) { overscroll-behavior: none; }

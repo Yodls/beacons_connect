@@ -197,6 +197,24 @@ def inject_db_banner():
     return {"db_banner": DB_BANNER}
 
 
+# The version at the foot of every page (_sitefoot.html). BEACON_VERSION is
+# put in the server's environment by the deploy script: `beacon start` sets it
+# from the release tag checked out (git describe), and `beacon update` ends by
+# calling start, so the page names the code that is actually running, a
+# rollback included. Read on each render rather than once, so a test can set
+# it. Anywhere it is not set (a development machine, a server started by hand)
+# the page says so rather than guessing.
+#
+# The footer's contact address is SITE_CONTACT_EMAIL, from .env, so nobody's
+# address is written into the repository. Unset, the footer has no contact
+# line. (Not emails.CONTACT_EMAIL, which signs the site's own emails.)
+@app.context_processor
+def inject_site_foot():
+    return {"app_version": os.environ.get("BEACON_VERSION", "").strip() or "development",
+            "contact_email": os.environ.get("SITE_CONTACT_EMAIL", "").strip(),
+            "site_year": datetime.now(timezone.utc).year}
+
+
 # ---------- Club categories and icons ----------
 # club_catalog.py decides a club's category and icon from its name;
 # club_icons.py draws the icons. The icons are one SVG file, built once at

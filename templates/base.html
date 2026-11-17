@@ -722,6 +722,52 @@
       }
       .pagehead .lede { max-width: 62ch; }
 
+      /* ---------- the foot of every page ----------
+         What this is, who to write to, where the code lives and the
+         version running (_sitefoot.html). The page's width, on the same
+         frosted label as a page's title so it reads over the harbour, in
+         small type. The body's padding under it keeps it clear of the tab
+         bar when the page is scrolled to its end. */
+      .sitefoot {
+        width: min(1148px, calc(100% - 32px)); margin: 32px auto 0; padding: 12px 16px;
+        background: rgba(255, 255, 255, .86);
+        -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
+        color: var(--muted); font-size: .85rem; line-height: 1.5; text-align: center;
+      }
+      .sitefoot p { margin: 0; }
+      .sitefoot p + p { margin-top: 4px; }
+      .sitefoot-about { color: var(--navy); font-weight: 700; }
+      .sitefoot-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 18px; }
+      .sitefoot a { overflow-wrap: anywhere; }
+      /* GitHub's mark beside its link, at the size of the words. */
+      .sitefoot-gh { display: inline-flex; align-items: center; gap: 6px; }
+      .sitefoot-gh .icon { width: 16px; height: 16px; }
+      /* The sign-in pages fill the window to centre their form (.auth is
+         100vh tall), which put the footer below the fold and gave a desktop
+         window a page to scroll. There the form's area takes what the
+         footer leaves, and the footer stands at the window's foot. */
+      body:has(.auth) #live {
+        display: flex; flex-direction: column;
+        min-height: 100vh; min-height: 100dvh;
+      }
+      body:has(.auth) .auth { flex: 1 0 auto; min-height: 0; }
+      body:has(.auth) .sitefoot { flex: none; margin: 0 auto 16px; }
+      /* In their two-column layout on a wide screen, the footer's three lines
+         run as two and the form's margins give a little, so the tallest of
+         them (register) still fits a 1280x800 window with its footer. */
+      @media (min-width: 60rem) {
+        body:has(.auth) .auth { padding-top: 12px; padding-bottom: 8px; }
+        body:has(.auth) .sitefoot {
+          display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+          gap: 2px 18px; padding: 8px 14px; margin-bottom: 8px;
+        }
+        body:has(.auth) .sitefoot p + p { margin-top: 0; }
+      }
+      .sitefoot-fine { font-size: .78rem; }
+      .sitefoot-version { font-variant-numeric: tabular-nums; }
+
       /* ---------- flashes ---------- */
       .flashes { display: grid; gap: .5rem; margin-bottom: 16px; }
       .flash {
@@ -1647,6 +1693,9 @@
       {# Flashes used to render here, which would now put them above the
          sticky top bar. Each layout places ui.flashes() itself instead. #}
       {% block content %}{% endblock %}
+      {# On every page, signed in or not. Included rather than a block, so no
+         page can empty it by accident. #}
+      {% include "_sitefoot.html" %}
       {% block script %}{% endblock %}
     </div>
   </body>
