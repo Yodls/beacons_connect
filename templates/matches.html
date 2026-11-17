@@ -166,7 +166,7 @@
             {% for person in requests %}
               <div class="card row asked">
                 <div class="card-top">
-                  {{ ui.avatar(person.name, person.user_id) }}
+                  {{ ui.face(person.name, person.user_id) }}
                   <div class="grow">
                     <h3>{{ person.name }}
                       {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
@@ -196,7 +196,7 @@
           {% for match in matches %}
             <div class="card row">
               <div class="card-top">
-                {{ ui.avatar(match.name, match.user_id) }}
+                {{ ui.face(match.name, match.user_id) }}
                 <div class="grow">
                   <h3>{{ match.name }}
                     {%- if match.pronouns %} <span class="pronouns">{{ match.pronouns }}</span>{% endif -%}
@@ -236,7 +236,7 @@
           {% for rec in recs %}
             <div class="card row">
               <div class="card-top">
-                {{ ui.avatar(rec.name, rec.user_id) }}
+                {{ ui.face(rec.name, rec.user_id) }}
                 <div class="grow">
                   <h3>{{ rec.name }}
                     {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}

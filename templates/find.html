@@ -301,7 +301,7 @@
       {% for pairing in pairings %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(pairing.other, pairing.id) }}
+            {{ ui.face(pairing.other, pairing.other_id) }}
             <div class="grow">
               <h3>{{ pairing.game }}</h3>
               <span class="meta">with {{ pairing.other }}</span>

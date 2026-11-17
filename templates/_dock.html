@@ -50,7 +50,7 @@
         <h4>Results for &ldquo;{{ dock_term }}&rdquo;</h4>
         {% for person in dock_results %}
           <div class="dock-row">
-            {{ ui.avatar(person.name, person.user_id) }}
+            {{ ui.face(person.name, person.user_id) }}
             <span class="grow">{{ person.name }}
               {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
             </span>
@@ -87,7 +87,7 @@
       <h4>Friend requests</h4>
       {% for person in dock_requests %}
         <div class="dock-row">
-          {{ ui.avatar(person.name, person.user_id) }}
+          {{ ui.face(person.name, person.user_id) }}
           <span class="grow">{{ person.name }}
             {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
           </span>
@@ -138,7 +138,7 @@
     <h4>Your friends</h4>
     {% for friend in dock_friends %}
       <div class="dock-row">
-        {{ ui.avatar(friend.name, friend.user_id) }}
+        {{ ui.face(friend.name, friend.user_id) }}
         <a class="grow"
            href="{{ url_for('chat', kind='match', target_id=friend.user_id) }}">{{ friend.name }}
           {%- if friend.pronouns %} <span class="pronouns">{{ friend.pronouns }}</span>{% endif -%}

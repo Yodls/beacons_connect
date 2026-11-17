@@ -57,7 +57,7 @@
         {% for person in results %}
           <div class="card {% if person.state == 'they_asked' %}asked{% endif %}">
             <div class="card-top">
-              {{ ui.avatar(person.name, person.user_id) }}
+              {{ ui.face(person.name, person.user_id) }}
               <div class="grow">
                 <h3>{{ person.name }}
                   {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}
@@ -131,7 +131,7 @@
       {% for person in sent %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(person.name, person.user_id) }}
+            {{ ui.face(person.name, person.user_id) }}
             <div class="grow">
               <h3>{{ person.name }}
                 {%- if person.pronouns %} <span class="pronouns">{{ person.pronouns }}</span>{% endif -%}

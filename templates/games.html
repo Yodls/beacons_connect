@@ -289,7 +289,10 @@
         {% set invited_you = row.game.status == "invited" and row.waiting_on_you %}
         <div class="gamerow">
           <div class="top">
-            {{ ui.avatar(row.opponent, row.game.id, square=true) }}
+            {# The other player: their picture, or their initials. (It was a
+               square seeded by the game, which drew the opponent's initials
+               in the game's colours.) #}
+            {{ ui.face(row.opponent, row.opponent_id) }}
             <div class="grow">
               <h3>{{ row.label }}</h3>
               <span class="why">with {{ row.opponent }}</span>
@@ -372,7 +375,7 @@
             {% for row in leaders %}
               <li{% if row.id == current_user.id %} class="me"{% endif %}>
                 <span class="place p{{ loop.index }}">{{ loop.index }}</span>
-                {{ ui.avatar(row.name, row.id, sm=true) }}
+                {{ ui.face(row.name, row.id, sm=true) }}
                 <span class="who">{{ row.name }}{% if row.id == current_user.id %} <small>(you)</small>{% endif %}</span>
                 <b class="wins">{{ row.wins }} win{{ "" if row.wins == 1 else "s" }}</b>
               </li>

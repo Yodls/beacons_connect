@@ -18,6 +18,9 @@
    data-chat="{{ chat.url }}">
   {% if chat.kind == "club" %}
     {{ ui.club_badge(chat.title) }}
+  {% elif chat.kind in ("match", "pair") %}
+    {# A friend or a pairing: the row is a person, so their picture. #}
+    {{ ui.face(chat.title, chat.avatar_id or chat.target_id) }}
   {% else %}
     {{ ui.avatar(chat.title, chat.avatar_id or chat.target_id) }}
   {% endif %}

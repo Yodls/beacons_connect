@@ -1151,6 +1151,12 @@
           max-width: 84%; padding: 5px 10px 4px;
         }
         #log .msg:not(.has-card):not(.note) > * { grid-column: 1 / -1; }
+        /* Except the avatar. A positioned grid item with a column is placed
+           against that column, which starts inside the bubble's padding, so
+           left: -38px put the face 10px too far right, over the bubble's
+           edge. Without one it is placed against the bubble itself, as on
+           wider screens, and sits clear of it. */
+        #log .msg:not(.has-card):not(.note) > .avatar { grid-column: auto; }
         #log .msg:not(.has-card):not(.note) > .at { grid-column: 1; order: 1; margin-top: 1px; }
         /* Beside a long time (a date and an hour) on the narrowest phones,
            or with the text made larger, the actions can wrap. Each one's tap
@@ -1202,8 +1208,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='harbor-battleship.css') }}">
   <div class="chathead">
     {# A pair chat is keyed on the pairing; its circle takes the person's
-       colours, as a friend chat's does. #}
-    {% if kind == "club" %}{{ ui.club_badge(title) }}{% else %}{{ ui.avatar(title, partner_id if kind == "pair" and partner_id else target_id) }}{% endif %}
+       colours, as a friend chat's does. A friend chat is keyed on the friend
+       (target_id is their user id), and both are a person: their picture.
+       A group or the campus room is not, and a pair whose person cannot be
+       named falls back to the pairing's own circle rather than look a
+       picture up by the pairing's id. #}
+    {% if kind == "club" %}{{ ui.club_badge(title) }}
+    {%- elif kind == "match" %}{{ ui.face(title, target_id) }}
+    {%- elif kind == "pair" and partner_id %}{{ ui.face(title, partner_id) }}
+    {%- else %}{{ ui.avatar(title, target_id) }}{% endif %}
     <div class="grow">
       {# The chip stays outside the <h1>: the browser harness identifies pages
          by h1 textContent, so the heading has to read exactly the title. #}
@@ -1400,7 +1413,7 @@
          "Today" markers. #}
       <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}{% if message.reactions and not message.post %} has-reacts{% endif %}"
            data-id="{{ message.id }}" data-ts="{{ message.ts }}">
-        {% if not message.mine %}{{ ui.avatar(message.name, message.user_id, sm=true) }}{% endif %}
+        {% if not message.mine %}{{ ui.face(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
         {# What this answers, from the copy taken when it was sent. data-to
            only while the original is still there to jump to. #}
@@ -2751,11 +2764,21 @@
 
       p.className = "msg" + (message.user_id === me ? " mine" : "");
       if (message.user_id !== me) {
-        // The same avatar ui.avatar() draws: initials on a palette colour.
-        var parts = String(message.name || "?").trim().split(/\s+/);
-        var face = span("avatar av-" + (message.user_id % 6) + " sm",
-          (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
-        face.setAttribute("aria-hidden", "true");
+        // The same face ui.face() draws: the sender's picture when they have
+        // set one, otherwise their initials on a palette colour.
+        var face;
+        if (message.photo) {
+          face = document.createElement("img");
+          face.className = "avatar sm";
+          face.src = message.photo;
+          face.alt = "";
+          face.loading = "lazy";
+        } else {
+          var parts = String(message.name || "?").trim().split(/\s+/);
+          face = span("avatar av-" + (message.user_id % 6) + " sm",
+            (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
+          face.setAttribute("aria-hidden", "true");
+        }
         p.appendChild(face);
       }
       p.appendChild(span("who", message.name));

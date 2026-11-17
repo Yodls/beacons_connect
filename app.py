@@ -1851,6 +1851,9 @@ def chat_rows(kind, parent, after=0):
             "ts": m.created_at.isoformat() + "Z",
             "mine": m.user_id == current_user.id,
             "reactions": reacted.get(m.id, []),
+            # The sender's picture, for the face beside the bubble (null:
+            # their initials). From one lookup of everybody's per request.
+            "photo": beacon_picture_url(m.user_id),
         }
         # A reply carries a copy of what it quoted, made when it was sent.
         # When its author deletes the original, the copy is cleared too
@@ -4974,6 +4977,8 @@ def find_game():
             "id": pairing.id,
             "game": pairing.game,
             "other": other.name if other else "Partner",
+            # The partner, for their picture (ui.face) on the card.
+            "other_id": other_id,
         })
 
     # The highest one they already have, for the live channel to start from:
@@ -8716,7 +8721,8 @@ def map_flag_payloads(rows):
             .where(GamePostRsvp.post_id.in_(post_ids))
             .order_by(User.name)
         ):
-            people.setdefault(post_id, []).append({"id": user_id, "name": name})
+            people.setdefault(post_id, []).append(
+                {"id": user_id, "name": name, "photo": beacon_picture_url(user_id)})
         rooms = chats_for(post_ids)
 
     # The friends each of *my* "My friend(s)" flags is shared with, so the
@@ -8771,8 +8777,10 @@ def map_flag_payloads(rows):
             "latitude": float(flag.latitude),
             "longitude": float(flag.longitude),
             "owner_name": owner_name,
-            # For the owner's avatar on the card (its colour is the id's).
+            # For the owner's avatar on the card (its colour is the id's),
+            # and their picture when they have set one.
             "owner_id": flag.owner_id,
+            "owner_photo": beacon_picture_url(flag.owner_id),
             "mine": is_mine,
             "event": event,
             "created_at": flag.created_at.isoformat() + "Z",
@@ -8993,7 +9001,8 @@ def map_flags_list():
         .where(ClubMember.user_id == me)
         .order_by(Club.name)
     ).all()
-    friends = [{"id": f["user_id"], "name": f["name"]}
+    friends = [{"id": f["user_id"], "name": f["name"],
+                "photo": beacon_picture_url(f["user_id"])}
                for f in matching.active_matches(me)]
     friends.sort(key=lambda f: f["name"].lower())
 
@@ -9387,6 +9396,7 @@ def beacon_set_password(user, new_password):
 # not start without these references.
 
 import datetime as _bc_dt
+import io as _bc_io
 import os as _bc_os
 import re as _bc_re
 import secrets as _bc_secrets
@@ -9615,10 +9625,64 @@ def _bc_is_image(head):
 
 
 def _bc_picture_path(name):
-    """The file's path, only for names this code made (u<id>-<hex>.<ext>)."""
-    if not name or not _bc_re.fullmatch(r"u\d+-[0-9a-f]{12}\.(png|jpg|gif|webp)", name):
+    """The file's path, only for names this code made: p<id>-<hex>.jpg for a
+    picture made ready to show (_bc_process_picture), or u<id>-<hex>.<ext> for
+    one stored as uploaded, before that was done (_bc_convert_old_pictures)."""
+    if not name or not _bc_re.fullmatch(
+            r"p\d+-[0-9a-f]{12}\.jpg|u\d+-[0-9a-f]{12}\.(png|jpg|gif|webp)", name):
         return None
     return _bc_os.path.join(_bc_upload_folder(), name)
+
+
+# What a picture becomes before anybody else sees it: a small square with
+# nothing hidden in it. Pictures used to be kept exactly as uploaded, so a
+# phone photo carried its EXIF data (often where it was taken), and a 2 MB
+# original was what drew a 30px face beside every message.
+BEACON_PICTURE_SIZE = 256
+# A small file can still unpack into an enormous image. Refused before it is
+# decoded: a phone's largest photos are under 50 megapixels.
+BEACON_PICTURE_MAX_PIXELS = 50_000_000
+
+
+class _BcPictureError(ValueError):
+    """A picture that cannot be made ready to show; the message says why."""
+
+
+def _bc_process_picture(data):
+    """The picture as it is kept and shown: a BEACON_PICTURE_SIZE square JPEG
+    with no metadata. Raises _BcPictureError for one that cannot be used."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        img = Image.open(_bc_io.BytesIO(data))
+    except Image.DecompressionBombError:
+        raise _BcPictureError("That picture is too large to use. Try a smaller one.")
+    except (UnidentifiedImageError, OSError):
+        raise _BcPictureError("That picture could not be read. Try another one.")
+    if img.width * img.height > BEACON_PICTURE_MAX_PIXELS:
+        raise _BcPictureError("That picture is too large to use. Try a smaller one.")
+    try:
+        img.seek(0)                          # the first frame of an animation
+        # Upright first: a phone photo is often stored sideways with a tag
+        # saying which way up it goes, and the tag is about to be dropped.
+        img = ImageOps.exif_transpose(img)
+        # Anything see-through goes onto white, which is what an avatar is
+        # drawn on.
+        img = img.convert("RGBA")
+        flat = Image.new("RGB", img.size, (255, 255, 255))
+        flat.paste(img, mask=img.getchannel("A"))
+        flat = ImageOps.fit(flat, (BEACON_PICTURE_SIZE, BEACON_PICTURE_SIZE),
+                            Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        out = _bc_io.BytesIO()
+        # No exif= given, so none is written: the location, the camera, the
+        # date and the rest stay behind.
+        flat.save(out, "JPEG", quality=85, optimize=True)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise _BcPictureError("That picture could not be read. Try another one.")
+    return out.getvalue()
+
+
+def _bc_picture_name(user_id):
+    return "p%d-%s.jpg" % (user_id, _bc_secrets.token_hex(6))
 
 
 def _bc_remove_file(name):
@@ -9631,32 +9695,114 @@ def _bc_remove_file(name):
 
 
 def _bc_store_picture(row, upload):
-    """Saves a new picture for this profile row. Returns (old file name, error)."""
+    """Saves a new picture for this profile row, made ready to show first
+    (_bc_process_picture): what is kept is never the upload itself. Returns
+    (old file name, error)."""
     data = upload.read(BEACON_PICTURE_LIMIT + 1)
     if len(data) > BEACON_PICTURE_LIMIT:
         return None, "The picture must be under 2 MB."
     if not _bc_is_image(data[:12]):
         return None, "The picture must be a JPG, PNG, GIF or WebP image."
-    ext = {b"\x89P": "png", b"\xff\xd8": "jpg", b"GI": "gif", b"RI": "webp"}[data[:2]]
-    name = "u%d-%s.%s" % (row.user_id, _bc_secrets.token_hex(6), ext)
+    try:
+        ready = _bc_process_picture(data)
+    except _BcPictureError as error:
+        return None, str(error)
+    name = _bc_picture_name(row.user_id)
     with open(_bc_picture_path(name), "wb") as out:
-        out.write(data)
+        out.write(ready)
     old, row.picture = row.picture, name
-    _bc_flask.g.pop("_bc_pictures", None)          # forget the old address for this request
+    _bc_forget_pictures()                            # forget the old address for this request
     return old, None
 
 
+_bc_pictures_converted = []
+
+
+def _bc_convert_old_pictures():
+    """Once per server process: every picture still kept as it was uploaded (a
+    u<id>-... file, from before pictures were made ready to show) is made ready
+    the way an upload is now, as a p<id>-...jpg, and the original goes.
+
+    In connections of its own, never the request's session, so it cannot
+    commit anything a request has pending. Compare and set, because both
+    gunicorn workers may reach the same row: only the one whose UPDATE still
+    finds the old name keeps its copy, and the other removes its own. Nothing
+    is removed from the database: one value changes, and the original file is
+    deleted only once its replacement is committed. A row whose file is not on
+    this machine (a database shared with another one) is left as it is, and so
+    is a picture that cannot be read."""
+    if _bc_pictures_converted:
+        return
+    _bc_pictures_converted.append(True)
+    table = BeaconProfile.__table__
+    try:
+        with db.engine.connect() as conn:
+            rows = conn.execute(_bc_sa.select(table.c.user_id, table.c.picture)
+                                .where(table.c.picture.like("u%"))).all()
+    except Exception:                       # never take the site down over this
+        app.logger.exception("Beacon profile: could not list pictures to convert")
+        return
+    for user_id, old in rows:
+        path = _bc_picture_path(old)
+        if not path or not _bc_os.path.isfile(path):
+            continue
+        try:
+            with open(path, "rb") as original:
+                ready = _bc_process_picture(original.read())
+        except (_BcPictureError, OSError):
+            app.logger.warning("Beacon profile: picture %s could not be converted; "
+                               "left as it was", old)
+            continue
+        new = _bc_picture_name(user_id)
+        won = False
+        try:
+            with open(_bc_picture_path(new), "wb") as out:
+                out.write(ready)
+            with db.engine.begin() as conn:
+                won = conn.execute(
+                    table.update()
+                    .where(table.c.user_id == user_id, table.c.picture == old)
+                    .values(picture=new)).rowcount == 1
+        except Exception:
+            app.logger.exception("Beacon profile: could not convert picture %s", old)
+        _bc_remove_file(old if won else new)
+
+
+def _bc_forget_pictures():
+    """After a picture is set or taken away: this request looks them up again."""
+    if _bc_flask.has_request_context():
+        _bc_flask.g.pop("_bc_pictures", None)
+        _bc_flask.g.pop("_bc_picture_names", None)
+
+
+def _bc_picture_names():
+    """Everybody's picture, by user id: one query for the whole request.
+
+    A page can show a face for every friend, every member and every message's
+    sender, so a lookup per person was a query per person. All the pictures
+    that are set come back in one go instead, the first time any is wanted.
+    """
+    cache = _bc_flask.g if _bc_flask.has_request_context() else None
+    names = getattr(cache, "_bc_picture_names", None) if cache is not None else None
+    if names is None:
+        names = {}
+        _bc_ensure_tables()
+        if _bc_tables_ready:
+            with db.session.no_autoflush:      # a lookup only: never writes pending changes
+                names = dict(db.session.execute(
+                    db.select(BeaconProfile.user_id, BeaconProfile.picture)
+                    .where(BeaconProfile.picture.isnot(None))).all())
+        if cache is not None:
+            cache._bc_picture_names = names
+    return names
+
+
 def beacon_picture_url(user_id):
-    """The picture's address, or None (the page then shows your initials avatar).
-    Looked up once per request per student."""
+    """The picture's address, or None (the page then shows the initials avatar).
+    From one lookup of everybody's per request (_bc_picture_names)."""
     cache = _bc_flask.g.setdefault("_bc_pictures", {}) if _bc_flask.has_request_context() else {}
     if user_id not in cache:
-        _bc_ensure_tables()
-        if not _bc_tables_ready:
-            return None
-        with db.session.no_autoflush:          # a lookup only: never writes pending changes
-            row = db.session.get(BeaconProfile, user_id)
-        name = row.picture if row else None
+        name = _bc_picture_names().get(user_id)
         path = _bc_picture_path(name)
         # The file itself must be there too: if it is gone (a server whose disk is
         # wiped on each redeploy, say), initials show instead of a broken image.
@@ -9667,6 +9813,14 @@ def beacon_picture_url(user_id):
     if app.config.get("BEACON_UPLOAD_FOLDER"):
         return _bc_flask.url_for("beacon_upload", name=name)
     return _bc_flask.url_for("static", filename="uploads/" + name)
+
+
+# For the templates: ui.face() in _ui.html asks this for a person's picture.
+# A global rather than a context value, because pages import _ui.html without
+# their context, and a global is still there.
+@app.template_global("photo_of")
+def photo_of(user_id):
+    return beacon_picture_url(user_id) if user_id else None
 
 
 # ----------------------------------------------------------------------------- helpers for your own routes
@@ -9795,6 +9949,7 @@ def _bc_profile_details():
     upload = _bc_flask.request.files.get("picture")
     if _bc_flask.request.form.get("remove_picture") == "1":
         old_picture, row.picture = row.picture, None
+        _bc_forget_pictures()
     elif upload and upload.filename:
         old_picture, problem = _bc_store_picture(row, upload)
         if problem:
@@ -9948,6 +10103,7 @@ def _bc_profile_picture():
             _bc_flask.flash("You don't have a photo to remove.")
             return _bc_flask.redirect(back)
         old_picture, row.picture = row.picture, None
+        _bc_forget_pictures()
         message = "Your photo is removed. Your initials show instead."
     else:
         upload = _bc_flask.request.files.get("picture")
@@ -10074,6 +10230,10 @@ def _bc_ensure_tables():
         db.session.rollback()
         app.logger.exception("Beacon profile: could not create the beacon_ tables; "
                              "run `flask --app app beacon-create-tables`.")
+    if _bc_tables_ready:
+        # Pictures uploaded before they were made ready to show, made ready
+        # now: once per process, the first time it serves anything.
+        _bc_convert_old_pictures()
     return None
 
 

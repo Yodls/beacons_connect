@@ -12,6 +12,23 @@
 {%- endmacro %}
 
 {#
+  A person: their profile picture when they have set one, their initials
+  (avatar, above) when not. For people only, and only with their user id:
+  avatar() is also used for clubs, groups and games, whose seed is their own
+  id, and looking a picture up by that would show somebody else's face.
+  The <img> carries the same classes, so every size rule written for .avatar
+  fits it too; alt="" because the name is always written beside it.
+#}
+{% macro face(label, user_id, square=false, sm=false) -%}
+  {%- set url = photo_of(user_id) -%}
+  {%- if url -%}
+    <img class="avatar{% if square %} sq{% endif %}{% if sm %} sm{% endif %}" src="{{ url }}" alt="" loading="lazy" />
+  {%- else -%}
+    {{ avatar(label, user_id, square=square, sm=sm) }}
+  {%- endif -%}
+{%- endmacro %}
+
+{#
   A club's own pixel icon, where a person would get initials. The icon comes
   from the club's name (club_catalog.py), so any club, old or new, gets one.
 #}

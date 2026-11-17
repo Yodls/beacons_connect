@@ -67,14 +67,11 @@
       {% include "_notices.html" %}
 
       {# Where sign out lives, on every page. #}
-      {% set my_picture = current_user.picture_url %}
       <details class="who">
         <summary aria-label="Your account">
-          {% if my_picture %}
-            <img class="avatar sq" src="{{ my_picture }}" alt="" />
-          {% else %}
-            {{ ui.avatar(current_user.name, current_user.id, square=true) }}
-          {% endif %}
+          {# Your picture, or your initials: the same ui.face every other
+             person is drawn with. #}
+          {{ ui.face(current_user.name, current_user.id, square=true) }}
         </summary>
         <div class="who-panel">
           <b>{{ current_user.name }}</b>

@@ -25,7 +25,7 @@
 {% for person in people %}
   {% set state = states.get(person.id, "none") %}
   <div class="dock-row">
-    {{ ui.avatar(person.name, person.id) }}
+    {{ ui.face(person.name, person.id) }}
     <span class="grow">{{ person.name }}
       {%- if owner_id is defined and person.id == owner_id %}
         <span class="dock-quiet">Owner</span>

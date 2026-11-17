@@ -526,7 +526,7 @@
       {% for rec in recs %}
         <div class="card">
           <div class="card-top">
-            {{ ui.avatar(rec.name, rec.user_id) }}
+            {{ ui.face(rec.name, rec.user_id) }}
             <div class="grow">
               <h3>{{ rec.name }}
                 {%- if rec.pronouns %} <span class="pronouns">{{ rec.pronouns }}</span>{% endif -%}

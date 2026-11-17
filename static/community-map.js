@@ -685,13 +685,24 @@
     return b;
   }
 
-  // Somebody's avatar: their initials on the colour their id gives them,
-  // the same as _ui.html's macro draws everywhere else.
-  function avatar(name, id) {
-    var parts = String(name || "").split(" ").filter(Boolean);
-    var initials = (parts.length ? parts[0][0] : "") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
-    var a = node("span", "avatar sm av-" + (Math.abs(parseInt(id, 10) || 0) % 6), initials.toUpperCase());
-    a.setAttribute("aria-hidden", "true");
+  // Somebody's avatar: their picture when they have set one, otherwise their
+  // initials on the colour their id gives them, the same as _ui.html's face()
+  // draws everywhere else. Small, except in the friend picker (small false).
+  function avatar(name, id, photo, small) {
+    var size = small === false ? "" : " sm";
+    var a;
+    if (photo) {
+      a = document.createElement("img");
+      a.className = "avatar" + size;
+      a.src = photo;
+      a.alt = "";
+      a.loading = "lazy";
+    } else {
+      var parts = String(name || "").split(" ").filter(Boolean);
+      var initials = (parts.length ? parts[0][0] : "") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+      a = node("span", "avatar" + size + " av-" + (Math.abs(parseInt(id, 10) || 0) % 6), initials.toUpperCase());
+      a.setAttribute("aria-hidden", "true");
+    }
     a.title = name || "";
     return a;
   }
@@ -771,7 +782,7 @@
 
     var body = node("div", "fd-body");
     var head = node("div", "fd-head");
-    head.appendChild(avatar(flag.owner_name, flag.owner_id));
+    head.appendChild(avatar(flag.owner_name, flag.owner_id, flag.owner_photo));
     var text = node("div", "grow");
     text.appendChild(node("b", "fd-title", flag.title));
     text.appendChild(node("span", "fd-sub", whoLine(flag)));
@@ -794,7 +805,7 @@
       var people = ev.people || [];
       if (people.length) {
         var faces = node("span", "fd-faces");
-        people.slice(0, 5).forEach(function (p) { faces.appendChild(avatar(p.name, p.id)); });
+        people.slice(0, 5).forEach(function (p) { faces.appendChild(avatar(p.name, p.id, p.photo)); });
         who.appendChild(faces);
       }
       var names = people.map(function (p) { return firstName(p.name); });
@@ -1309,11 +1320,7 @@
         renderFriendChips();
       });
       var tick = node("span", "cbox"); tick.appendChild(spriteNode("check"));
-      var parts = f.name.split(/\s+/);
-      var avatar = node("span", "avatar av-" + (f.id % 6),
-        (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
-      avatar.setAttribute("aria-hidden", "true");
-      row.appendChild(box); row.appendChild(tick); row.appendChild(avatar);
+      row.appendChild(box); row.appendChild(tick); row.appendChild(avatar(f.name, f.id, f.photo, false));
       row.appendChild(node("span", "grow", f.name));
       el.friendList.appendChild(row);
     });

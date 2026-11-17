@@ -48,9 +48,9 @@
     </div>
     <div class="ms-body">
       <div class="ms-vs">
-        <span class="ms-side ms-me">{{ ui.avatar(me.name, me.id) }}<b>You</b></span>
+        <span class="ms-side ms-me">{{ ui.face(me.name, me.id) }}<b>You</b></span>
         <span class="ms-badge" aria-hidden="true">VS</span>
-        <span class="ms-side ms-them">{{ ui.avatar(splash.opponent, splash.opponent_id) }}<b>{{ splash.opponent }}</b></span>
+        <span class="ms-side ms-them">{{ ui.face(splash.opponent, splash.opponent_id) }}<b>{{ splash.opponent }}</b></span>
       </div>
       <p class="ms-line">{{ splash.lead }} <b>{{ splash.opponent }}</b>
         {%- if splash.what %} for <b>{{ splash.what }}</b>{% endif %}</p>
