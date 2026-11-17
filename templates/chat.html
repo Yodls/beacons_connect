@@ -1051,6 +1051,29 @@
         box-shadow: var(--drop);
       }
 
+      /* ---------- a conversation that fits does not scroll as a page ----------
+         On any screen, phone to desktop. The log sizer fits the chat to the
+         window and marks it (.gamewrap.fits) when the log has a readable
+         height there; the page then has nothing left to scroll. Without
+         this it always had a little: base.html keeps 112px at the foot of
+         every page for the tab bar, more than the bar takes, so a chat that
+         fitted still scrolled by 8px on a desktop and 26px on a small
+         tablet, and a wheel or a thumb carried on past the end of the
+         conversation moved the whole page by that. (base.html's
+         min-height: 100vh is the same fault on a phone, where 100vh is
+         taller than what shows; the phone block below drops it outright.)
+
+         When it does not fit (a short window, or a board above or beside
+         the chat) the mark is off and the page scrolls as any page does,
+         with its room at the foot, so the composer can clear the tab bar. */
+      body:has(.gamewrap.fits) { min-height: 0; padding-bottom: 0; }
+      /* Nothing to scroll, so nothing to stretch or pull to refresh either,
+         where the browser honours it. */
+      html:has(.gamewrap.fits), body:has(.gamewrap.fits) { overscroll-behavior: none; }
+      /* And a conversation's scroll stays in the conversation, whatever the
+         page can do: it does not carry on into the page at the log's end. */
+      #log { overscroll-behavior: contain; }
+
       /* ---------- a conversation on a phone ----------
          The screen is the conversation's. Between the site's top bar, the
          page's margins, a window frame, the composer and the floating tab
@@ -1065,8 +1088,18 @@
         nav.tabbar { display: none; }
         /* base.html keeps room at the foot for the tab bar. Here the
            composer's own bar runs to the foot of the screen instead, the
-           home indicator's inset inside it. */
-        body { padding-bottom: 0; }
+           home indicator's inset inside it.
+
+           And base.html makes every page at least 100vh tall, which on an
+           iPhone is the screen with Safari's bars tucked away: about 100px
+           taller than what shows while they are out. The chat is fitted to
+           what shows (the log sizer), so that spare height was a page that
+           could scroll under a conversation that could not, with a blank
+           strip under the composer once it had. Nothing to scroll is the
+           only lock that holds there: overflow: hidden on the page is not
+           honoured by iOS once its bars are in, and would hide the composer
+           on a screen too short to fit, where the page has to scroll. */
+        body { padding-bottom: 0; min-height: 0; }
         main.page { padding: 0; }
         /* Toasts cleared the tab bar; now they clear the composer. */
         #toasts { bottom: calc(68px + env(safe-area-inset-bottom)); }
@@ -1512,8 +1545,34 @@
       var row = wrap && wrap.querySelector(".talkcol .sendrow");
       if (!log || !row || !window.getComputedStyle) { return; }
       function px(el, prop) { return parseFloat(getComputedStyle(el)[prop]) || 0; }
+      // The foot of what can be seen. A fixed element at bottom: 0 sits on
+      // it whatever a phone browser's own bars are doing, which is why the
+      // tab bar's top served as the floor; where this page hides the tab
+      // bar, this mark stands in for it. Not innerHeight or the root's
+      // clientHeight: iOS reports both stale in some states of its bars.
+      // On the body, outside #live: made once and kept across page swaps,
+      // and under no ancestor that could become its containing block.
+      var phone = window.matchMedia ? window.matchMedia("(max-width: 560px)") : null;
+      function screenFoot() {
+        var mark = document.getElementById("screenfoot");
+        if (!mark) {
+          mark = document.createElement("i");
+          mark.id = "screenfoot";
+          mark.setAttribute("aria-hidden", "true");
+          mark.style.cssText = "position:fixed;left:0;bottom:0;width:0;height:0;"
+                             + "visibility:hidden;pointer-events:none";
+          document.body.appendChild(mark);
+        }
+        return mark.getBoundingClientRect().top;
+      }
       function size() {
-        if (wrap.classList.contains("playing")) { log.style.height = ""; return; }
+        // With a board the chat is sized by the stylesheet (or the foot
+        // script, beside it) and the page scrolls: not a chat that fits.
+        if (wrap.classList.contains("playing")) {
+          log.style.height = "";
+          wrap.classList.remove("fits");
+          return;
+        }
         // Where the tab bar's top edge is on the screen. It is fixed, so
         // that is where it is at any scroll; with none (a wide window
         // without one), the foot of the window.
@@ -1524,16 +1583,27 @@
         // the log at its minimum. Then the floor is the foot of the screen:
         // the composer's bar runs to it, carrying its own padding and the
         // home indicator's inset, so the only gap is whatever the body
-        // still keeps at its foot (none, in that layout).
-        var hidden = !!bar && getComputedStyle(bar).display === "none";
-        var floor = bar && !hidden && getComputedStyle(bar).position === "fixed"
-          ? bar.getBoundingClientRect().top : root.clientHeight;
+        // still keeps at its foot (none, in that layout). The page is then
+        // exactly as tall as what shows, with nothing to scroll.
+        //
+        // On the first pass of a full page load the tab bar is not in the
+        // document yet (it follows the page's markup), so the phone width
+        // answers for it and the first paint is already the right height.
+        var hidden = bar ? getComputedStyle(bar).display === "none"
+                         : !!phone && phone.matches;
+        var floor = hidden ? screenFoot()
+          : bar && getComputedStyle(bar).position === "fixed"
+            ? bar.getBoundingClientRect().top : root.clientHeight;
         var gap = hidden ? px(document.body, "paddingBottom") : 16;
         var chip = document.getElementById("replying");
         var under = row.offsetHeight + px(row, "marginTop")
                   + (chip && !chip.hidden ? chip.offsetHeight + px(chip, "marginTop") : 0);
         var top = log.getBoundingClientRect().top + window.pageYOffset;
         var want = Math.floor(floor - gap - top - under);
+        // Fitted to the window with a readable log: the page's stylesheet
+        // then leaves the page nothing to scroll (.gamewrap.fits). Nothing
+        // measured above depends on that, so marking it cannot feed back.
+        wrap.classList.toggle("fits", want >= 256);
         var was = log.style.height;
         var next = Math.max(want, 256) + "px";
         log.style.height = next;
@@ -1720,6 +1790,14 @@
     window.beaconTalkSizer = size;
     window.addEventListener("scroll", later, { passive: true });
     window.addEventListener("resize", later);
+    // And whenever else what shows can change height without a resize the
+    // page is sure to hear: a phone browser's bars sliding in or out, the
+    // phone turned, a page brought back from the back-forward cache. On a
+    // phone the chat is fitted to exactly what shows, so a fit that went
+    // stale would be a page that scrolls again.
+    window.addEventListener("orientationchange", later);
+    window.addEventListener("pageshow", later);
+    if (window.visualViewport) { window.visualViewport.addEventListener("resize", later); }
     size();
   })();
 
