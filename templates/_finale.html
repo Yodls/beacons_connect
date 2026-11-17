@@ -1,0 +1,517 @@
+{#
+  The presentation's ending, on Home. Included by home.html at the end of its
+  main block, for admins only (styles in _finale.css). The way in is the
+  lighthouse on the welcome window's island: home.html lays a clear button
+  (#fin-light) over it, also for admins only.
+
+  Clicking the lighthouse asks "Fire cannons?" (the safeguard: Not yet
+  closes it and nothing has changed). Fire! then plays, in order:
+
+    1. the page steps aside, leaving the Harborwalk behind it, and a cannon
+       rolls in from either end of the grass;
+    2. night falls, as the top bar's night switch does it but in half the
+       time (if it is night already, it stays night);
+    3. the cannons fire shells that burst over the harbour;
+    4. more shells burst into the letters of "Beacons Connect", one at a time;
+    5. the letters fall away and the smoke clears;
+    6. the sign-in page's brand panel (gull and pigeon) arrives a piece at a
+       time, with "Return to home" right under it. Nothing more happens
+       until that key is pressed, which loads Home afresh.
+
+  The whole of it runs about fifteen seconds; the times are in show(), near
+  the end of the script, and the tile's own in _finale.css.
+
+  The sky is turned with the same data-sky attribute the site uses, but
+  nothing is written to this device's remembered choice, so Home comes back
+  the way it was left. With reduced motion there are no shells: night
+  falls, the words light up, and the panel follows.
+
+  Everything is drawn at the Harborwalk's scale (one art pixel to two, three
+  or four screen pixels), so the sparks are pixels too. The script arms no
+  pollers and does nothing at all until the lighthouse is clicked.
+#}
+<div class="fin-ask" id="fin-ask" role="dialog" aria-modal="true" aria-labelledby="fin-ask-title" hidden>
+  <div class="fin-card">
+    <h2 id="fin-ask-title">Fire cannons?</h2>
+    <p>This plays the presentation's ending over Home.</p>
+    <div class="fin-keys">
+      <button type="button" class="fin-key gold" id="fin-fire">Fire!</button>
+      <button type="button" class="fin-key" id="fin-hold">Not yet</button>
+    </div>
+  </div>
+</div>
+
+<div class="finale" id="finale" tabindex="-1" hidden>
+  <div class="fin-art" aria-hidden="true">
+    <i class="fin-cannon left"><i class="fin-flip"><i class="fin-gun"><svg viewBox="0 0 32 28" width="32" height="28" shape-rendering="crispEdges" focusable="false"><path fill="#132245" d="M23 1h3v1h-3zM22 2h1v1h-1zM26 2h1v1h-1zM22 3h1v1h-1zM27 3h1v1h-1zM20 4h2v1h-2zM27 4h1v1h-1zM19 5h1v1h-1zM28 5h1v1h-1zM17 6h2v1h-2zM27 6h1v1h-1zM16 7h1v1h-1zM25 7h2v1h-2zM14 8h2v1h-2zM24 8h1v1h-1zM13 9h1v1h-1zM22 9h2v1h-2zM11 10h2v1h-2zM21 10h1v1h-1zM10 11h1v1h-1zM20 11h1v1h-1zM9 12h1v1h-1zM19 12h1v1h-1zM7 13h2v1h-2zM18 13h1v1h-1zM6 14h1v1h-1zM18 14h1v1h-1zM5 15h1v1h-1zM19 15h1v1h-1zM6 16h1v1h-1zM20 16h1v1h-1zM5 17h2v1h-2zM20 17h1v1h-1zM4 18h1v1h-1zM20 18h1v1h-1zM4 19h1v1h-1zM21 19h1v1h-1zM5 20h1v1h-1zM20 20h1v1h-1zM3 21h2v1h-2zM20 21h1v1h-1zM1 22h2v1h-2zM20 22h1v1h-1zM0 23h1v1h-1zM19 23h1v1h-1zM6 24h3v1h-3zM18 24h1v1h-1zM5 25h1v1h-1zM9 25h1v1h-1zM17 25h1v1h-1zM3 26h2v1h-2zM10 26h3v1h-3zM14 26h3v1h-3zM0 27h3v1h-3zM13 27h1v1h-1z"/><path fill="#7A8798" d="M23 2h3v1h-3zM24 3h1v1h-1zM22 4h1v1h-1zM20 5h3v1h-3zM19 6h2v1h-2zM17 7h3v1h-3zM16 8h2v1h-2zM14 9h3v1h-3zM13 10h3v1h-3zM11 11h1v1h-1zM13 11h1v1h-1zM10 12h3v1h-3zM9 13h1v1h-1zM7 14h2v1h-2zM6 15h2v1h-2z"/><path fill="#C9A227" d="M23 3h1v1h-1zM23 4h1v1h-1zM24 5h1v1h-1zM25 6h1v1h-1zM12 11h1v1h-1z"/><path fill="#3B4452" d="M25 3h2v1h-2zM24 4h3v1h-3zM23 5h1v1h-1zM25 5h1v1h-1zM21 6h3v1h-3zM20 7h3v1h-3zM18 8h4v1h-4zM17 9h3v1h-3zM16 10h3v1h-3zM14 11h4v1h-4zM14 12h3v1h-3z"/><path fill="#232A35" d="M26 5h2v1h-2zM24 6h1v1h-1zM26 6h1v1h-1zM23 7h2v1h-2zM22 8h2v1h-2zM20 9h2v1h-2zM19 10h2v1h-2zM18 11h2v1h-2zM17 12h2v1h-2zM17 13h1v1h-1zM5 18h2v1h-2zM5 19h1v1h-1z"/><path fill="#C08447" d="M13 12h1v1h-1zM10 13h7v1h-7zM9 14h2v1h-2zM16 14h2v1h-2zM8 15h2v1h-2zM17 15h2v1h-2zM7 16h2v1h-2zM18 16h2v1h-2zM7 17h1v1h-1zM19 17h1v1h-1zM6 20h1v1h-1zM5 21h2v1h-2zM3 22h2v1h-2zM1 23h3v1h-3zM0 24h2v1h-2zM0 25h1v1h-1z"/><path fill="#1B2230" d="M11 14h2v1h-2zM14 14h2v1h-2zM11 15h2v1h-2zM14 15h1v1h-1zM12 16h1v1h-1zM8 17h2v1h-2zM9 18h2v1h-2zM8 20h3v1h-3zM8 21h2v1h-2z"/><path fill="#6E4E2A" d="M13 14h1v1h-1zM10 15h1v1h-1zM13 15h1v1h-1zM16 15h1v1h-1zM9 16h3v1h-3zM13 16h1v1h-1zM15 16h3v1h-3zM10 17h7v1h-7zM11 18h1v1h-1zM15 18h1v1h-1zM8 19h4v1h-4zM15 19h4v1h-4zM11 20h1v1h-1zM15 20h1v1h-1zM10 21h7v1h-7zM9 22h3v1h-3zM13 22h1v1h-1zM15 22h3v1h-3zM10 23h1v1h-1zM13 23h1v1h-1zM16 23h1v1h-1zM13 24h1v1h-1z"/><path fill="#9A6233" d="M7 18h1v1h-1zM19 18h1v1h-1zM6 19h2v1h-2zM19 19h2v1h-2zM7 20h1v1h-1zM19 20h1v1h-1zM7 21h1v1h-1zM19 21h1v1h-1zM5 22h4v1h-4zM18 22h2v1h-2zM4 23h6v1h-6zM17 23h2v1h-2zM2 24h4v1h-4zM9 24h2v1h-2zM16 24h2v1h-2zM1 25h4v1h-4zM10 25h7v1h-7zM0 26h3v1h-3zM13 26h1v1h-1z"/><path fill="#2E343C" d="M12 18h3v1h-3zM12 19h3v1h-3zM12 20h3v1h-3z"/></svg><i class="fin-flash"></i><i class="fin-muzzle"></i></i></i></i>
+    <i class="fin-cannon right"><i class="fin-flip"><i class="fin-gun"><svg viewBox="0 0 32 28" width="32" height="28" shape-rendering="crispEdges" focusable="false"><path fill="#132245" d="M23 1h3v1h-3zM22 2h1v1h-1zM26 2h1v1h-1zM22 3h1v1h-1zM27 3h1v1h-1zM20 4h2v1h-2zM27 4h1v1h-1zM19 5h1v1h-1zM28 5h1v1h-1zM17 6h2v1h-2zM27 6h1v1h-1zM16 7h1v1h-1zM25 7h2v1h-2zM14 8h2v1h-2zM24 8h1v1h-1zM13 9h1v1h-1zM22 9h2v1h-2zM11 10h2v1h-2zM21 10h1v1h-1zM10 11h1v1h-1zM20 11h1v1h-1zM9 12h1v1h-1zM19 12h1v1h-1zM7 13h2v1h-2zM18 13h1v1h-1zM6 14h1v1h-1zM18 14h1v1h-1zM5 15h1v1h-1zM19 15h1v1h-1zM6 16h1v1h-1zM20 16h1v1h-1zM5 17h2v1h-2zM20 17h1v1h-1zM4 18h1v1h-1zM20 18h1v1h-1zM4 19h1v1h-1zM21 19h1v1h-1zM5 20h1v1h-1zM20 20h1v1h-1zM3 21h2v1h-2zM20 21h1v1h-1zM1 22h2v1h-2zM20 22h1v1h-1zM0 23h1v1h-1zM19 23h1v1h-1zM6 24h3v1h-3zM18 24h1v1h-1zM5 25h1v1h-1zM9 25h1v1h-1zM17 25h1v1h-1zM3 26h2v1h-2zM10 26h3v1h-3zM14 26h3v1h-3zM0 27h3v1h-3zM13 27h1v1h-1z"/><path fill="#7A8798" d="M23 2h3v1h-3zM24 3h1v1h-1zM22 4h1v1h-1zM20 5h3v1h-3zM19 6h2v1h-2zM17 7h3v1h-3zM16 8h2v1h-2zM14 9h3v1h-3zM13 10h3v1h-3zM11 11h1v1h-1zM13 11h1v1h-1zM10 12h3v1h-3zM9 13h1v1h-1zM7 14h2v1h-2zM6 15h2v1h-2z"/><path fill="#C9A227" d="M23 3h1v1h-1zM23 4h1v1h-1zM24 5h1v1h-1zM25 6h1v1h-1zM12 11h1v1h-1z"/><path fill="#3B4452" d="M25 3h2v1h-2zM24 4h3v1h-3zM23 5h1v1h-1zM25 5h1v1h-1zM21 6h3v1h-3zM20 7h3v1h-3zM18 8h4v1h-4zM17 9h3v1h-3zM16 10h3v1h-3zM14 11h4v1h-4zM14 12h3v1h-3z"/><path fill="#232A35" d="M26 5h2v1h-2zM24 6h1v1h-1zM26 6h1v1h-1zM23 7h2v1h-2zM22 8h2v1h-2zM20 9h2v1h-2zM19 10h2v1h-2zM18 11h2v1h-2zM17 12h2v1h-2zM17 13h1v1h-1zM5 18h2v1h-2zM5 19h1v1h-1z"/><path fill="#C08447" d="M13 12h1v1h-1zM10 13h7v1h-7zM9 14h2v1h-2zM16 14h2v1h-2zM8 15h2v1h-2zM17 15h2v1h-2zM7 16h2v1h-2zM18 16h2v1h-2zM7 17h1v1h-1zM19 17h1v1h-1zM6 20h1v1h-1zM5 21h2v1h-2zM3 22h2v1h-2zM1 23h3v1h-3zM0 24h2v1h-2zM0 25h1v1h-1z"/><path fill="#1B2230" d="M11 14h2v1h-2zM14 14h2v1h-2zM11 15h2v1h-2zM14 15h1v1h-1zM12 16h1v1h-1zM8 17h2v1h-2zM9 18h2v1h-2zM8 20h3v1h-3zM8 21h2v1h-2z"/><path fill="#6E4E2A" d="M13 14h1v1h-1zM10 15h1v1h-1zM13 15h1v1h-1zM16 15h1v1h-1zM9 16h3v1h-3zM13 16h1v1h-1zM15 16h3v1h-3zM10 17h7v1h-7zM11 18h1v1h-1zM15 18h1v1h-1zM8 19h4v1h-4zM15 19h4v1h-4zM11 20h1v1h-1zM15 20h1v1h-1zM10 21h7v1h-7zM9 22h3v1h-3zM13 22h1v1h-1zM15 22h3v1h-3zM10 23h1v1h-1zM13 23h1v1h-1zM16 23h1v1h-1zM13 24h1v1h-1z"/><path fill="#9A6233" d="M7 18h1v1h-1zM19 18h1v1h-1zM6 19h2v1h-2zM19 19h2v1h-2zM7 20h1v1h-1zM19 20h1v1h-1zM7 21h1v1h-1zM19 21h1v1h-1zM5 22h4v1h-4zM18 22h2v1h-2zM4 23h6v1h-6zM17 23h2v1h-2zM2 24h4v1h-4zM9 24h2v1h-2zM16 24h2v1h-2zM1 25h4v1h-4zM10 25h7v1h-7zM0 26h3v1h-3zM13 26h1v1h-1z"/><path fill="#2E343C" d="M12 18h3v1h-3zM12 19h3v1h-3zM12 20h3v1h-3z"/></svg><i class="fin-flash"></i><i class="fin-muzzle"></i></i></i></i>
+  </div>
+  <canvas class="fin-canvas fin-smoke" aria-hidden="true"></canvas>
+  <canvas class="fin-canvas fin-sparks" aria-hidden="true"></canvas>
+  <div class="fin-stage">
+    <div class="fin-tile">
+      {% include "_brandpanel.html" %}
+      {# data-full: a whole page load, not a swap, so Home starts clean. #}
+      <a class="fin-key gold fin-home" href="{{ url_for('index') }}" data-full>Return to home</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var light = document.getElementById("fin-light");
+    var ask = document.getElementById("fin-ask");
+    var fin = document.getElementById("finale");
+    if (!light || !ask || !fin) { return; }
+    var fire = document.getElementById("fin-fire");
+    var hold = document.getElementById("fin-hold");
+    var art = fin.querySelector(".fin-art");
+    var stage = fin.querySelector(".fin-stage");
+    var guns = { l: fin.querySelector(".fin-cannon.left"), r: fin.querySelector(".fin-cannon.right") };
+    var smokeCv = fin.querySelector(".fin-smoke"), sparkCv = fin.querySelector(".fin-sparks");
+    var calm = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    var fired = false;
+
+    /* ---------- the lighthouse and its safeguard ---------- */
+    function open() {
+      if (fired) { return; }
+      ask.hidden = false;
+      // Not yet takes the focus, so a stray Enter never fires the cannons.
+      try { hold.focus(); } catch (e) { /* fine */ }
+    }
+    function close() { ask.hidden = true; }
+    light.hidden = false;
+    light.addEventListener("click", open);
+    hold.addEventListener("click", close);
+    ask.addEventListener("click", function (e) { if (e.target === ask) { close(); } });
+    ask.addEventListener("keydown", function (e) { if (e.key === "Escape") { close(); } });
+    fire.addEventListener("click", start);
+
+    /* ---------- the show ----------
+       Everything below works in art pixels: W by H is the window divided by
+       the Harborwalk's scale, and the two canvases are that size, stretched
+       back up without smoothing. */
+    var W = 0, H = 0, sm = null, sp = null;
+    var shells = [], parts = [], dots = [], flashes = [], puffs = [], events = [];
+    var T = 0, last = 0, running = false, clearing = false, ending = false;
+
+    var GOLD = "#FEDE42", SKY = "#78AFE9", WHITE = "#FFFFFF", ORANGE = "#FF791F",
+        RED = "#FF5A5F", LILAC = "#C9A8F0", MINT = "#8CE6C8";
+    var PALETTE = [GOLD, SKY, WHITE, ORANGE, RED, LILAC, MINT];
+
+    // "Beacons Connect" on a 5 by 7 dot grid: one number per row, one bit per dot.
+    var TEXT = "BeaconsConnect";
+    var GLYPHS = {
+      B: [30, 17, 17, 30, 17, 17, 30],
+      C: [14, 17, 16, 16, 16, 17, 14],
+      e: [0, 0, 14, 17, 31, 16, 14],
+      a: [0, 0, 14, 1, 15, 17, 15],
+      c: [0, 0, 14, 16, 16, 17, 14],
+      o: [0, 0, 14, 17, 17, 17, 14],
+      n: [0, 0, 22, 25, 17, 17, 17],
+      s: [0, 0, 14, 16, 14, 1, 30],
+      t: [8, 8, 28, 8, 8, 9, 6]
+    };
+
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function pick(list) { return list[(Math.random() * list.length) | 0]; }
+    function rgba(hex, a) {
+      var n = parseInt(hex.slice(1), 16);
+      return "rgba(" + (n >> 16) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+    }
+    // Things to do at a time on the show's clock, kept in order.
+    function at(t, fn) {
+      var i = events.length;
+      events.push(null);
+      while (i > 0 && events[i - 1].t > t) { events[i] = events[i - 1]; i--; }
+      events[i] = { t: t, fn: fn };
+    }
+
+    /* Where the words go: on one line where the window is wide enough for
+       dots four art pixels apart, otherwise one word over the other. From
+       480px the Harborwalk's lamp stands at 86% across with its head in
+       this part of the sky, so the words keep to the middle 68%. */
+    var lay = null;
+    function layout() {
+      var room = W * (fin.clientWidth >= 480 ? 0.68 : 0.86);
+      var s = Math.floor(room / 86), two = false, letters = [], i, x, y;
+      if (s < 4) {
+        two = true;
+        s = Math.max(2, Math.floor(Math.min(room / 41, H * 0.36 / 17)));
+      }
+      s = Math.min(s, 10);
+      if (two) {
+        x = Math.round((W - 41 * s) / 2); y = Math.round(H * 0.27 - 8.5 * s);
+        for (i = 0; i < 14; i++) { letters.push({ x: x + (i % 7) * 6 * s, y: y + (i < 7 ? 0 : 10 * s) }); }
+      } else {
+        x = Math.round((W - 86 * s) / 2); y = Math.round(H * 0.27 - 3.5 * s);
+        for (i = 0; i < 14; i++) { letters.push({ x: x + (i * 6 + (i < 7 ? 0 : 3)) * s, y: y }); }
+      }
+      lay = {
+        s: s, d: Math.max(1, Math.round(s * 0.6)), letters: letters,
+        box: { x0: x - 2 * s, y0: y - 2 * s, x1: x + (two ? 41 : 86) * s + 2 * s, y1: y + (two ? 17 : 7) * s + 2 * s }
+      };
+    }
+
+    function size() {
+      var k = parseFloat(window.getComputedStyle(art).getPropertyValue("--k")) || 3;
+      var w = Math.max(40, Math.round(fin.clientWidth / k));
+      var h = Math.max(40, Math.round(fin.clientHeight / k));
+      if (w === W && h === H) { return; }
+      // The window changed (Esc out of full screen, say): carry what is in
+      // the air across to the new size.
+      var fx = W ? w / W : 1, fy = H ? h / H : 1;
+      [parts, puffs, flashes].forEach(function (list) {
+        list.forEach(function (p) {
+          p.x *= fx; p.y *= fy;
+          if (p.px !== undefined) { p.px *= fx; p.py *= fy; p.qx *= fx; p.qy *= fy; }
+        });
+      });
+      shells.forEach(function (s) {
+        s.x0 *= fx; s.tx *= fx; s.vx *= fx;
+        s.y0 *= fy; s.ty *= fy; s.vy *= fy; s.g *= fy;
+      });
+      W = w; H = h;
+      smokeCv.width = sparkCv.width = w;
+      smokeCv.height = sparkCv.height = h;
+      layout();
+      if (!running && dots.length) { draw(); }
+    }
+
+    /* ---------- cannons, shells, bursts, smoke ---------- */
+    function muzzle(side) {
+      var m = guns[side].querySelector(".fin-muzzle").getBoundingClientRect();
+      var f = fin.getBoundingClientRect();
+      return { x: (m.left - f.left) * W / (f.width || 1), y: (m.top - f.top) * H / (f.height || 1) };
+    }
+    function bang(side) {
+      var g = guns[side];
+      g.classList.remove("bang");
+      void g.offsetWidth;   // so the recoil and the flash run again
+      g.classList.add("bang");
+    }
+    function puff(x, y, r, o) {
+      if (puffs.length > 170) { puffs.shift(); }
+      puffs.push({ x: x, y: y, r: r, vx: o.vx, vy: o.vy, a: o.a, grow: o.grow, age: 0, life: o.life });
+    }
+    // One shot: the cannon kicks and smokes, and a shell climbs to (tx, ty)
+    // in `fly` seconds, slowing as it goes, then calls `done` there.
+    function shoot(side, tx, ty, fly, done) {
+      var m = muzzle(side), g = H * 0.9, dir = side === "l" ? 1 : -1, i;
+      bang(side);
+      shells.push({
+        x0: m.x, y0: m.y, x: m.x, y: m.y, tx: tx, ty: ty,
+        vx: (tx - m.x) / fly, vy: (ty - m.y - 0.5 * g * fly * fly) / fly,
+        g: g, age: 0, fly: fly, done: done
+      });
+      for (i = 0; i < 3; i++) {
+        puff(m.x + dir * rnd(0, 3), m.y - rnd(0, 3), rnd(4, 6.5),
+             { vx: dir * rnd(5, 14), vy: -rnd(4, 12), a: 0.5, life: rnd(1.5, 2.4), grow: rnd(5, 9) });
+      }
+    }
+    // A burst of radius about o.r: a filled ball (peony), a ring, or a
+    // slow gold willow that droops. It flashes, and leaves smoke behind.
+    function burst(x, y, o) {
+      var R = o.r, willow = o.kind === "willow", ring = o.kind === "ring";
+      var n = o.n || Math.round(Math.min(170, 50 + R * 1.5)), k = willow ? 1.5 : 3.2, i, a, v;
+      for (i = 0; i < n; i++) {
+        a = Math.random() * 6.2832;
+        v = R * k * (ring ? rnd(0.92, 1) : Math.sqrt(rnd(0.06, 1)));
+        parts.push({
+          x: x, y: y, px: x, py: y, qx: x, qy: y,
+          vx: Math.cos(a) * v, vy: Math.sin(a) * v, k: k, g: H * (willow ? 0.14 : 0.06),
+          age: 0, life: (willow ? 1.5 : 1.05) + Math.random() * 0.5,
+          col: (o.col2 && i % 3 === 0) ? o.col2 : o.col
+        });
+      }
+      flashes.push({ x: x, y: y, r: R * 1.6, age: 0, col: o.col });
+      for (i = 0; i < 3; i++) {
+        puff(x + rnd(-R, R) * 0.4, y + rnd(-R, R) * 0.4, R * rnd(0.45, 0.7),
+             { vx: rnd(1, 4), vy: rnd(0.5, 2.5), a: rnd(0.13, 0.2), life: rnd(5, 8), grow: R * rnd(0.06, 0.12) });
+      }
+    }
+    // A shell of any colour and kind, to (x, y).
+    function shell(side, x, y, r, kind) {
+      var col = kind === "willow" ? pick([GOLD, "#FFE9A8", WHITE]) : pick(PALETTE);
+      var col2 = kind === "peony" && Math.random() < 0.4 ? pick(PALETTE) : null;
+      shoot(side, x, y, rnd(0.6, 0.8), function (bx, by) {
+        burst(bx, by, { r: r, kind: kind, col: col, col2: col2 });
+      });
+    }
+    function kind() { var u = Math.random(); return u < 0.55 ? "peony" : u < 0.8 ? "ring" : "willow"; }
+    // Anywhere over the harbour on that cannon's side; or, once the words
+    // are going up (`under`), in the sky between them and the far shore.
+    function free(side, under) {
+      var r = Math.min(W, H * 1.3) * rnd(0.12, 0.2) * (under ? 0.6 : 1);
+      var x = W * (side === "l" ? rnd(0.1, 0.56) : rnd(0.44, 0.9));
+      var y = under ? rnd(Math.min(lay.box.y1 + r * 0.8, H * 0.5), H * 0.54) : H * rnd(0.09, 0.44);
+      shell(side, x, y, r, kind());
+    }
+
+    /* ---------- the letters ---------- */
+    function centre(li) {
+      var L = lay.letters[li];
+      return { x: L.x + 2 * lay.s + lay.d / 2, y: L.y + 3.5 * lay.s };
+    }
+    // A shell to a letter's place; its burst leaves a spark on every dot of
+    // the letter. "Beacons" is gold, from the left cannon; "Connect" is
+    // sky blue, from the right.
+    function letter(t, li) {
+      at(t, function () {
+        var mid = centre(li), col = li < 7 ? GOLD : SKY;
+        shoot(li < 7 ? "l" : "r", mid.x, mid.y, rnd(0.6, 0.75), function (bx, by) {
+          var rows = GLYPHS[TEXT.charAt(li)], r, c;
+          for (r = 0; r < 7; r++) {
+            for (c = 0; c < 5; c++) {
+              if ((rows[r] >> (4 - c)) & 1) {
+                dots.push({ li: li, c: c, r: r, born: T, col: col,
+                            ph: Math.random() * 6.2832, ja: Math.random() * 6.2832, jk: rnd(0.6, 1.8) });
+              }
+            }
+          }
+          burst(bx, by, { r: lay.s * 5, n: 26, kind: "peony", col: col, col2: WHITE });
+        });
+      });
+    }
+    function back(u) { var v = u - 1; return 1 + 2.9 * v * v * v + 1.9 * v * v; }
+    // Where a letter's spark is now: thrown out of the burst for its first
+    // 0.6s, overshooting and settling on its dot, then still.
+    function dotAt(d) {
+      var L = lay.letters[d.li], s = lay.s, tx = L.x + d.c * s, ty = L.y + d.r * s;
+      var u = (T - d.born) / 0.6;
+      if (u >= 1) { return [tx, ty, 1]; }
+      var cx = L.x + 2 * s, cy = L.y + 3.5 * s, e = back(u), kick = Math.sin(Math.PI * u) * d.jk * s;
+      return [cx + (tx - cx) * e + Math.cos(d.ja) * kick, cy + (ty - cy) * e + Math.sin(d.ja) * kick, u];
+    }
+    // The letter lets go: its sparks fall away as embers.
+    function release(li) {
+      dots = dots.filter(function (d) {
+        if (d.li !== li) { return true; }
+        var p = dotAt(d);
+        parts.push({
+          x: p[0], y: p[1], px: p[0], py: p[1], qx: p[0], qy: p[1],
+          vx: rnd(-5, 5), vy: rnd(-3, 6), k: 0.6, g: H * 0.1,
+          age: 0, life: rnd(0.6, 1.1), col: d.col, sz: lay.d > 1 ? 2 : 1
+        });
+        return false;
+      });
+    }
+
+    /* ---------- one frame ---------- */
+    function step(dt) {
+      var i, s, p, drag;
+      for (i = shells.length - 1; i >= 0; i--) {
+        s = shells[i]; s.age += dt;
+        if (s.age >= s.fly) { shells.splice(i, 1); s.done(s.tx, s.ty); continue; }
+        s.x = s.x0 + s.vx * s.age;
+        s.y = s.y0 + s.vy * s.age + 0.5 * s.g * s.age * s.age;
+        // the shell's tail of embers
+        parts.push({
+          x: s.x, y: s.y, px: s.x, py: s.y, qx: s.x, qy: s.y,
+          vx: rnd(-4, 4), vy: rnd(2, 10), k: 2, g: H * 0.05,
+          age: 0, life: rnd(0.25, 0.5), col: Math.random() < 0.5 ? ORANGE : GOLD
+        });
+      }
+      for (i = parts.length - 1; i >= 0; i--) {
+        p = parts[i]; p.age += dt;
+        if (p.age >= p.life) { parts[i] = parts[parts.length - 1]; parts.pop(); continue; }
+        drag = Math.exp(-p.k * dt);
+        p.vx *= drag; p.vy = p.vy * drag + p.g * dt;
+        p.qx = p.px; p.qy = p.py; p.px = p.x; p.py = p.y;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+      }
+      for (i = flashes.length - 1; i >= 0; i--) {
+        flashes[i].age += dt;
+        if (flashes[i].age >= 0.45) { flashes.splice(i, 1); }
+      }
+      for (i = puffs.length - 1; i >= 0; i--) {
+        p = puffs[i]; p.age += dt;
+        if (p.age >= p.life) { puffs.splice(i, 1); continue; }
+        if (clearing) { p.vx += 30 * dt; }   // a breeze takes the smoke off to the right
+        p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.grow * dt;
+      }
+    }
+
+    function draw() {
+      var hz = Math.round(H * 0.62), D = lay.d, i, j, p, a, f, g, d, pos, b, x, y, sz;
+      sm.clearRect(0, 0, W, H);
+      // smoke: soft grey puffs that thin out towards their edges
+      for (i = 0; i < puffs.length; i++) {
+        p = puffs[i];
+        a = p.a * Math.min(1, p.age / 0.25) * Math.min(1, (p.life - p.age) / (p.life * 0.5));
+        g = sm.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        g.addColorStop(0, "rgba(180,191,211," + a + ")");
+        g.addColorStop(0.5, "rgba(180,191,211," + a * 0.6 + ")");
+        g.addColorStop(1, "rgba(180,191,211,0)");
+        sm.fillStyle = g;
+        sm.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      }
+
+      sp.globalCompositeOperation = "source-over";
+      sp.globalAlpha = 1;
+      sp.clearRect(0, 0, W, H);
+      sp.globalCompositeOperation = "lighter";
+      // each burst's flash, and its glint on the water
+      for (i = 0; i < flashes.length; i++) {
+        f = flashes[i]; a = 1 - f.age / 0.45;
+        g = sp.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+        g.addColorStop(0, rgba(f.col, 0.5 * a)); g.addColorStop(1, rgba(f.col, 0));
+        sp.globalAlpha = 1; sp.fillStyle = g;
+        sp.fillRect(f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
+        sp.fillStyle = f.col;
+        for (j = 0; j < 6; j++) {
+          sp.globalAlpha = 0.32 * a * Math.random();
+          sp.fillRect(Math.round(f.x + rnd(-0.5, 0.5) * f.r), hz + 1 + ((Math.random() * H * 0.1) | 0), 2 + ((Math.random() * 4) | 0), 1);
+        }
+      }
+      sp.globalAlpha = 1; sp.fillStyle = "#FFF6C8";
+      for (i = 0; i < shells.length; i++) {
+        sp.fillRect(Math.round(shells[i].x), Math.round(shells[i].y), 1, 2);
+      }
+      // sparks: a head and two fainter pixels where it just was; near the
+      // end of its life a spark fades and flickers
+      for (i = 0; i < parts.length; i++) {
+        p = parts[i];
+        if (p.age > p.life * 0.7 && Math.random() < 0.35) { continue; }
+        a = p.age < p.life * 0.55 ? 1 : (p.life - p.age) / (p.life * 0.45);
+        sz = p.sz || 1;
+        sp.fillStyle = p.age < 0.12 ? WHITE : p.col;
+        sp.globalAlpha = a; sp.fillRect(Math.round(p.x), Math.round(p.y), sz, sz);
+        sp.globalAlpha = a * 0.45; sp.fillRect(Math.round(p.px), Math.round(p.py), sz, sz);
+        sp.globalAlpha = a * 0.2; sp.fillRect(Math.round(p.qx), Math.round(p.qy), sz, sz);
+      }
+      // the letters: each dot a pale core in a halo of its colour, twinkling
+      for (i = 0; i < dots.length; i++) {
+        d = dots[i]; pos = dotAt(d);
+        b = pos[2] < 1 || calm ? 1 : 0.74 + 0.26 * Math.sin(T * 5 + d.ph);
+        x = Math.round(pos[0]); y = Math.round(pos[1]);
+        sp.globalAlpha = 0.3 * b; sp.fillStyle = d.col;
+        sp.fillRect(x - 1, y - 1, D + 2, D + 2);
+        sp.globalAlpha = b; sp.fillStyle = d.li < 7 ? "#FFF3A6" : "#D9EDFF";
+        sp.fillRect(x, y, D, D);
+      }
+      // and the words' shimmer on the water under them
+      for (j = 0; dots.length && j < 8; j++) {
+        d = pick(dots);
+        sp.globalAlpha = rnd(0.05, 0.2); sp.fillStyle = d.col;
+        sp.fillRect(Math.round(lay.letters[d.li].x + d.c * lay.s + rnd(-2, 2)), hz + 1 + ((Math.random() * H * 0.07) | 0), 2 + ((Math.random() * 3) | 0), 1);
+      }
+      sp.globalCompositeOperation = "source-over";
+      sp.globalAlpha = 1;
+    }
+
+    function frame(now) {
+      if (!running) { return; }
+      // The show's own clock: it stops while the tab is hidden, and a long
+      // frame never skips more than a twentieth of a second.
+      var dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+      last = now; T += dt;
+      while (events.length && events[0].t <= T) { events.shift().fn(); }
+      step(dt);
+      draw();
+      if (ending && !shells.length && !parts.length && !puffs.length && !dots.length) {
+        running = false;   // the sky is empty; nothing left to draw
+        return;
+      }
+      window.requestAnimationFrame(frame);
+    }
+
+    /* ---------- the running order ---------- */
+    function tile() { stage.classList.add("show"); }
+    function dusk() { root.setAttribute("data-sky", "night"); }
+
+    function show() {
+      // When each part starts, in seconds from Fire!: the opening bursts,
+      // the letters, the last volley, and the letters letting go.
+      var t0 = 2.2, tB = t0 + 2.5, tH = tB + 3.3, tR = tH + 2.6, i;
+      // 1 and 2: the cannons roll in, and night falls
+      at(0.15, function () { fin.classList.add("roll"); });
+      at(0.4, dusk);
+      // 3: open fire, a cannon at a time, quickening
+      [0, 0.3, 0.7, 0.95, 1.3, 1.5, 1.85, 2].forEach(function (g, n) {
+        at(t0 + g, function () { free(n % 2 ? "r" : "l", false); });
+      });
+      // 4: the letters, both words at once, each from its own end, with a
+      // few more bursts in the sky under them
+      for (i = 0; i < 7; i++) {
+        letter(tB + i * 0.4, i);
+        letter(tB + i * 0.4 + 0.2, 7 + i);
+      }
+      [0.6, 1.4, 2.2].forEach(function (g, n) {
+        at(tB + g, function () { free(n % 2 ? "l" : "r", true); });
+      });
+      // the words are up: a last volley under and beside them
+      [0, 0.15, 0.4, 0.55, 0.85, 0.95].forEach(function (g, n) {
+        at(tH + g, function () {
+          var side = n % 2 ? "r" : "l", big = n > 3;   // it ends on two gold willows
+          var r = Math.min(W, H * 1.3) * (big ? 0.19 : rnd(0.08, 0.13));
+          var x = W * (side === "l" ? rnd(0.1, 0.46) : rnd(0.54, 0.9));
+          shell(side, x, rnd(Math.min(lay.box.y1 + r * 0.8, H * 0.5), H * 0.54), r, big ? "willow" : kind());
+        });
+      });
+      // 5: the letters fall away, left to right, and the smoke clears
+      for (i = 0; i < 14; i++) {
+        (function (li) { at(tR + (li % 7) * 0.07 + (li < 7 ? 0 : 0.035), function () { release(li); }); })(i);
+      }
+      at(tR + 0.1, function () {
+        clearing = true;
+        puffs.forEach(function (p) { p.life = Math.min(p.life, p.age + rnd(0.7, 1.5)); });
+      });
+      // 6: the tile
+      at(tR + 1.8, tile);
+      at(tR + 2, function () { ending = true; });
+    }
+
+    // With reduced motion: no shells. Night falls, the words light up and
+    // stay a while, and the tile follows.
+    function quiet() {
+      fin.classList.add("roll");
+      dusk();
+      window.setTimeout(function () {
+        var li, rows, r, c;
+        T = 10;
+        for (li = 0; li < 14; li++) {
+          rows = GLYPHS[TEXT.charAt(li)];
+          for (r = 0; r < 7; r++) {
+            for (c = 0; c < 5; c++) {
+              if ((rows[r] >> (4 - c)) & 1) { dots.push({ li: li, c: c, r: r, born: 0, col: li < 7 ? GOLD : SKY, ph: 0, ja: 0, jk: 0 }); }
+            }
+          }
+        }
+        draw();
+      }, 700);
+      window.setTimeout(function () { dots = []; draw(); tile(); }, 3800);
+    }
+
+    function start() {
+      if (fired) { return; }
+      fired = true;
+      ask.hidden = true;
+      light.hidden = true;
+      // The page steps aside (see _finale.css). Nothing is saved, and
+      // Return to home loads the page afresh, so all of this undoes itself.
+      root.setAttribute("data-finale", "");
+      fin.hidden = false;
+      void fin.offsetWidth;   // so the fade-in runs
+      fin.classList.add("on");
+      try { fin.focus(); } catch (e) { /* fine */ }
+
+      sm = smokeCv.getContext ? smokeCv.getContext("2d") : null;
+      sp = sparkCv.getContext ? sparkCv.getContext("2d") : null;
+      if (!sm || !sp || !window.requestAnimationFrame) {
+        // Nothing to draw the sparks with: night, then the tile.
+        fin.classList.add("roll");
+        dusk();
+        window.setTimeout(tile, 2500);
+        return;
+      }
+      size();
+      window.addEventListener("resize", size);
+      if (calm) { quiet(); return; }
+      show();
+      running = true;
+      window.requestAnimationFrame(frame);
+    }
+  })();
+</script>
