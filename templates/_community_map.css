@@ -69,6 +69,14 @@
       /* A key of the map's that an open card has had to cover steps aside
          until the card shuts (hideCovered in community-map.js). */
       .campus-map-stage .covered { visibility: hidden; }
+      /* Something the map is asking for (to place the meetup's flag): the
+         yellow of the Post a meetup key, a size up, so it reads as the
+         thing to do and not as a note. */
+      .map-status.prompt {
+        background: var(--gold); color: var(--navy);
+        border-color: var(--navy); box-shadow: 3px 3px 0 var(--navy);
+        font-size: .95rem;
+      }
       .map-status.error { background: var(--danger); }
       .map-status.success { background: var(--beacon); }
       .map-status:empty { display: none; }

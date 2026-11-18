@@ -288,68 +288,146 @@
       .msg .quote:not([data-to]) .quote-text { font-style: italic; }
       .msg.mine .quote { border-left-color: #fff; background: rgba(255, 255, 255, .18); }
       /* The reactions sit on the bubble's top corner, as in iMessage: the
-         right on theirs (their avatar is bottom left), the left on yours. */
+         right on theirs (their avatar is bottom left), the left on yours.
+         One key: hovered or tapped, it opens the card of who reacted. */
       .msg .reacts {
         position: absolute; top: -13px; right: -8px;
-        display: flex; gap: 2px; padding: 0 5px;
+        display: flex; align-items: center; gap: 2px;
+        width: auto; min-height: 0; margin: 0; padding: 0 5px;
         background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: 999px;
-        font-size: .8rem; line-height: 1.45; white-space: nowrap;
+        border: 2px solid var(--navy); border-radius: 999px; box-shadow: none;
+        font: 400 .8rem/1.45 var(--sans); white-space: nowrap; cursor: pointer;
+        transition: transform .12s ease, background-color .12s ease;
       }
       .msg.mine .reacts { right: auto; left: -8px; }
+      .msg .reacts:hover, .msg .reacts[aria-expanded="true"] { background: var(--paper); transform: scale(1.08); }
+      .msg .reacts:active { transform: scale(.96); box-shadow: none; }
       .msg .react { border-radius: 999px; padding: 0 1px; }
       .msg .react.on { background: rgba(120, 175, 233, .45); }
       .msg .react b { margin-left: 1px; font-size: .7rem; }
       .msg.has-reacts { margin-top: 12px; }
-      /* React, Reply and Report under the words. Written out rather than
-         hidden behind a tap, so it is plain that a message can be answered.
-         Styled like the Report link beside them, with the same padded hit
-         area pulled back by a negative margin. */
-      .msg .row-acts {
-        display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px;
-        margin-top: 2px; color: var(--muted); font-size: .82rem;
-      }
-      .msg .row-acts button {
-        min-height: 0; width: auto; margin: -8px -4px; padding: 8px 4px;
-        background: none; color: inherit; border: 0; box-shadow: none;
-        font-size: .82rem; font-weight: 700; text-decoration: underline;
-      }
-      .msg .row-acts button:hover, .msg .row-acts button[aria-expanded="true"] { color: var(--navy); }
-      .msg .row-acts .report-link { margin: -10px -4px; }
-      .msg.mine .row-acts { color: rgba(255, 255, 255, .85); }
-      .msg.mine .row-acts button:hover,
-      .msg.mine .row-acts button[aria-expanded="true"] { color: #fff; }
-      /* Delete after its first tap: asking, in red, until the second tap or
-         four seconds. */
-      .msg .row-acts .act-delete.armed,
-      .msg.mine .row-acts .act-delete.armed {
-        margin: -2px 0; padding: 2px 7px;
-        background: var(--danger); color: #fff;
-        border-radius: var(--r-sm); text-decoration: none;
-      }
-      /* A row the script turns into a shared-flag card has no bubble to
-         react to; Report stays. */
-      .msg.has-card .act-react, .msg.has-card .act-reply, .msg.has-card .act-sep { display: none; }
       .msg.flash { box-shadow: 0 0 0 3px var(--sky), 4px 4px 0 var(--navy); }
-      /* Tap a bubble for this: the six reactions and Reply. A sibling of the
-         row rather than inside it, because a bubble at 320px is too narrow
-         for six things to tap. */
-      .msgbar {
-        align-self: flex-start; flex: none; max-width: 100%;
-        display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
-        margin: -6px 0 14px; padding: 3px;
+      /* A bubble can be focused, for the keyboard: Enter opens its bar. */
+      .msg[tabindex]:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+      /* Report, where there is no script to draw the bar that holds it. */
+      .msg noscript .report-link { font-size: .8rem; }
+
+      /* ---------- a message's bar ----------
+         What can be done with a message: the six reactions, Reply, and
+         "more" (Report, and Delete on your own or for an admin). Nothing of
+         it is written on the bubble; the bar floats in when the message is
+         hovered (a mouse), tapped (a finger) or opened from the keyboard.
+
+         It is a child of the bubble, placed against it and out of the
+         flow, so opening it moves nothing in the chat. Above the bubble,
+         or under it (.under) when there is no room above in the part of the
+         log on show; kept inside the log sideways by --nudge. Both are set
+         by the script (placeFloat), so it is never cut off by the log's
+         edge: the first message, the last, a narrow phone. */
+      .msgbar, .reactwho {
+        position: absolute; z-index: 6; left: var(--nudge, 0px); bottom: calc(100% + 8px);
         background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r);
+        border: 2px solid var(--navy);
         box-shadow: 3px 3px 0 var(--navy);
+        transform-origin: 24px 100%;
+        animation: msgbar-in .16s cubic-bezier(.2, .8, .2, 1.15);
       }
-      .msgbar.mine { align-self: flex-end; }
-      .msgbar button {
-        width: 38px; height: 38px; min-height: 0; margin: 0; padding: 0;
-        background: none; color: inherit; border: 0; border-radius: 8px; box-shadow: none;
-        font-size: 1.25rem; line-height: 1;
+      .msg.mine > .msgbar, .msg.mine > .reactwho {
+        left: auto; right: var(--nudge, 0px); transform-origin: calc(100% - 24px) 100%;
       }
-      .msgbar button:hover, .msgbar button:focus-visible { background: var(--paper); }
-      .msgbar button.on { background: rgba(120, 175, 233, .45); }
+      /* Clear of the reactions on the bubble's top corner. */
+      .msg.has-reacts > .msgbar, .msg.has-reacts > .reactwho { bottom: calc(100% + 18px); }
+      .msg > .msgbar.under, .msg > .reactwho.under {
+        bottom: auto; top: calc(100% + 8px);
+        transform-origin: 24px 0; animation-name: msgbar-in-under;
+      }
+      .msg.mine > .msgbar.under, .msg.mine > .reactwho.under { transform-origin: calc(100% - 24px) 0; }
+      /* Beside the bubble (.beside), level with its top, where the log has
+         the room for it: a computer, a message that does not fill the line.
+         There it covers no other message at all. */
+      .msg > .msgbar.beside, .msg > .reactwho.beside {
+        bottom: auto; top: var(--drop, -2px); left: calc(100% + 10px);
+        transform-origin: 0 24px; animation-name: msgbar-in-beside;
+      }
+      .msg.has-reacts > .msgbar.beside, .msg.has-reacts > .reactwho.beside { left: calc(100% + 18px); }
+      .msg.mine > .msgbar.beside, .msg.mine > .reactwho.beside {
+        left: auto; right: calc(100% + 10px);
+        transform-origin: 100% 24px; animation-name: msgbar-in-beside-mine;
+      }
+      .msg.mine.has-reacts > .msgbar.beside, .msg.mine.has-reacts > .reactwho.beside { right: calc(100% + 18px); }
+      @keyframes msgbar-in { from { opacity: 0; transform: translateY(8px) scale(.9); } }
+      @keyframes msgbar-in-under { from { opacity: 0; transform: translateY(-8px) scale(.9); } }
+      @keyframes msgbar-in-beside { from { opacity: 0; transform: translateX(-10px) scale(.9); } }
+      @keyframes msgbar-in-beside-mine { from { opacity: 0; transform: translateX(10px) scale(.9); } }
+      .msgbar {
+        display: flex; align-items: center; gap: 2px;
+        padding: 3px; border-radius: 999px; white-space: nowrap;
+      }
+      .msgbar button, .msgbar a {
+        flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+        width: auto; height: 36px; min-height: 0; margin: 0; padding: 0 11px;
+        background: none; color: var(--navy);
+        border: 0; border-radius: 999px; box-shadow: none;
+        font: 700 .86rem/1 var(--sans); text-decoration: none; cursor: pointer;
+        transition: transform .12s ease, background-color .12s ease;
+      }
+      .msgbar button:hover, .msgbar a:hover,
+      .msgbar button:focus-visible, .msgbar a:focus-visible { background: var(--paper); text-decoration: none; }
+      .msgbar button:active, .msgbar a:active { transform: scale(.94); box-shadow: none; }
+      .msgbar .icon { width: 18px; height: 18px; }
+      /* A reaction: a round key that grows a little under the pointer. */
+      .msgbar .rx { width: 36px; padding: 0; font-size: 1.25rem; font-weight: 400; }
+      .msgbar .rx:hover, .msgbar .rx:focus-visible { background: none; transform: translateY(-3px) scale(1.3); }
+      .msgbar .rx:active { transform: scale(1.05); }
+      .msgbar .rx.on, .msgbar .rx.on:hover { background: rgba(120, 175, 233, .45); }
+      .msgbar .bar-more, .msgbar .bar-back { width: 36px; padding: 0; }
+      .msgbar .bar-back .icon { transform: scaleX(-1); }
+      .msgbar .bar-sep { flex: none; width: 2px; height: 20px; margin: 0 3px; background: var(--line); border-radius: 1px; }
+      /* Delete, red; after its first tap it is asking, filled, until the
+         second tap or four seconds. */
+      .msgbar .act-delete { color: var(--danger); }
+      .msgbar .act-delete.armed, .msgbar .act-delete.armed:hover { background: var(--danger); color: #fff; }
+      /* A phone: six reactions, Reply and More have to share one line of a
+         narrow log (288px of it at 320), so Reply is its icon alone, and on
+         the narrowest the keys are a size down. Measured: 322px wide with
+         the word, 262 like this. */
+      @media (max-width: 480px) {
+        .msgbar .act-reply { width: 36px; padding: 0; }
+        .msgbar .act-reply > span { display: none; }
+      }
+      @media (max-width: 400px) {
+        .msgbar { gap: 1px; }
+        .msgbar button, .msgbar a { height: 34px; }
+        .msgbar .rx, .msgbar .bar-more, .msgbar .bar-back, .msgbar .act-reply { width: 33px; }
+        .msgbar .rx { font-size: 1.15rem; }
+        .msgbar .bar-sep { margin: 0 2px; }
+      }
+
+      /* ---------- who reacted ----------
+         The card a message's reactions open: each reaction used, and under
+         it who used it, with their face. Placed like the bar. */
+      .reactwho {
+        display: block; min-width: 11.5rem; max-width: min(17rem, 78vw); max-height: 15rem;
+        padding: 8px 10px 10px; overflow-y: auto; overscroll-behavior: contain;
+        border-radius: var(--r);
+        font: 400 .92rem/1.3 var(--sans); text-align: left; white-space: normal; cursor: default;
+      }
+      .rw-head {
+        display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; padding-bottom: 3px;
+        color: var(--muted); border-bottom: 2px dashed var(--line);
+        font-size: .78rem; font-weight: 700; letter-spacing: .02em;
+      }
+      .rw-head:first-child { margin-top: 0; }
+      .rw-glyph { font-size: 1.05rem; line-height: 1; }
+      .rw-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+      .rw-person { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-weight: 700; overflow-wrap: anywhere; }
+      .rw-person .avatar { flex: none; width: 24px; height: 24px; font-size: 11px; box-shadow: none; }
+      .rw-more { padding: 2px 0 0 32px; color: var(--muted); font-size: .82rem; }
+      @media (prefers-reduced-motion: reduce) {
+        .msgbar, .reactwho { animation: none; }
+        .msgbar button, .msgbar a, .msg .reacts { transition: none; }
+        .msgbar .rx:hover, .msgbar .rx:focus-visible { transform: none; background: var(--paper); }
+      }
       /* Above the composer while you are writing a reply. */
       .replying {
         display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 10px;
@@ -1137,35 +1215,15 @@
         .gamewrap.playing #gamepane-slot { margin: 0 8px; }
         .gamewrap.playing #log { border-top-width: 2px; }
 
-        /* Messages: the time and the React / Reply / Report line share a
-           line instead of taking one each, in a two-column grid that the
-           name, the quote and the words span, so a bubble is still as wide
-           as its words. The avatar and the reactions are placed absolutely
-           and sit outside the grid. */
+        /* Messages: closer together, a little wider, tighter inside. A
+           bubble is its name, its words and the time; what can be done with
+           it is in the bar a tap brings (.msgbar), not written on it. */
         #log .daymark { margin: 0 0 8px; padding: 2px 8px; font-size: .74rem; }
         #log .msg:not(.note) { margin-bottom: 8px; }
         #log .msg:not(.note):not(.mine) { margin-left: 38px; }
         #log .msg > .avatar { left: -38px; }
-        #log .msg:not(.has-card):not(.note) {
-          display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: baseline;
-          max-width: 84%; padding: 5px 10px 4px;
-        }
-        #log .msg:not(.has-card):not(.note) > * { grid-column: 1 / -1; }
-        /* Except the avatar. A positioned grid item with a column is placed
-           against that column, which starts inside the bubble's padding, so
-           left: -38px put the face 10px too far right, over the bubble's
-           edge. Without one it is placed against the bubble itself, as on
-           wider screens, and sits clear of it. */
-        #log .msg:not(.has-card):not(.note) > .avatar { grid-column: auto; }
-        #log .msg:not(.has-card):not(.note) > .at { grid-column: 1; order: 1; margin-top: 1px; }
-        /* Beside a long time (a date and an hour) on the narrowest phones,
-           or with the text made larger, the actions can wrap. Each one's tap
-           area reaches 8-10px above and below its words, so wrapped lines
-           sit 20px apart: closer, and a tap on React landed on the Report
-           link under it. */
-        #log .msg:not(.has-card):not(.note) > .row-acts {
-          grid-column: 2; order: 2; justify-self: end; margin-top: 1px; row-gap: 20px;
-        }
+        #log .msg:not(.has-card):not(.note) { max-width: 84%; padding: 5px 10px 4px; }
+        #log .msg:not(.has-card):not(.note) > .at { margin-top: 1px; }
 
         /* A game moment: the same window, a size smaller. */
         #log .msg.note { margin: 2px 0 10px; }
@@ -1411,8 +1469,31 @@
          (has-card), and the script below does the same for a shared map
          flag. data-ts is the moment in full, for local times and the
          "Today" markers. #}
+      {# What can be done with a message is not written on it: it is in the
+         bar the script floats on the bubble when the message is hovered,
+         tapped or opened from the keyboard (openBar). The row only says
+         what it offers, in data-acts, and the script draws from that; the
+         live builder below writes the same words, so a message is as
+         answerable after a live update as before it.
+
+           react, reply  not on a meetup card, nor once the chat has closed
+           report        not on your own messages
+           delete        your own words at any time (a closed chat too),
+                         and anybody's for an admin; never a meetup card,
+                         which is cancelled from the card
+
+         tabindex: a row that offers something can be focused, and Enter
+         opens its bar. #}
+      {% set answerable = not ended and not message.post %}
+      {% set deletable = (message.mine or current_user.is_admin) and not message.post %}
+      {% set acts = (["react", "reply"] if answerable else [])
+                    + ([] if message.mine else ["report"])
+                    + (["delete"] if deletable else []) %}
       <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}{% if message.reactions and not message.post %} has-reacts{% endif %}"
-           data-id="{{ message.id }}" data-ts="{{ message.ts }}">
+           data-id="{{ message.id }}" data-ts="{{ message.ts }}"
+           {%- if acts %} data-acts="{{ acts | join(' ') }}" tabindex="0"{% endif %}
+           {%- if not message.mine %} data-report="{{ url_for('report_new', kind='abuse', message=message.id) }}"{% endif %}
+           {%- if deletable %} data-delete="{{ url_for('message_delete', message_id=message.id) }}"{% endif %}>
         {% if not message.mine %}{{ ui.face(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
         {# What this answers, from the copy taken when it was sent. data-to
@@ -1434,46 +1515,19 @@
             {%- include "_postcard.html" -%}
           {% endwith %}
         {% endif %}
-        {# React, Reply and Report, written out under the words. React and
-           Reply are not offered on a meetup card or once the chat has
-           closed; Report is not offered on your own messages. All three
-           are added in the JS builder below as well -- a message that could
-           only be answered until the next live update would be worse than
-           one that could not be answered at all. #}
-        {# Delete is on your own words, at any time -- including once a
-           meetup's chat has closed -- and, for an admin, on anybody's.
-           Never on a meetup card: that is cancelled from the card. An
-           admin's row for somebody else reads "Report · Delete". #}
-        {% set answerable = not ended and not message.post %}
-        {% set deletable = (message.mine or current_user.is_admin) and not message.post %}
-        {% if answerable or not message.mine or deletable %}
-          <span class="row-acts">
-            {%- if answerable -%}
-              <button type="button" class="act-react" aria-expanded="false">React</button>
-              <span class="act-sep" aria-hidden="true">&middot;</span>
-              <button type="button" class="act-reply">Reply</button>
-            {%- endif -%}
-            {%- if answerable and (not message.mine or deletable) -%}
-              <span class="act-sep" aria-hidden="true">&middot;</span>
-            {%- endif -%}
-            {%- if not message.mine -%}
-              <a class="report-link"
-                 href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a>
-            {%- endif -%}
-            {%- if not message.mine and deletable -%}
-              <span class="act-sep" aria-hidden="true">&middot;</span>
-            {%- endif -%}
-            {%- if deletable -%}
-              <button type="button" class="act-delete"
-                      data-url="{{ url_for('message_delete', message_id=message.id) }}">Delete</button>
-            {%- endif -%}
-          </span>
+        {# With no script there is no bar: Report, the one thing here that
+           is a plain link, is still to be had. #}
+        {% if not message.mine %}
+          <noscript><a class="report-link"
+                       href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a></noscript>
         {% endif %}
-        {# Drawn the same way by paintReacts below, which the live channel
-           and the react fetch both use. Not on a meetup card: it has no
-           bubble for them to sit on. #}
+        {# The reactions, as one key: it opens the card of who reacted
+           (showWho), read from data-who. Drawn the same way by paintReacts
+           below, which the live channel and the react fetch both use. Not
+           on a meetup card: it has no bubble for them to sit on. #}
         {% if message.reactions and not message.post %}
-          <span class="reacts">{% for r in message.reactions %}<span class="react{% if r.mine %} on{% endif %}" data-name="{{ r.name }}" title="{{ r.label }}{% if r.mine %} (yours){% endif %}">{{ r.glyph }}{% if r.count > 1 %}<b>{{ r.count }}</b>{% endif %}</span>{% endfor %}</span>
+          <button type="button" class="reacts" aria-expanded="false" aria-label="See who reacted"
+                  data-who="{{ message.reactions | tojson | forceescape }}">{% for r in message.reactions %}<span class="react{% if r.mine %} on{% endif %}" data-name="{{ r.name }}" title="{{ r.label }}{% if r.mine %} (yours){% endif %}">{{ r.glyph }}{% if r.count > 1 %}<b>{{ r.count }}</b>{% endif %}</span>{% endfor %}</button>
         {% endif %}
         <span class="at">{{ message.at }}</span>
       </div>
@@ -2671,18 +2725,29 @@
     // A row's reaction chips, from the server's list. The one painter for
     // live rows, the live map and the react fetch, drawn to match the
     // server's, so none of them can draw it differently.
+    // The chips are one key, which opens the card of who reacted (showWho);
+    // the list it was painted from rides on it as data-who, the way the
+    // server writes it.
     function paintReacts(row, list) {
       var box = row.querySelector(":scope > .reacts");
       if (!list || !list.length || row.classList.contains("has-post")) {
-        if (box) { box.remove(); }
+        if (box) {
+          if (whoRow === row) { closeWho(); }
+          box.remove();
+        }
         row.classList.remove("has-reacts");
         return;
       }
       if (!box) {
-        box = span("reacts", "");
+        box = document.createElement("button");
+        box.type = "button";
+        box.className = "reacts";
+        box.setAttribute("aria-expanded", "false");
+        box.setAttribute("aria-label", "See who reacted");
         row.insertBefore(box, row.querySelector(":scope > .at"));
       }
       box.replaceChildren();
+      box.dataset.who = JSON.stringify(list);
       list.forEach(function (r) {
         var chip = span("react" + (r.mine ? " on" : ""), r.glyph);
         chip.dataset.name = r.name;
@@ -2695,20 +2760,38 @@
         box.appendChild(chip);
       });
       row.classList.add("has-reacts");
+      // The card, if it is open on this row, follows what changed.
+      if (whoRow === row) { showWho(row); }
     }
 
-    function actButton(cls, label) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = cls;
-      b.textContent = label;
-      if (cls === "act-react") { b.setAttribute("aria-expanded", "false"); }
-      return b;
+    // Somebody's face, the same one ui.face() draws: their picture when
+    // they have set one, otherwise their initials on the palette colour
+    // their id gives (`seed`, 0 to 5).
+    function faceOf(name, seed, photo) {
+      var face;
+      if (photo) {
+        face = document.createElement("img");
+        face.className = "avatar sm";
+        face.src = photo;
+        face.alt = "";
+        face.loading = "lazy";
+        return face;
+      }
+      var parts = String(name || "?").trim().split(/\s+/);
+      face = span("avatar av-" + (seed % 6) + " sm",
+        (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
+      face.setAttribute("aria-hidden", "true");
+      return face;
     }
-    function actSep() {
-      var dot = span("act-sep", "\u00b7");
-      dot.setAttribute("aria-hidden", "true");
-      return dot;
+    // One of the icons in the page's set (_icons.html), as markup.
+    function iconOf(name) {
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "icon");
+      svg.setAttribute("aria-hidden", "true");
+      var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#icon-" + name);
+      svg.appendChild(use);
+      return svg;
     }
 
     // A one-button form, the way the friends panel builds its Add button.
@@ -2765,22 +2848,7 @@
 
       p.className = "msg" + (message.user_id === me ? " mine" : "");
       if (message.user_id !== me) {
-        // The same face ui.face() draws: the sender's picture when they have
-        // set one, otherwise their initials on a palette colour.
-        var face;
-        if (message.photo) {
-          face = document.createElement("img");
-          face.className = "avatar sm";
-          face.src = message.photo;
-          face.alt = "";
-          face.loading = "lazy";
-        } else {
-          var parts = String(message.name || "?").trim().split(/\s+/);
-          face = span("avatar av-" + (message.user_id % 6) + " sm",
-            (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase());
-          face.setAttribute("aria-hidden", "true");
-        }
-        p.appendChild(face);
+        p.appendChild(faceOf(message.name, message.user_id % 6, message.photo));
       }
       p.appendChild(span("who", message.name));
       if (message.reply && message.reply.gone) {
@@ -2800,51 +2868,148 @@
         p.appendChild(quote);
       }
       p.appendChild(span("body", message.body));
-      // The same React, Reply and Report row the server draws. Built rather
-      // than pasted as markup: this file is checked file-wide for innerHTML.
+      // What the message offers, in the same words the server writes in
+      // data-acts: its bar (openBar) is drawn from them. React and Reply
+      // not on a meetup card nor in a closed chat; Report not on your own;
+      // Delete on your own, or anybody's for an admin, never a meetup card.
       var answerable = !closed && !message.post;
       var theirs = message.user_id !== me;
-      // Your own words, or anybody's for an admin; never a meetup card.
       var deletable = (!theirs || admin) && !message.post;
-      if (answerable || theirs || deletable) {
-        var acts = span("row-acts", "");
-        if (answerable) {
-          acts.appendChild(actButton("act-react", "React"));
-          acts.appendChild(actSep());
-          acts.appendChild(actButton("act-reply", "Reply"));
-        }
-        if (answerable && (theirs || deletable)) { acts.appendChild(actSep()); }
-        if (theirs) {
-          var tell = document.createElement("a");
-          tell.className = "report-link";
-          tell.href = "/report?kind=abuse&message=" + encodeURIComponent(message.id);
-          tell.textContent = "Report";
-          acts.appendChild(tell);
-        }
-        if (theirs && deletable) { acts.appendChild(actSep()); }
-        if (deletable) {
-          var gone = actButton("act-delete", "Delete");
-          gone.dataset.url = "/messages/" + encodeURIComponent(message.id) + "/delete";
-          acts.appendChild(gone);
-        }
-        p.appendChild(acts);
+      var acts = (answerable ? ["react", "reply"] : [])
+        .concat(theirs ? ["report"] : [], deletable ? ["delete"] : []);
+      if (acts.length) {
+        p.dataset.acts = acts.join(" ");
+        p.tabIndex = 0;
       }
+      if (theirs) { p.dataset.report = "/report?kind=abuse&message=" + encodeURIComponent(message.id); }
+      if (deletable) { p.dataset.delete = "/messages/" + encodeURIComponent(message.id) + "/delete"; }
       p.appendChild(span("at", message.at || ""));
       paintReacts(p, message.reactions);
       log.appendChild(p);
     }
 
-    // ---------- tap a bubble: react or reply ----------
-    // One listener on #log, which every swap replaces, so it cannot pile up
-    // the way one on the document would.
-    var bar = null;
+    // ---------- a message's bar: react, reply, more ----------
+    // Nothing of what can be done with a message is written on it. Its bar
+    // floats in on the bubble when the message is hovered (a mouse), tapped
+    // (a finger, or a click) or opened from the keyboard, and holds the six
+    // reactions, Reply, and "more" (Report, and Delete where it is offered).
+    // The bar is a child of the row, placed against it and out of the flow,
+    // so opening it moves nothing in the chat; placeFloat keeps it inside
+    // the part of the log on show, so it is never cut off.
+    //
+    // The listeners are on #log, which every swap replaces, so they cannot
+    // pile up the way ones on the document would.
+    var bar = null;       // the bar that is open
+    var barRow = null;    // the message it is on
+    var barHow = "";      // how it was opened: "hover", "tap" or "key"
+    var who = null;       // the card of who reacted, and the message it is on
+    var whoRow = null;
+    var whoHow = "";
+    var enter = null;     // timers: the pause before a hover opens,
+    var leave = null;     // and the grace before leaving shuts
+    var hush = null;      // where the pointer was when a bar's key was pressed (hoverIn)
+    var ownScroll = 0;    // when placeFloat last scrolled the log itself
+    var HOVERS = window.matchMedia ? window.matchMedia("(hover: hover) and (pointer: fine)") : null;
+
+    // What a row offers (data-acts). A row drawn as a card has no bubble to
+    // react to or quote, so only Report and Delete are left of it.
+    function offers(row) {
+      var acts = (row.dataset.acts || "").split(" ").filter(Boolean);
+      return row.classList.contains("has-card")
+        ? acts.filter(function (a) { return a === "report" || a === "delete"; }) : acts;
+    }
+    function hasBar(row) {
+      return !!row && !!row.dataset.id && !row.classList.contains("note") && offers(row).length > 0;
+    }
+
+    // Puts a bar or a card (a child of `row`) where it can be seen whole.
+    // A bar goes beside the bubble where the log has the room (`beside`:
+    // a computer, a message that does not fill the line), which covers no
+    // other message. Otherwise, and always for the card: above the bubble,
+    // or under it when there is no room above in the part of the log on
+    // show; and inside the log sideways. The log is the box that clips: it
+    // scrolls, so anything past its edge is cut off.
+    function placeFloat(box, row, beside) {
+      box.classList.remove("under", "beside");
+      box.style.removeProperty("--nudge");
+      var view = log.getBoundingClientRect();
+      // A strip over the log's foot (the Meet up key) covers that much.
+      var foot = view.bottom - Math.max(0, (parseFloat(getComputedStyle(log).paddingBottom) || 0) - 16);
+      var r = row.getBoundingClientRect();
+      box.style.removeProperty("--drop");
+      if (beside) {
+        var chips = row.classList.contains("has-reacts") ? 18 : 10;
+        var free = row.classList.contains("mine") ? r.left - (view.left + 8) : (view.right - 8) - r.right;
+        if (free >= box.offsetWidth + chips) {
+          // Level with the bubble's top; lowered or raised (--drop) where
+          // the bubble is at the log's very edge, so the bar is on show
+          // whole, as long as it still stands beside the bubble.
+          var drop = -2;
+          if (r.top + drop < view.top + 4) { drop = view.top + 4 - r.top; }
+          if (r.top + drop + box.offsetHeight > foot - 4) { drop = foot - 4 - box.offsetHeight - r.top; }
+          if (drop <= r.height - 12 && drop + box.offsetHeight >= 12
+              && r.top + drop >= view.top + 4) {
+            box.classList.add("beside");
+            box.style.setProperty("--drop", Math.round(drop) + "px");
+            return;
+          }
+        }
+      }
+      // Where the box is laid out, on the screen. From its layout, not its
+      // drawn rectangle: it arrives scaled and sliding (its entrance), and
+      // measured mid-way it would be the wrong size in the wrong place.
+      function laid() {
+        var left = r.left + row.clientLeft + box.offsetLeft;
+        var top = r.top + row.clientTop + box.offsetTop;
+        return { left: left, right: left + box.offsetWidth, top: top, bottom: top + box.offsetHeight };
+      }
+      var gap = (row.classList.contains("has-reacts") ? 18 : 8) + 4;
+      var above = r.top - view.top, under = foot - r.bottom;
+      if (above < box.offsetHeight + gap && under > above) { box.classList.add("under"); }
+      // Sideways: its near edge is the bubble's; nudged back in if its far
+      // edge would pass the log's, but never so far that its near edge
+      // passes the other side.
+      var b = laid();
+      var mine = row.classList.contains("mine");
+      var over = mine ? (view.left + 8) - b.left : b.right - (view.right - 8);
+      var room = mine ? (view.right - 8) - b.right : b.left - (view.left + 8);
+      if (over > 0) { box.style.setProperty("--nudge", (-Math.ceil(Math.max(0, Math.min(over, room)))) + "px"); }
+      // Still past the log's top or foot (a bubble taller than the log):
+      // the log scrolls the little it takes. Marked, so the listener that
+      // puts a hovered bar away when the log is scrolled knows this scroll
+      // was the bar's own.
+      b = laid();
+      var by = b.bottom > foot ? Math.ceil(b.bottom - foot + 4)
+             : b.top < view.top ? -Math.ceil(view.top - b.top + 4) : 0;
+      if (by) {
+        ownScroll = Date.now();
+        log.scrollTop += by;
+      }
+    }
+
+    // Let go of before it is taken out of the page: taking out a bar that
+    // holds the focus fires focusout, whose listener shuts the bar, and it
+    // must find there is nothing left to shut.
     function closeBar() {
+      clearTimeout(enter);
+      clearTimeout(leave);
       if (!bar) { return; }
-      var row = bar.previousElementSibling;
-      var btn = row && row.querySelector(":scope > .row-acts .act-react");
-      if (btn) { btn.setAttribute("aria-expanded", "false"); }
-      bar.remove();
+      var gone = bar, row = barRow;
       bar = null;
+      barRow = null;
+      barHow = "";
+      row.classList.remove("barred");
+      gone.remove();
+    }
+    function closeWho() {
+      if (!who) { return; }
+      var gone = who, row = whoRow;
+      who = null;
+      whoRow = null;
+      whoHow = "";
+      var key = row.querySelector(":scope > .reacts");
+      if (key) { key.setAttribute("aria-expanded", "false"); }
+      gone.remove();
     }
     function reactUrl(row) {
       return "/messages/" + encodeURIComponent(row.dataset.id) + "/react";
@@ -2902,29 +3067,155 @@
       var input = document.querySelector(".composer input[name=body]");
       if (input) { input.focus(); }
     }
-    function openBar(row) {
+    // A key on the bar: an icon, words, or both.
+    function barKey(cls, label, icon, words) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      if (icon) { b.appendChild(iconOf(icon)); }
+      if (words) { b.appendChild(span("", words)); }
+      // Named for a screen reader either way: on a phone a key's words are
+      // left out and its icon stands alone.
+      b.setAttribute("aria-label", label);
+      if (!words || icon) { b.title = label; }
+      return b;
+    }
+    // What the bar holds. "main": the six reactions, Reply, and the key to
+    // the rest. "more": Report and Delete, with a key back. A row that
+    // offers neither a reaction nor a reply (a closed chat, a card) goes
+    // straight to the rest, with no key back.
+    function fillBar(row, page) {
+      var acts = offers(row);
+      var has = function (a) { return acts.indexOf(a) !== -1; };
+      var rest = has("report") || has("delete");
+      var main = has("react") || has("reply");
+      bar.replaceChildren();
+      if (page === "more" || !main) {
+        if (main) {
+          var back = barKey("bar-back", "Back", "chevron", "");
+          back.addEventListener("click", function (e) { turnBar(e, row, "main"); });
+          bar.appendChild(back);
+        }
+        if (has("report")) {
+          var tell = document.createElement("a");
+          tell.className = "report-link";
+          tell.href = row.dataset.report || ("/report?kind=abuse&message=" + encodeURIComponent(row.dataset.id));
+          tell.textContent = "Report";
+          bar.appendChild(tell);
+        }
+        if (has("delete")) {
+          // Two taps, as before: deleteMessage asks on the first.
+          var gone = barKey("act-delete", "Delete", "", "Delete");
+          gone.dataset.url = row.dataset.delete;
+          bar.appendChild(gone);
+        }
+      } else {
+        if (has("react")) {
+          var picked = row.querySelector(":scope > .reacts .react.on");
+          REACTIONS.forEach(function (r) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "rx";
+            b.textContent = r[1];
+            b.setAttribute("aria-label", "React with " + r[2]);
+            var on = !!picked && picked.dataset.name === r[0];
+            b.setAttribute("aria-pressed", on ? "true" : "false");
+            if (on) { b.classList.add("on"); }
+            b.addEventListener("click", function (e) { hush = { x: e.clientX, y: e.clientY }; react(row, r[0]); });
+            bar.appendChild(b);
+          });
+        }
+        if (has("react") && (has("reply") || rest)) {
+          var sep = span("bar-sep", "");
+          sep.setAttribute("aria-hidden", "true");
+          bar.appendChild(sep);
+        }
+        if (has("reply")) {
+          var reply = barKey("act-reply", "Reply", "reply", "Reply");
+          reply.addEventListener("click", function (e) { hush = { x: e.clientX, y: e.clientY }; startReply(row); });
+          bar.appendChild(reply);
+        }
+        if (rest) {
+          var more = barKey("bar-more", "More", "more", "");
+          more.addEventListener("click", function (e) { turnBar(e, row, "more"); });
+          bar.appendChild(more);
+        }
+      }
+      placeFloat(bar, row, true);
+    }
+    // The bar turned to its other page by one of its own keys. The tap goes
+    // no further than the key: redrawing the bar takes the key out of the
+    // page, and a tap whose target is no longer in the log reads, to the
+    // listeners above it, as a tap somewhere else, which shuts the bar.
+    function turnBar(e, row, page) {
+      e.stopPropagation();
+      fillBar(row, page);
+      // Pinned: it is being used, so the pointer leaving does not shut it.
+      if (barHow === "hover") { barHow = "tap"; }
+      focusBar();
+    }
+    function focusBar() {
+      var first = bar && bar.querySelector("button, a");
+      if (first) { first.focus({ preventScroll: true }); }
+    }
+    // how: "hover", "tap" or "key". A hover does not take the focus (the
+    // person may be typing); a tap or the keyboard does.
+    function openBar(row, how) {
       closeBar();
-      var picked = row.querySelector(":scope > .reacts .react.on");
+      closeWho();
+      if (!hasBar(row)) { return; }
       bar = document.createElement("div");
-      bar.className = "msgbar" + (row.classList.contains("mine") ? " mine" : "");
+      bar.className = "msgbar";
       bar.setAttribute("role", "toolbar");
-      bar.setAttribute("aria-label", "React or reply");
-      REACTIONS.forEach(function (r) {
-        var b = document.createElement("button");
-        b.type = "button";
-        b.textContent = r[1];
-        b.setAttribute("aria-label", "React with " + r[2]);
-        var on = !!picked && picked.dataset.name === r[0];
-        b.setAttribute("aria-pressed", on ? "true" : "false");
-        if (on) { b.className = "on"; }
-        b.addEventListener("click", function () { react(row, r[0]); });
-        bar.appendChild(b);
+      bar.setAttribute("aria-label", "Message actions");
+      barRow = row;
+      barHow = how || "tap";
+      row.classList.add("barred");
+      row.appendChild(bar);
+      fillBar(row, "main");
+      if (barHow !== "hover") { focusBar(); }
+    }
+
+    // ---------- who reacted ----------
+    // The card a message's reactions open, drawn from the list they were
+    // painted from (data-who): each reaction used, and under it who used
+    // it, oldest first, with their face. Yours reads "You". The server
+    // names so many and no more; past that, "and N more".
+    function showWho(row, how) {
+      var key = row.querySelector(":scope > .reacts");
+      var list = [];
+      try { list = JSON.parse((key && key.dataset.who) || "[]"); } catch (err) { list = []; }
+      var keep = whoRow === row ? whoHow : "";
+      closeWho();
+      if (!key || !list.length) { return; }
+      closeBar();
+      who = document.createElement("div");
+      who.className = "reactwho";
+      who.setAttribute("role", "group");
+      who.setAttribute("aria-label", "Who reacted");
+      list.forEach(function (r) {
+        var head = span("rw-head", "");
+        head.appendChild(span("rw-glyph", r.glyph));
+        // "a heart" is how the bar asks ("React with a heart"); here it is
+        // a heading: "Heart".
+        var label = String(r.label || "").replace(/^an? /, "");
+        head.appendChild(span("rw-label", label.charAt(0).toUpperCase() + label.slice(1)));
+        head.appendChild(span("rw-count", String(r.count)));
+        who.appendChild(head);
+        (r.who || []).forEach(function (p) {
+          var person = span("rw-person", "");
+          person.appendChild(faceOf(p.name, p.seed || 0, p.photo));
+          person.appendChild(span("rw-name", p.me ? "You" : p.name));
+          who.appendChild(person);
+        });
+        var rest = r.count - (r.who || []).length;
+        if (rest > 0) { who.appendChild(span("rw-more", "and " + rest + " more")); }
       });
-      // No Reply in here: it is written out on the message itself.
-      row.after(bar);
-      var btn = row.querySelector(":scope > .row-acts .act-react");
-      if (btn) { btn.setAttribute("aria-expanded", "true"); }
-      bar.firstElementChild.focus({ preventScroll: true });
+      whoRow = row;
+      whoHow = how || keep || "tap";
+      key.setAttribute("aria-expanded", "true");
+      row.appendChild(who);
+      placeFloat(who, row, true);
     }
     // The original a quote points at, brought into view and flashed. Moved
     // within the log only, so the page itself does not jump.
@@ -2936,13 +3227,14 @@
       target.classList.add("flash");
       setTimeout(function () { target.classList.remove("flash"); }, 1200);
     }
-    // A message gone from the log: its row, a reaction bar open under it,
-    // a reply being written to it, and every quote of it -- which now reads
+    // A message gone from the log: its row, a bar or a card open on it, a
+    // reply being written to it, and every quote of it -- which now reads
     // "Deleted message", as the server draws it from now on.
     function forget(id) {
       var row = log.querySelector('.msg[data-id="' + Number(id) + '"]');
       if (row) {
-        if (bar && bar.previousElementSibling === row) { closeBar(); }
+        if (barRow === row) { closeBar(); }
+        if (whoRow === row) { closeWho(); }
         row.remove();
       }
       log.querySelectorAll('.quote[data-to="' + Number(id) + '"]').forEach(function (q) {
@@ -2989,36 +3281,134 @@
 
     log.addEventListener("click", function (e) {
       var t = e.target;
-      if (t.closest(".msgbar")) { return; }
+      // Delete, on the bar: its own two taps.
       var del = t.closest(".act-delete");
       if (del) { deleteMessage(del); return; }
-      // The buttons written out on the message.
-      var act = t.closest(".act-react, .act-reply");
-      if (act) {
-        var owner = act.closest(".msg");
-        if (act.classList.contains("act-reply")) { startReply(owner); return; }
-        if (bar && bar.previousElementSibling === owner) { closeBar(); return; }
-        openBar(owner);
+      // The bar's other keys have their own listeners; the card is only read.
+      if (t.closest(".msgbar, .reactwho")) { return; }
+      // The reactions: who reacted, opened and shut by a tap.
+      var chips = t.closest(".reacts");
+      if (chips) {
+        var theirs = chips.closest(".msg");
+        if (whoRow === theirs && whoHow === "tap") { closeWho(); } else { showWho(theirs, "tap"); }
         return;
       }
       var quote = t.closest(".quote[data-to]");
       if (quote) { jumpTo(quote.dataset.to); return; }
       var row = t.closest(".msg");
-      // Not the cards, not the game notes, not a link or a button inside a
-      // row, and not somebody who has just selected text to copy it.
-      if (closed || !row || !row.dataset.id
-          || row.classList.contains("note") || row.classList.contains("has-card")
+      // Not a row with nothing to offer, not a link or a button inside a
+      // row (a card's own keys), and not somebody who has just selected
+      // text to copy it.
+      if (!hasBar(row)
           || t.closest("a, button, form, input, select, details")
           || String(window.getSelection ? window.getSelection() : "")) {
         closeBar();
+        closeWho();
         return;
       }
-      if (bar && bar.previousElementSibling === row) { closeBar(); return; }
-      openBar(row);
+      // A bar a hover brought stays for a tap (it would be odd for a click
+      // on a message to take away what pointing at it showed); a bar a tap
+      // brought is put away by the next one.
+      if (barRow === row && barHow === "hover") { barHow = "tap"; focusBar(); return; }
+      if (barRow === row) { closeBar(); return; }
+      openBar(row, "tap");
     });
+    // A tap anywhere else on the page puts both away. This one listener is
+    // on the document, so it is handed to the page's teardown (Beacon.live)
+    // and comes off when the page is swapped out: one per chat opened would
+    // otherwise pile up.
+    // (A target no longer in the page is not somewhere else: a key that
+    // rewrote itself when pressed, as Delete does to ask "Delete?".)
+    function tappedAway(e) {
+      if ((bar || who) && e.target.isConnected && !log.contains(e.target)) { closeBar(); closeWho(); }
+    }
+    if (typeof Beacon !== "undefined" && Beacon.live) {
+      Beacon.live(function () {
+        document.addEventListener("click", tappedAway);
+        return function () { document.removeEventListener("click", tappedAway); };
+      });
+    } else {
+      document.addEventListener("click", tappedAway);
+    }
     log.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") { closeBar(); }
+      var row = e.target.closest ? e.target.closest(".msg") : null;
+      if (e.key === "Escape" && (bar || who)) {
+        var back = barRow || whoRow;
+        closeBar();
+        closeWho();
+        if (back && back.tabIndex === 0) { back.focus({ preventScroll: true }); }
+        return;
+      }
+      // Enter or Space on a focused bubble (not on a key inside it).
+      if ((e.key === "Enter" || e.key === " ") && row && e.target === row && hasBar(row)) {
+        e.preventDefault();
+        openBar(row, "key");
+      }
     });
+    // The keyboard leaves the message: its bar goes with it.
+    log.addEventListener("focusout", function (e) {
+      if (!bar || barHow !== "key") { return; }
+      var to = e.relatedTarget;
+      if (!to || !barRow.contains(to)) { closeBar(); }
+    });
+
+    // A mouse: pointing at a message brings its bar after a short pause, and
+    // leaving the message and the bar puts it away after a grace long
+    // enough to cross the gap between them. Only where there is a pointer
+    // that hovers; a finger taps. A bar a tap or the keyboard brought is
+    // not put away by the pointer wandering off.
+    function hoverIn(e) {
+      if (!HOVERS || !HOVERS.matches) { return; }
+      // A key on a bar was just pressed and the bar went: whatever is now
+      // under the pointer was not pointed at, it was uncovered. Nothing
+      // opens until the pointer has moved.
+      if (hush) {
+        if (Math.abs(e.clientX - hush.x) < 6 && Math.abs(e.clientY - hush.y) < 6) { return; }
+        hush = null;
+      }
+      var row = e.target.closest ? e.target.closest(".msg") : null;
+      var chips = e.target.closest ? e.target.closest(".reacts") : null;
+      clearTimeout(leave);
+      clearTimeout(enter);
+      if (!row) { return; }
+      if (chips) {
+        // Over the reactions: who reacted, in place of the bar.
+        if (whoRow !== row) { enter = setTimeout(function () { showWho(row, "hover"); }, 180); }
+        return;
+      }
+      if (e.target.closest(".msgbar, .reactwho")) { return; }
+      if (whoRow === row && whoHow === "hover") { closeWho(); }
+      // Pointing at another message brings its bar in place of the one
+      // open, unless that one is being used from the keyboard.
+      if (barRow === row || !hasBar(row) || (bar && barHow === "key")) { return; }
+      enter = setTimeout(function () {
+        // Not over somebody selecting text, and not while a reply to
+        // another message is being typed into the composer's menu.
+        if (String(window.getSelection ? window.getSelection() : "")) { return; }
+        openBar(row, "hover");
+      }, 140);
+    }
+    function hoverOut(e) {
+      if (!HOVERS || !HOVERS.matches) { return; }
+      var to = e.relatedTarget;
+      var row = barRow || whoRow;
+      clearTimeout(enter);
+      if (!row || (to && row.contains(to))) { return; }
+      clearTimeout(leave);
+      leave = setTimeout(function () {
+        if (barHow === "hover") { closeBar(); }
+        if (whoHow === "hover") { closeWho(); }
+      }, 260);
+    }
+    log.addEventListener("mouseover", hoverIn);
+    log.addEventListener("mouseout", hoverOut);
+    // The log scrolled under an open bar: it goes with its message, which
+    // may now be past the log's edge, so both are put away.
+    log.addEventListener("scroll", function () {
+      if (Date.now() - ownScroll < 200) { return; }
+      if (barHow === "hover") { closeBar(); }
+      if (whoHow === "hover") { closeWho(); }
+    }, { passive: true });
     var cancel = document.querySelector("#replying .replying-cancel");
     if (cancel) { cancel.addEventListener("click", endReply); }
 

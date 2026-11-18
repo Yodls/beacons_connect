@@ -1761,24 +1761,46 @@ def in_chat(message, kind, parent):
     return getattr(message, MESSAGE_PARENTS[kind].key) == parent.id
 
 
+# How many of the people who used one reaction on one message are named in
+# its "who reacted" card. The count beside the emoji is always the real one;
+# past this the card says "and N more", so a busy Community Chat message does
+# not send a roll call with every page.
+REACTION_WHO_MAX = 30
+
+
 def reactions_for(message_ids):
-    """{message_id: [{name, glyph, label, count, mine}, ...]}, one query.
+    """{message_id: [{name, glyph, label, count, mine, who}, ...]}, one query.
 
     Only emoji somebody used appear, always in the order of REACTIONS, so the
     page, /messages and /live draw a row's chips the same way round.
+
+    `who` is who used that reaction, oldest first, for the card a chip opens:
+    each {name, photo, seed, me}. Their names are no secret here: these are
+    people in the same conversation, whose messages the reader can already
+    see. `seed` is the palette colour their initials get (the id itself is
+    not sent), `photo` their picture or None.
     """
     if not message_ids:
         return {}
     tally = {}
-    for mid, emoji, uid in db.session.execute(
+    for mid, emoji, uid, who in db.session.execute(
             db.select(MessageReaction.message_id, MessageReaction.emoji,
-                      MessageReaction.user_id)
-            .where(MessageReaction.message_id.in_(message_ids))):
-        count, mine = tally.setdefault(mid, {}).get(emoji, (0, False))
-        tally[mid][emoji] = (count + 1, mine or uid == current_user.id)
+                      MessageReaction.user_id, User.name)
+            .join(User, User.id == MessageReaction.user_id)
+            .where(MessageReaction.message_id.in_(message_ids))
+            .order_by(MessageReaction.created_at, MessageReaction.user_id)):
+        slot = tally.setdefault(mid, {}).setdefault(
+            emoji, {"count": 0, "mine": False, "who": []})
+        me = uid == current_user.id
+        slot["count"] += 1
+        slot["mine"] = slot["mine"] or me
+        if len(slot["who"]) < REACTION_WHO_MAX:
+            slot["who"].append({"name": who, "photo": beacon_picture_url(uid),
+                                "seed": uid % 6, "me": me})
     return {
         mid: [{"name": name, "glyph": glyph, "label": label,
-               "count": slot[name][0], "mine": slot[name][1]}
+               "count": slot[name]["count"], "mine": slot[name]["mine"],
+               "who": slot[name]["who"]}
               for name, glyph, label in REACTIONS if name in slot]
         for mid, slot in tally.items()
     }

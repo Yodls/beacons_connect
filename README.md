@@ -168,7 +168,10 @@ map window (`templates/_meetup_form.html`) and opens from the "Post a
 meetup" key or from the Post tab in the bottom bar. The key stands on the
 map's bottom right corner on a screen wider than 700px and across under the
 map on a phone; it steps aside while the form or a flag's card is open.
-Pressing the key scrolls the page to the form. Once a meetup is posted, the
+Posting is two steps. Pressing the key keeps the page on the map, which
+asks for the flag to be placed (a tap on the map, a drag, or a tap on the
+flag to keep it where it starts); placing it scrolls the page on to the
+form. Once a meetup is posted, the
 page scrolls back up to the map, which returns to its opening view with the
 new meetup's card open on its flag. A flag's card never moves the map: it
 opens above its flag, below it or beside it, wherever it fits whole (on a

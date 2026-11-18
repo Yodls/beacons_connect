@@ -103,10 +103,13 @@
   var shownCard = "";     // what the card last showed, so refreshes don't rebuild it
 
   // ---------- 3. helpers ----------
+  // kind: "error", "success", or "prompt" (something the map is asking for,
+  // in its own colour); none for a plain line.
   function announce(message, kind) {
     el.status.textContent = message || "";
     el.status.classList.toggle("error", kind === "error");
     el.status.classList.toggle("success", kind === "success");
+    el.status.classList.toggle("prompt", kind === "prompt");
     // Said while a card is open on the map: not across the card (5a).
     seatStatus();
   }
@@ -574,6 +577,8 @@
         draggable: true, title: "Your meetup. Drag to move it.", zIndexOffset: 2000
       }).addTo(flagLayer);
       spot.on("dragend", function () { movePick(spot.getLatLng()); });
+      // Tapped where it stands: this is the place.
+      spot.on("click", placedPick);
     }
   }
 
@@ -1300,22 +1305,23 @@
   function startPick(options) {
     selected = null;
     pick = { lat: options.lat, lng: options.lng, kind: options.kind || "event",
-             onMove: options.onMove, onDone: options.onDone };
+             onMove: options.onMove, onPlace: options.onPlace, onDone: options.onDone };
     setMode("pick");
-    // Zoomed in to place the pin, with the pin in the middle of the map, or
-    // in the middle of the stretch of it the page says will still be on
-    // the screen (options.within: px down the map, worked out now that the
-    // form is open under it). One move: a second one asked for while this
-    // zoom plays would be dropped by Leaflet.
-    var zoom = Math.max(map.getZoom(), PLACE_ZOOM);
-    var centre = L.latLng(pick.lat, pick.lng);
-    var stretch = options.within ? options.within() : null;
-    if (stretch && stretch[1] > stretch[0]) {
-      var want = (stretch[0] + stretch[1]) / 2;
-      centre = map.unproject(map.project(centre, zoom).add([0, map.getSize().y / 2 - want]), zoom);
-    }
-    map.setView(centre, zoom);
-    announce("Tap the map or drag the pin to where you'll meet.");
+    // The first thing anybody does is put the flag where the meetup is, so
+    // that is what the map asks for, with the whole map to do it on: the
+    // flag in its middle, zoomed in enough to tell one building from the
+    // next. The page keeps the map on the screen until the flag is placed.
+    map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), PLACE_ZOOM));
+    announce("Place your flag at the meetup location. Tap the map or drag the flag.", "prompt");
+  }
+
+  // The flag has been placed: put somewhere by a tap on the map or a drag,
+  // or tapped itself, which keeps it where it stands. The page hears it
+  // (onPlace) and goes on to the form.
+  function placedPick() {
+    if (!pick) { return; }
+    announce("Flag placed. Drag it or tap the map to move it.");
+    if (pick.onPlace) { pick.onPlace(); }
   }
 
   function movePick(latlng) {
@@ -1326,11 +1332,11 @@
       return;
     }
     pick.lat = latlng.lat; pick.lng = latlng.lng;
-    announce("");
     renderMarkers();
     if (pick.onMove) {
       pick.onMove({ lat: pick.lat, lng: pick.lng, near: nearestPlaceName(latlng) });
     }
+    placedPick();
   }
 
   function endPick() {
@@ -1410,8 +1416,10 @@
       if (mode === "idle") { renderDetail(); }
       // The first load's hint. Not over an error already on the line (the
       // locate key refused on an insecure page, say): an error outlasts a
-      // hint.
-      if (!quiet && !el.status.classList.contains("error")) {
+      // hint. And not while a meetup's flag is being placed (the Post tab
+      // opens the form before the flags have loaded): the line is asking
+      // for the flag then.
+      if (!quiet && mode === "idle" && !el.status.classList.contains("error")) {
         announce(focus ? "" : info.flags.length
           ? "Tap a flag to see what's happening." : "No meetups on the map yet. Post the first one.");
       }
@@ -1506,8 +1514,10 @@
     },
     resize: function () { if (map) { map.invalidateSize(); } },
     // The meetup form on /find: put its pin on the map and let it be moved.
-    // `onMove({lat, lng, near})` hears every move; `onDone()` hears Done.
-    // `kind` is the type the form has chosen, for the pin's colour.
+    // `onMove({lat, lng, near})` hears every move; `onPlace()` hears the
+    // flag placed (moved, or tapped to keep it where it is); `onDone()`
+    // hears Done. `kind` is the type the form has chosen, for the pin's
+    // colour.
     pick: function (options) {
       if (!map) { return false; }
       startPick(options);
@@ -1527,6 +1537,16 @@
       map.panTo([lat, lng]);
     },
     unpick: function () { endPick(); },
+    // The page has scrolled on to the form, and only a stretch of the map
+    // (from `stretch[0]` to `stretch[1]` px down it) is still on the screen
+    // above the form: the map is moved up or down, no further than it
+    // takes, so the flag just placed stands in that stretch.
+    pinWithin: function (stretch) {
+      if (!pick || !map || !stretch || stretch[1] - stretch[0] < 20) { return; }
+      var y = map.latLngToContainerPoint([pick.lat, pick.lng]).y;
+      var want = Math.max(stretch[0], Math.min(y, stretch[1]));
+      if (Math.abs(y - want) > 2) { map.panBy([0, y - want], { animate: !still() }); }
+    },
     // After a meetup is posted: the map goes back to the view the page
     // opens with, and the meetup's card opens on its flag there. The card
     // is put where there is room beside the flag (placeCallout), so the
