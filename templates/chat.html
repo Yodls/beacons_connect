@@ -380,27 +380,54 @@
       .msgbar .rx:hover, .msgbar .rx:focus-visible { background: none; transform: translateY(-3px) scale(1.3); }
       .msgbar .rx:active { transform: scale(1.05); }
       .msgbar .rx.on, .msgbar .rx.on:hover { background: rgba(120, 175, 233, .45); }
-      .msgbar .bar-more, .msgbar .bar-back { width: 36px; padding: 0; }
-      .msgbar .bar-back .icon { transform: scaleX(-1); }
+      .msgbar .bar-more { width: 36px; padding: 0; }
+      .msgbar .bar-more[aria-expanded="true"] { background: var(--paper); }
       .msgbar .bar-sep { flex: none; width: 2px; height: 20px; margin: 0 3px; background: var(--line); border-radius: 1px; }
       /* Delete, red; after its first tap it is asking, filled, until the
          second tap or four seconds. */
       .msgbar .act-delete { color: var(--danger); }
       .msgbar .act-delete.armed, .msgbar .act-delete.armed:hover { background: var(--danger); color: #fff; }
-      /* A phone: six reactions, Reply and More have to share one line of a
-         narrow log (288px of it at 320), so Reply is its icon alone, and on
-         the narrowest the keys are a size down. Measured: 322px wide with
-         the word, 262 like this. */
+      /* "More": a small menu dropping from its key (or rising over it, .up,
+         where the log has no room under it), Report and Delete as rows. */
+      .msgmenu {
+        position: absolute; right: -2px; top: calc(100% + 6px); z-index: 1;
+        display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+        min-width: 8.5rem; padding: 4px;
+        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
+        transform-origin: calc(100% - 18px) 0;
+        animation: msgbar-in-under .14s cubic-bezier(.2, .8, .2, 1.15);
+      }
+      .msgmenu.up { top: auto; bottom: calc(100% + 6px); transform-origin: calc(100% - 18px) 100%; animation-name: msgbar-in; }
+      .msgbar .msgmenu a, .msgbar .msgmenu button {
+        justify-content: flex-start; width: 100%; height: 36px; padding: 0 12px;
+        border-radius: var(--r-sm);
+      }
+      .msgbar .msgmenu button:active, .msgbar .msgmenu a:active { transform: none; }
+      /* Put away gracefully (fadeOut): it fades and shrinks back toward
+         where it came from, and takes no more taps while it does. */
+      .msgbar.leaving, .reactwho.leaving, .msgmenu.leaving {
+        pointer-events: none;
+        /* Over the entrance each placement (.beside, .under, .up) sets,
+           which would otherwise play again in place of this. */
+        animation: msgbar-out .15s cubic-bezier(.4, 0, 1, 1) forwards !important;
+      }
+      @keyframes msgbar-out { to { opacity: 0; transform: scale(.9); } }
+      /* A phone: six reactions, Reply (in words, as on a computer) and More
+         share one line of a narrow log, 304px of it at 320. A size down
+         from 480px, and a size down again under 400 with no rule between
+         the reactions and Reply. Measured: 296px at 320, 334 at 375. */
       @media (max-width: 480px) {
-        .msgbar .act-reply { width: 36px; padding: 0; }
-        .msgbar .act-reply > span { display: none; }
+        .msgbar .act-reply { gap: 4px; padding: 0 9px 0 7px; font-size: .82rem; }
+        .msgbar .act-reply .icon { width: 16px; height: 16px; }
       }
       @media (max-width: 400px) {
         .msgbar { gap: 1px; }
         .msgbar button, .msgbar a { height: 34px; }
-        .msgbar .rx, .msgbar .bar-more, .msgbar .bar-back, .msgbar .act-reply { width: 33px; }
-        .msgbar .rx { font-size: 1.15rem; }
-        .msgbar .bar-sep { margin: 0 2px; }
+        .msgbar .rx, .msgbar .bar-more { width: 30px; }
+        .msgbar .rx { font-size: 1.1rem; }
+        .msgbar .act-reply { padding: 0 7px 0 5px; }
+        .msgbar .bar-sep { display: none; }
       }
 
       /* ---------- who reacted ----------
@@ -424,7 +451,7 @@
       .rw-person .avatar { flex: none; width: 24px; height: 24px; font-size: 11px; box-shadow: none; }
       .rw-more { padding: 2px 0 0 32px; color: var(--muted); font-size: .82rem; }
       @media (prefers-reduced-motion: reduce) {
-        .msgbar, .reactwho { animation: none; }
+        .msgbar, .reactwho, .msgmenu { animation: none; }
         .msgbar button, .msgbar a, .msg .reacts { transition: none; }
         .msgbar .rx:hover, .msgbar .rx:focus-visible { transform: none; background: var(--paper); }
       }
@@ -810,17 +837,20 @@
       .newpost button { margin: 0; }
 
       /* The action row: divided off and pushed to the end, so it reads as the
-         card's own controls. Wraps rather than colliding on a narrow screen. */
+         card's own controls. One line: the key you came for (I'm in, or
+         Open chat once you are), See on map, and "..." at the end for
+         leaving and cancelling (_cardmenu.css, included below). It may
+         still wrap, so that nothing is ever cut off, but nothing here is
+         wide enough to make it. */
       .post-actions {
         display: flex; flex-wrap: wrap; justify-content: flex-start;
         align-items: center; gap: 8px;
         margin-top: 12px; padding-top: 12px;
         border-top: 2px dashed var(--line);
       }
-      /* The main key (I'm in) takes the full width, as in the preview. */
-      .post-actions > form:first-child:last-child,
-      .post-actions > form:first-child:has(> button:not(.ghost)) { flex: 1 1 100%; }
-      .post-actions > form:first-child:has(> button:not(.ghost)) button { width: 100%; min-height: 44px; font-size: 1rem; }
+      /* The main key (I'm in) takes what the line has left over. */
+      .post-actions > form:first-child:has(> button:not(.ghost)) { flex: 1 1 auto; }
+      .post-actions > form:first-child:has(> button:not(.ghost)) button { width: 100%; font-size: 1rem; }
       .post-actions form { margin: 0; }
       .post-actions .meta { margin-right: auto; }
       /* "See on map": a white key that goes to the meetup's flag on Meet up */
@@ -831,8 +861,9 @@
         box-shadow: 0 3px 0 var(--navy); font-size: .88rem;
       }
       .post-actions .maplink:hover { background: var(--paper); text-decoration: none; }
-      .post-actions button[type="submit"],
-      .post-actions .confirm > summary { min-height: 40px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      /* The row's own keys, not the rows of the menu. */
+      .post-actions > form > button[type="submit"] { min-height: 40px; margin: 0; padding: 0 12px; font-size: .88rem; }
+      {% include "_cardmenu.css" %}
 
       /* Leaving is the one action here you cannot undo in a click, so it
          carries the warning colour and asks first. Qualified with the element
@@ -1245,12 +1276,9 @@
            together, still 40px tall for a thumb. The meetup's own view in
            the Meet up sheet is not in #log, and keeps them full size. */
         #log .post .post-actions { gap: 6px; margin-top: 8px; padding-top: 8px; }
-        #log .post .post-actions button[type="submit"],
-        #log .post .post-actions .confirm > summary,
+        #log .post .post-actions > form > button[type="submit"],
         #log .post .post-actions .maplink { padding: 0 8px; font-size: .8rem; }
-        #log .post .post-actions > form:first-child:has(> button:not(.ghost)) button {
-          min-height: 40px; font-size: .92rem;
-        }
+        #log .post .post-actions > form:first-child:has(> button:not(.ghost)) button { font-size: .92rem; }
       }
 
       {% include "_matchsplash.css" %}
@@ -1486,13 +1514,15 @@
          opens its bar. #}
       {% set answerable = not ended and not message.post %}
       {% set deletable = (message.mine or current_user.is_admin) and not message.post %}
+      {% set reported = url_for('report_new', kind='abuse', post=message.post.id) if message.post
+                        else url_for('report_new', kind='abuse', message=message.id) %}
       {% set acts = (["react", "reply"] if answerable else [])
                     + ([] if message.mine else ["report"])
                     + (["delete"] if deletable else []) %}
       <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}{% if message.reactions and not message.post %} has-reacts{% endif %}"
            data-id="{{ message.id }}" data-ts="{{ message.ts }}"
            {%- if acts %} data-acts="{{ acts | join(' ') }}" tabindex="0"{% endif %}
-           {%- if not message.mine %} data-report="{{ url_for('report_new', kind='abuse', message=message.id) }}"{% endif %}
+           {%- if not message.mine %} data-report="{{ reported }}"{% endif %}
            {%- if deletable %} data-delete="{{ url_for('message_delete', message_id=message.id) }}"{% endif %}>
         {% if not message.mine %}{{ ui.face(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
@@ -1518,8 +1548,7 @@
         {# With no script there is no bar: Report, the one thing here that
            is a plain link, is still to be had. #}
         {% if not message.mine %}
-          <noscript><a class="report-link"
-                       href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a></noscript>
+          <noscript><a class="report-link" href="{{ reported }}">Report</a></noscript>
         {% endif %}
         {# The reactions, as one key: it opens the card of who reacted
            (showWho), read from data-who. Drawn the same way by paintReacts
@@ -2214,15 +2243,29 @@
       var card = win.dataset.post
         ? log.querySelector('.post[data-post="' + win.dataset.post + '"]') : null;
       if (!card || !aboutCard) { return false; }
-      // An "are you sure" the reader has open stays open across a refresh.
-      var asking = !!aboutCard.querySelector("details.confirm[open]");
+      // Its "..." menu, if the reader has it open here, stays open across a
+      // refresh. The copy starts clean: not with a menu that is open on the
+      // card in the log, nor with a key there that is half way through
+      // asking ("Tap again to leave"), which here would act at one tap.
+      var asking = aboutCard.querySelector("details.cardmore[open]");
       var copy = card.cloneNode(true);
       copy.removeAttribute("data-post");
-      aboutCard.replaceChildren(copy);
+      Array.prototype.forEach.call(copy.querySelectorAll("details.cardmore"), function (menu) {
+        menu.removeAttribute("open");
+        menu.classList.remove("up", "leaving");
+      });
+      Array.prototype.forEach.call(copy.querySelectorAll("button[data-ask].armed"), function (key) {
+        key.classList.remove("armed");
+        key.textContent = key.getAttribute("data-label") || key.textContent;
+      });
       if (asking) {
-        var again = copy.querySelector("details.confirm");
-        if (again) { again.setAttribute("open", ""); }
+        var again = copy.querySelector("details.cardmore");
+        if (again) {
+          again.setAttribute("open", "");
+          again.classList.toggle("up", asking.classList.contains("up"));
+        }
       }
+      aboutCard.replaceChildren(copy);
       return true;
     }
     function adopt(card) {
@@ -2686,20 +2729,27 @@
       if (!had) {
         var at = msg.querySelector(".at");
         if (at) { msg.insertBefore(fresh, at); } else { msg.appendChild(fresh); }
-        // Now it is a meetup's message: the card stands in for the bubble.
+        // Now it is a meetup's message: the card stands in for the bubble,
+        // and Report (somebody else's) names the meetup.
         msg.classList.add("has-card", "has-post");
+        if (msg.dataset.report && fresh.dataset.post) {
+          msg.dataset.report = "/report?kind=abuse&post=" + encodeURIComponent(fresh.dataset.post);
+        }
         return;
       }
-      // Whether the "are you sure" is open is the reader's business, not the
+      // Whether the card's menu is open is the reader's business, not the
       // server's -- the same care the roster takes. Somebody deciding whether
-      // to give up their place must not have the question shut under them
+      // to give up their place must not have the menu shut under them
       // because a third person joined.
-      var asking = !!had.querySelector("details.confirm[open]");
-      had.replaceWith(fresh);
+      var asking = had.querySelector("details.cardmore[open]");
       if (asking) {
-        var again = fresh.querySelector("details.confirm");
-        if (again) { again.setAttribute("open", ""); }
+        var again = fresh.querySelector("details.cardmore");
+        if (again) {
+          again.setAttribute("open", "");
+          again.classList.toggle("up", asking.classList.contains("up"));
+        }
       }
+      had.replaceWith(fresh);
     }
     // The Meet up window's bar follows the cards (friend chats).
     function cardsMoved() {
@@ -2881,7 +2931,13 @@
         p.dataset.acts = acts.join(" ");
         p.tabIndex = 0;
       }
-      if (theirs) { p.dataset.report = "/report?kind=abuse&message=" + encodeURIComponent(message.id); }
+      // Report names the meetup on a message carrying one, as the card's
+      // own Report link used to; otherwise the message.
+      if (theirs) {
+        p.dataset.report = message.post && message.post.id
+          ? "/report?kind=abuse&post=" + encodeURIComponent(message.post.id)
+          : "/report?kind=abuse&message=" + encodeURIComponent(message.id);
+      }
       if (deletable) { p.dataset.delete = "/messages/" + encodeURIComponent(message.id) + "/delete"; }
       p.appendChild(span("at", message.at || ""));
       paintReacts(p, message.reactions);
@@ -2907,8 +2963,8 @@
     var whoHow = "";
     var enter = null;     // timers: the pause before a hover opens,
     var leave = null;     // and the grace before leaving shuts
-    var hush = null;      // where the pointer was when a bar's key was pressed (hoverIn)
-    var ownScroll = 0;    // when placeFloat last scrolled the log itself
+    var hush = null;      // where the pointer was when a bar was put away on purpose (hoverIn)
+    var pointer = null;   // where the pointer last moved over the log
     var HOVERS = window.matchMedia ? window.matchMedia("(hover: hover) and (pointer: fine)") : null;
 
     // What a row offers (data-acts). A row drawn as a card has no bubble to
@@ -2932,6 +2988,8 @@
     function placeFloat(box, row, beside) {
       box.classList.remove("under", "beside");
       box.style.removeProperty("--nudge");
+      box.style.top = "";
+      box.style.bottom = "";
       var view = log.getBoundingClientRect();
       // A strip over the log's foot (the Meet up key) covers that much.
       var foot = view.bottom - Math.max(0, (parseFloat(getComputedStyle(log).paddingBottom) || 0) - 16);
@@ -2974,16 +3032,16 @@
       var over = mine ? (view.left + 8) - b.left : b.right - (view.right - 8);
       var room = mine ? (view.right - 8) - b.right : b.left - (view.left + 8);
       if (over > 0) { box.style.setProperty("--nudge", (-Math.ceil(Math.max(0, Math.min(over, room)))) + "px"); }
-      // Still past the log's top or foot (a bubble taller than the log):
-      // the log scrolls the little it takes. Marked, so the listener that
-      // puts a hovered bar away when the log is scrolled knows this scroll
-      // was the bar's own.
+      // Still past the log's top or foot (a bubble at the very edge, or
+      // taller than the log): it is moved in to the edge, over its own
+      // bubble if it must. The log itself is never scrolled for it, so
+      // nothing in the chat moves when it opens.
       b = laid();
-      var by = b.bottom > foot ? Math.ceil(b.bottom - foot + 4)
-             : b.top < view.top ? -Math.ceil(view.top - b.top + 4) : 0;
-      if (by) {
-        ownScroll = Date.now();
-        log.scrollTop += by;
+      var shift = b.top < view.top + 4 ? (view.top + 4) - b.top
+                : b.bottom > foot - 4 ? (foot - 4) - b.bottom : 0;
+      if (shift) {
+        box.style.top = Math.round(box.offsetTop + shift) + "px";
+        box.style.bottom = "auto";
       }
     }
 
@@ -2999,7 +3057,7 @@
       barRow = null;
       barHow = "";
       row.classList.remove("barred");
-      gone.remove();
+      fadeOut(gone);
     }
     function closeWho() {
       if (!who) { return; }
@@ -3009,7 +3067,7 @@
       whoHow = "";
       var key = row.querySelector(":scope > .reacts");
       if (key) { key.setAttribute("aria-expanded", "false"); }
-      gone.remove();
+      fadeOut(gone);
     }
     function reactUrl(row) {
       return "/messages/" + encodeURIComponent(row.dataset.id) + "/react";
@@ -3084,31 +3142,34 @@
     // the rest. "more": Report and Delete, with a key back. A row that
     // offers neither a reaction nor a reply (a closed chat, a card) goes
     // straight to the rest, with no key back.
-    function fillBar(row, page) {
+    // Report and Delete, where they are offered: as keys in the bar itself
+    // (`into` the bar) or as the rows of the "more" menu.
+    function restKeys(row, into) {
+      var acts = offers(row);
+      if (acts.indexOf("report") !== -1) {
+        var tell = document.createElement("a");
+        tell.className = "report-link";
+        tell.href = row.dataset.report || ("/report?kind=abuse&message=" + encodeURIComponent(row.dataset.id));
+        tell.textContent = "Report";
+        into.appendChild(tell);
+      }
+      if (acts.indexOf("delete") !== -1) {
+        // Two taps, as before: deleteMessage asks on the first.
+        var gone = barKey("act-delete", "Delete", "", "Delete");
+        gone.dataset.url = row.dataset.delete;
+        into.appendChild(gone);
+      }
+    }
+    function fillBar(row) {
       var acts = offers(row);
       var has = function (a) { return acts.indexOf(a) !== -1; };
       var rest = has("report") || has("delete");
       var main = has("react") || has("reply");
       bar.replaceChildren();
-      if (page === "more" || !main) {
-        if (main) {
-          var back = barKey("bar-back", "Back", "chevron", "");
-          back.addEventListener("click", function (e) { turnBar(e, row, "main"); });
-          bar.appendChild(back);
-        }
-        if (has("report")) {
-          var tell = document.createElement("a");
-          tell.className = "report-link";
-          tell.href = row.dataset.report || ("/report?kind=abuse&message=" + encodeURIComponent(row.dataset.id));
-          tell.textContent = "Report";
-          bar.appendChild(tell);
-        }
-        if (has("delete")) {
-          // Two taps, as before: deleteMessage asks on the first.
-          var gone = barKey("act-delete", "Delete", "", "Delete");
-          gone.dataset.url = row.dataset.delete;
-          bar.appendChild(gone);
-        }
+      if (!main) {
+        // Nothing to react to or answer (a closed chat, a card): what is
+        // left is in the bar itself.
+        restKeys(row, bar);
       } else {
         if (has("react")) {
           var picked = row.querySelector(":scope > .reacts .react.on");
@@ -3137,26 +3198,64 @@
         }
         if (rest) {
           var more = barKey("bar-more", "More", "more", "");
-          more.addEventListener("click", function (e) { turnBar(e, row, "more"); });
+          more.setAttribute("aria-haspopup", "menu");
+          more.setAttribute("aria-expanded", "false");
+          more.addEventListener("click", function (e) { toggleMenu(e, row, more); });
           bar.appendChild(more);
         }
       }
       placeFloat(bar, row, true);
     }
-    // The bar turned to its other page by one of its own keys. The tap goes
-    // no further than the key: redrawing the bar takes the key out of the
-    // page, and a tap whose target is no longer in the log reads, to the
-    // listeners above it, as a tap somewhere else, which shuts the bar.
-    function turnBar(e, row, page) {
+    // "More": a small menu dropping from its key, with Report and Delete.
+    // It is part of the bar (inside it), so the pointer on it is still on
+    // the message, and the bar keeps its six reactions and its place. The
+    // tap goes no further than the key, so the listeners above it do not
+    // read it as a tap on the message.
+    function toggleMenu(e, row, key) {
       e.stopPropagation();
-      fillBar(row, page);
-      // Pinned: it is being used, so the pointer leaving does not shut it.
-      if (barHow === "hover") { barHow = "tap"; }
-      focusBar();
+      var menu = bar && bar.querySelector(":scope > .msgmenu");
+      if (menu) {
+        fadeOut(menu);
+        key.setAttribute("aria-expanded", "false");
+        return;
+      }
+      menu = document.createElement("div");
+      menu.className = "msgmenu";
+      menu.setAttribute("role", "menu");
+      restKeys(row, menu);
+      Array.prototype.forEach.call(menu.children, function (item) { item.setAttribute("role", "menuitem"); });
+      bar.appendChild(menu);
+      key.setAttribute("aria-expanded", "true");
+      // Under the key, or over it when the log has no room under it.
+      var view = log.getBoundingClientRect();
+      var foot = view.bottom - Math.max(0, (parseFloat(getComputedStyle(log).paddingBottom) || 0) - 16);
+      var m = menu.getBoundingClientRect(), b = bar.getBoundingClientRect();
+      if (b.bottom + 6 + menu.offsetHeight > foot - 4 && b.top - 6 - menu.offsetHeight >= view.top + 4) {
+        menu.classList.add("up");
+      }
+      var first = menu.querySelector("a, button");
+      if (first) { first.focus({ preventScroll: true }); }
     }
     function focusBar() {
       var first = bar && bar.querySelector("button, a");
       if (first) { first.focus({ preventScroll: true }); }
+    }
+    // Put away gracefully: it fades and shrinks back toward where it came
+    // from, then goes. Out of reach at once (it is no longer the bar or the
+    // card; a new one can open while it fades), and gone at once under
+    // reduced motion.
+    function fadeOut(el) {
+      if (!el || !el.isConnected) { return; }
+      if (el.contains(document.activeElement)) { document.activeElement.blur(); }
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        el.remove();
+        return;
+      }
+      el.classList.add("leaving");
+      el.setAttribute("aria-hidden", "true");
+      var done = function () { el.remove(); };
+      el.addEventListener("animationend", done, { once: true });
+      setTimeout(done, 260);
     }
     // how: "hover", "tap" or "key". A hover does not take the focus (the
     // person may be typing); a tap or the keyboard does.
@@ -3172,7 +3271,7 @@
       barHow = how || "tap";
       row.classList.add("barred");
       row.appendChild(bar);
-      fillBar(row, "main");
+      fillBar(row);
       if (barHow !== "hover") { focusBar(); }
     }
 
@@ -3306,34 +3405,38 @@
         closeWho();
         return;
       }
-      // A bar a hover brought stays for a tap (it would be odd for a click
-      // on a message to take away what pointing at it showed); a bar a tap
-      // brought is put away by the next one.
-      if (barRow === row && barHow === "hover") { barHow = "tap"; focusBar(); return; }
+      // A bar a hover brought stays for a click on its message (it would be
+      // odd for a click to take away what pointing at it showed), and goes
+      // when the pointer leaves, as before; a bar a tap brought is put away
+      // by the next one.
+      if (barRow === row && barHow === "hover") { focusBar(); return; }
       if (barRow === row) { closeBar(); return; }
       openBar(row, "tap");
     });
-    // A tap anywhere else on the page puts both away. This one listener is
-    // on the document, so it is handed to the page's teardown (Beacon.live)
-    // and comes off when the page is swapped out: one per chat opened would
-    // otherwise pile up.
+    // A tap anywhere else on the page puts both away. The one listener on
+    // the document is put there once per tab, and calls whichever chat is
+    // on the page now (window.beaconChatAway, replaced by every chat page
+    // the enhancer swaps in), so opening chat after chat does not pile
+    // listeners up. A chat that has been swapped out lets go of the hook.
     // (A target no longer in the page is not somewhere else: a key that
     // rewrote itself when pressed, as Delete does to ask "Delete?".)
-    function tappedAway(e) {
+    window.beaconChatAway = function (e) {
+      if (!log.isConnected) { window.beaconChatAway = null; return; }
       if ((bar || who) && e.target.isConnected && !log.contains(e.target)) { closeBar(); closeWho(); }
-    }
-    if (typeof Beacon !== "undefined" && Beacon.live) {
-      Beacon.live(function () {
-        document.addEventListener("click", tappedAway);
-        return function () { document.removeEventListener("click", tappedAway); };
+    };
+    if (!window.beaconChatAwayBound) {
+      window.beaconChatAwayBound = true;
+      document.addEventListener("click", function (e) {
+        if (window.beaconChatAway) { window.beaconChatAway(e); }
       });
-    } else {
-      document.addEventListener("click", tappedAway);
     }
     log.addEventListener("keydown", function (e) {
       var row = e.target.closest ? e.target.closest(".msg") : null;
       if (e.key === "Escape" && (bar || who)) {
         var back = barRow || whoRow;
+        // Put away on purpose: not brought back by the pointer still resting
+        // on the message, only once it moves (hoverIn).
+        if (pointer) { hush = pointer; }
         closeBar();
         closeWho();
         if (back && back.tabIndex === 0) { back.focus({ preventScroll: true }); }
@@ -3368,7 +3471,11 @@
       }
       var row = e.target.closest ? e.target.closest(".msg") : null;
       var chips = e.target.closest ? e.target.closest(".reacts") : null;
-      clearTimeout(leave);
+      // Back over the message whose bar or card is open (the bar and the
+      // card are inside it): it stays. Anywhere else in the log, the space
+      // between messages included, the leaving goes on and it is put away.
+      var open = barRow || whoRow;
+      if (open && row === open) { clearTimeout(leave); }
       clearTimeout(enter);
       if (!row) { return; }
       if (chips) {
@@ -3388,6 +3495,10 @@
         openBar(row, "hover");
       }, 140);
     }
+    // The pointer leaving the message and its bar or card puts them away,
+    // however they were opened (a hover, a click, a key on the bar): with a
+    // mouse, what is open is what is pointed at. Only a bar opened from the
+    // keyboard stays, until Escape or the focus moves on.
     function hoverOut(e) {
       if (!HOVERS || !HOVERS.matches) { return; }
       var to = e.relatedTarget;
@@ -3396,16 +3507,16 @@
       if (!row || (to && row.contains(to))) { return; }
       clearTimeout(leave);
       leave = setTimeout(function () {
-        if (barHow === "hover") { closeBar(); }
-        if (whoHow === "hover") { closeWho(); }
+        if (bar && barHow !== "key") { closeBar(); }
+        if (who) { closeWho(); }
       }, 260);
     }
+    log.addEventListener("mousemove", function (e) { pointer = { x: e.clientX, y: e.clientY }; }, { passive: true });
     log.addEventListener("mouseover", hoverIn);
     log.addEventListener("mouseout", hoverOut);
     // The log scrolled under an open bar: it goes with its message, which
     // may now be past the log's edge, so both are put away.
     log.addEventListener("scroll", function () {
-      if (Date.now() - ownScroll < 200) { return; }
       if (barHow === "hover") { closeBar(); }
       if (whoHow === "hover") { closeWho(); }
     }, { passive: true });

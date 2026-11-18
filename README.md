@@ -203,7 +203,11 @@ as a small flag in its own colour. An author can drag their flag to a new
 spot, which rewrites the meetup's place to match, and takes it down by
 cancelling the meetup from its card; nobody else can do either. Meetup cards
 in chats and on Meet up get a "See on map" link for anyone who can see the
-flag. Unfriending or blocking somebody takes them off the flags they were
+flag. Those cards keep their keys on one line: "I'm in" (or "Open chat" once
+you are in), "See on map", and a "..." menu that holds "Leave Meetup" and
+"Cancel meetup". Each of those two asks for a second tap before it acts
+("Tap again to leave"), and goes back by itself after four seconds.
+Unfriending or blocking somebody takes them off the flags they were
 picked for.
 
 Students used to be able to drop a flag by hand as well, with no meetup

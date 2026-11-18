@@ -47,35 +47,29 @@
     {{ post.going | join(", ") }}{% endif %}
   </span>
   {# One action row at the foot of the card, divided off from the details
-     above it, so these never read as chat-window controls. Both labels name
-     the meetup: "Leave" alone was taken for leaving the conversation, and
-     "Close" for shutting the window. "Cancel meetup" is the word /find
-     already uses for this. #}
+     above it, so these never read as chat-window controls. Leaving and
+     cancelling both name the meetup: "Leave" alone was taken for leaving
+     the conversation, and "Close" for shutting the window. "Cancel meetup"
+     is the word /find already uses for this. #}
   <div class="post-actions">
     {% if post.status != "open" %}
       <span class="meta">Closed</span>
     {% else %}
-      {% if post.im_going %}
-        {# Asked before you give up your place. A <details>, like the bell and
-           the game picker, so it needs no JavaScript -- clicking the summary
-           again puts it away. #}
-        <details class="confirm">
-          <summary class="leave">Leave Meetup</summary>
-          <div class="confirm-body">
-            <span class="confirm-ask">Are you sure you want to leave
-              this meetup?</span>
-            <span class="confirm-row">
-              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
-                <button type="submit" class="leave-yes">Yes, leave</button>
-              </form>
-              <button type="button" class="confirm-no">Keep my spot</button>
-            </span>
-          </div>
-        </details>
-      {% else %}
+      {# One line, whatever the card offers: the key you came for (I'm in,
+         or Open chat once you are), See on map, and the rest behind "...".
+         All four with their words need 473px, and the row has 352 on a
+         computer and 238 on a small phone. #}
+      {% if not post.im_going %}
         <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
           <button type="submit"
                   {% if post.full %}disabled{% endif %}>I'm in</button>
+        </form>
+      {% elif post.chat_id %}
+        {# Only for somebody going: the chat refuses anybody else, so offering
+           it to them would be a door that does not open. #}
+        <form method="get"
+              action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
+          <button type="submit" class="ghost">Open chat</button>
         </form>
       {% endif %}
       {# The meetup's flag on the campus map, for whoever may see it (the
@@ -84,25 +78,33 @@
         <a class="maplink" data-flag="{{ post.flag }}"
            href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
       {% endif %}
-      {# Only for somebody going: the chat refuses anybody else, so offering
-         it to them would be a door that does not open. #}
-      {% if post.im_going and post.chat_id %}
-        <form method="get"
-              action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
-          <button type="submit" class="ghost">Open chat</button>
-        </form>
+      {# The two you cannot take back, in a menu (_cardmenu.css). A
+         <details>, like the bell and the game picker, so it opens without
+         JavaScript. With it, the first tap on either only asks: the key
+         reads its data-ask for four seconds (_enhance.html), and the second
+         tap sends its form. #}
+      {% if post.im_going or post.mine %}
+        <details class="cardmore">
+          <summary aria-label="More"><svg class="icon" aria-hidden="true"><use href="#icon-more" /></svg></summary>
+          <div class="cardmenu">
+            {% if post.im_going %}
+              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
+                <button type="submit" data-ask="Tap again to leave">Leave Meetup</button>
+              </form>
+            {% endif %}
+            {% if post.mine %}
+              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
+                <button type="submit" data-ask="Tap again to cancel">Cancel meetup</button>
+              </form>
+            {% endif %}
+          </div>
+        </details>
       {% endif %}
-      {% if post.mine %}
-        <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
-          <button type="submit" class="ghost">Cancel meetup</button>
-        </form>
-      {% else %}
-        {# Not on your own meetup: cancelling is what you do to that. The
-           link carries the post, so the report names the meetup and its
-           author together -- which is what whoever reads it needs. #}
-        <a class="report-link"
-           href="{{ url_for('report_new', kind='abuse', post=post.id) }}">Report</a>
-      {% endif %}
+      {# Somebody else's meetup is reported from the message's bar in the
+         chat (its More menu), not from here as well: the message carrying
+         this card points that Report at the meetup (data-report in
+         chat.html), so the report names the meetup and its author
+         together, which is what whoever reads it needs. #}
     {% endif %}
   </div>
   </div>

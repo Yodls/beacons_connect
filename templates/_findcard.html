@@ -34,33 +34,18 @@
             &middot; {{ post.going | join(", ") }}{% endif %}
           </span>
           <div class="actions">
-            {% if post.im_going %}
-              {# Asked before you give up your place, the same as in the chat.
-                 A <details>, so it needs no JavaScript. #}
-              <details class="confirm">
-                <summary class="leave">Leave Meetup</summary>
-                <div class="confirm-body">
-                  <span class="confirm-ask">Are you sure you want to leave this
-                    meetup?</span>
-                  <span class="confirm-row">
-                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
-                      <input type="hidden" name="back" value="find" />
-                      <button type="submit" class="leave-yes">Yes, leave</button>
-                    </form>
-                    <button type="button" class="confirm-no">Keep my spot</button>
-                  </span>
-                </div>
-              </details>
-            {% else %}
+            {# One line, the same as the meetup's card in a chat
+               (_postcard.html): the key you came for, See on map, and the
+               two you cannot take back behind "...". #}
+            {% if not post.im_going %}
               <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
                 <input type="hidden" name="back" value="find" />
                 <button type="submit"
                         {% if post.full %}disabled{% endif %}>I'm in</button>
               </form>
-            {% endif %}
-            {# Only for somebody going: the chat refuses anybody else, so
-               offering it to them would be a door that does not open. #}
-            {% if post.im_going and post.chat_id %}
+            {% elif post.chat_id %}
+              {# Only for somebody going: the chat refuses anybody else, so
+                 offering it to them would be a door that does not open. #}
               <form method="get"
                     action="{{ url_for('chat', kind='group', target_id=post.chat_id) }}">
                 <button type="submit" class="ghost">Open chat</button>
@@ -71,11 +56,27 @@
               <a class="key maplink" data-flag="{{ post.flag }}"
                  href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
             {% endif %}
-            {% if post.mine %}
-              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
-                <input type="hidden" name="back" value="find" />
-                <button type="submit" class="ghost">Cancel meetup</button>
-              </form>
+            {# A <details>, so it opens without JavaScript. With it, the
+               first tap on either key only asks (data-ask, _enhance.html)
+               and the second sends its form. #}
+            {% if post.im_going or post.mine %}
+              <details class="cardmore">
+                <summary aria-label="More"><svg class="icon" aria-hidden="true"><use href="#icon-more" /></svg></summary>
+                <div class="cardmenu">
+                  {% if post.im_going %}
+                    <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">
+                      <input type="hidden" name="back" value="find" />
+                      <button type="submit" data-ask="Tap again to leave">Leave Meetup</button>
+                    </form>
+                  {% endif %}
+                  {% if post.mine %}
+                    <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">
+                      <input type="hidden" name="back" value="find" />
+                      <button type="submit" data-ask="Tap again to cancel">Cancel meetup</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </details>
             {% endif %}
           </div>
         </div>

@@ -95,6 +95,116 @@
       });
     });
 
+    // A meetup card's "..." menu (_postcard.html, _findcard.html,
+    // _cardmenu.css): Leave Meetup and Cancel meetup. Here for the reason
+    // the panels above are: a card is redrawn by the live channel and copied
+    // into the Meet up drawer, so nothing can be bound to one.
+    //
+    // Opened here rather than by the browser, so that it is in its place
+    // (under its key, or over it where its scroller has no room under)
+    // before it is first painted; and put away with a short fade (.leaving).
+    // Without this script it is still a <details>, and opens.
+    var CARDMENUS = "details.cardmore[open]";
+    function each(list, fn) { Array.prototype.forEach.call(list, fn); }
+    function calm() {
+      return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    }
+    // A key that was asking goes back to its own words.
+    function unask(key) {
+      clearTimeout(key.beaconAsk);
+      if (!key.classList.contains("armed")) { return; }
+      key.classList.remove("armed");
+      key.textContent = key.getAttribute("data-label") || key.textContent;
+    }
+    function shutCardMenu(menu) {
+      if (!menu.hasAttribute("open") || menu.classList.contains("leaving")) { return; }
+      var done = function () {
+        menu.classList.remove("leaving");
+        menu.classList.remove("up");
+        menu.removeAttribute("open");
+        each(menu.querySelectorAll("button[data-ask]"), unask);
+      };
+      if (calm()) { done(); return; }
+      menu.classList.add("leaving");
+      setTimeout(done, 150);
+    }
+    // The nearest thing that would cut the menu off: the chat's log, the
+    // Meet up drawer. None on a page that scrolls as a whole.
+    function clipOf(el) {
+      for (var p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        var flow = window.getComputedStyle(p).overflowY;
+        if (flow && flow !== "visible") { return p; }
+      }
+      return null;
+    }
+    function openCardMenu(menu) {
+      menu.classList.remove("up");
+      menu.setAttribute("open", "");
+      var list = menu.querySelector(".cardmenu"), key = menu.querySelector("summary");
+      if (!list || !key) { return; }
+      var k = key.getBoundingClientRect(), clip = clipOf(menu);
+      var top = 0, bottom = window.innerHeight;
+      if (clip) {
+        var c = clip.getBoundingClientRect();
+        // A log keeps room at its foot for what floats over it; all but a
+        // little of that is not somewhere to put a menu.
+        var foot = Math.max(0, (parseFloat(window.getComputedStyle(clip).paddingBottom) || 0) - 16);
+        top = Math.max(top, c.top);
+        bottom = Math.min(bottom, c.bottom - foot);
+      }
+      // offsetHeight, not its rectangle: it is growing into place as this
+      // is asked, and its rectangle is the smaller for it.
+      var tall = list.offsetHeight + 10;
+      if (k.bottom + tall > bottom - 4 && k.top - tall >= top + 4) { menu.classList.add("up"); }
+    }
+    function shutCardMenus(e) {
+      each(document.querySelectorAll(CARDMENUS), function (menu) {
+        if (!menu.contains(e.target)) { shutCardMenu(menu); }
+      });
+    }
+    document.addEventListener("click", shutCardMenus, true);
+    document.addEventListener("pointerdown", shutCardMenus, true);
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") { return; }
+      each(document.querySelectorAll(CARDMENUS), function (menu) {
+        var within = menu.contains(document.activeElement);
+        var key = menu.querySelector("summary");
+        shutCardMenu(menu);
+        if (within && key) { key.focus({ preventScroll: true }); }
+      });
+    });
+    document.addEventListener("click", function (e) {
+      var t = e.target && e.target.closest ? e.target : null;
+      if (!t) { return; }
+      // Leave Meetup, Cancel meetup: the first tap only asks. The key reads
+      // its data-ask ("Tap again to leave"), filled, for four seconds; a
+      // second tap in that time is left alone, and its form goes.
+      var key = t.closest("button[data-ask]");
+      if (key) {
+        clearTimeout(key.beaconAsk);
+        if (!key.classList.contains("armed")) {
+          e.preventDefault();
+          key.setAttribute("data-label", key.textContent);
+          key.textContent = key.getAttribute("data-ask");
+          key.classList.add("armed");
+        }
+        // Armed, or sent: either way it is itself again four seconds on,
+        // if nothing has redrawn its card by then (beacon:done below).
+        key.beaconAsk = setTimeout(function () { unask(key); }, 4000);
+        return;
+      }
+      var summary = t.closest("details.cardmore > summary");
+      if (!summary) { return; }
+      e.preventDefault();
+      var menu = summary.parentNode;
+      if (menu.classList.contains("leaving")) { return; }
+      if (menu.hasAttribute("open")) { shutCardMenu(menu); } else { openCardMenu(menu); }
+    });
+    // Sent and answered: the key is not left asking in a menu that has shut.
+    document.addEventListener("beacon:done", function (e) {
+      if (e.target && e.target.querySelectorAll) { each(e.target.querySelectorAll("button[data-ask]"), unask); }
+    });
+
     if (!window.fetch || !window.history.pushState || !window.DOMParser) { return; }
 
     function live() { return document.getElementById("live"); }

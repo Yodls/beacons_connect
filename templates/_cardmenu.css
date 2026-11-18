@@ -1,0 +1,70 @@
+      /* ---------- a meetup card's "..." menu ----------
+         Leave Meetup and Cancel meetup, the two keys on a meetup's card you
+         cannot take back, out of the row of keys so that row is one line on
+         every screen (_postcard.html in a chat, _findcard.html on Meet up).
+         Included by chat.html and find.html, so the menu has one source.
+         Opening it, its keys asking for a second tap and putting it away
+         are in _enhance.html.
+
+         The key: a white square at the end of the row. */
+      .cardmore { position: relative; flex: none; margin: 0 0 0 auto; }
+      .cardmore > summary {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 40px; height: 40px; padding: 0;
+        list-style: none; cursor: pointer;
+        background: #fff; color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 0 3px 0 var(--navy);
+      }
+      .cardmore > summary::-webkit-details-marker { display: none; }
+      .cardmore > summary .icon { width: 20px; height: 20px; }
+      .cardmore > summary:hover { background: var(--paper); }
+      .cardmore[open] > summary { transform: translateY(3px); box-shadow: none; background: var(--paper); }
+      /* The menu: over the page, hung from the key's right edge, so nothing
+         on the card moves. Under the key, or over it (.up) where its
+         scroller has no room under. As wide as the longer question its keys
+         ask, so asking does not resize it. */
+      .cardmenu {
+        position: absolute; right: 0; top: calc(100% + 9px); z-index: 7;
+        display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+        min-width: 11.25rem; padding: 4px;
+        background: #fff; border: 2px solid var(--navy); border-radius: var(--r);
+        box-shadow: 3px 3px 0 var(--navy);
+        transform-origin: calc(100% - 18px) 0;
+        animation: cardmenu-in .14s cubic-bezier(.2, .8, .2, 1.15);
+      }
+      .cardmore.up > .cardmenu {
+        top: auto; bottom: calc(100% + 6px);
+        transform-origin: calc(100% - 18px) 100%;
+      }
+      .cardmenu form { margin: 0; }
+      /* Its keys: rows of red words, not raised keys. Spelled out against
+         the raised blue key every submit button is drawn as. */
+      .cardmenu button[type="submit"],
+      .cardmenu button[type="submit"]:active {
+        display: flex; align-items: center; justify-content: flex-start;
+        width: 100%; min-height: 38px; margin: 0; padding: 0 12px;
+        background: none; color: var(--danger);
+        border: 0; border-radius: var(--r-sm); box-shadow: none; transform: none;
+        font: 700 .88rem/1.1 var(--sans); white-space: nowrap; text-align: left;
+      }
+      .cardmenu button[type="submit"]:hover,
+      .cardmenu button[type="submit"]:focus-visible { background: var(--danger-bg); }
+      /* Asking: after its first tap a key is filled, and reads "Tap again
+         to leave" until the second tap or four seconds. */
+      .cardmenu button.armed, .cardmenu button.armed:hover,
+      .cardmenu button.armed:focus-visible, .cardmenu button.armed:active {
+        background: var(--danger); color: #fff;
+      }
+      .cardmenu button[disabled], .cardmenu button[disabled]:hover { opacity: .65; cursor: default; }
+      /* Put away: it fades and shrinks back toward its key, and takes no
+         more taps while it does. */
+      .cardmore.leaving > .cardmenu {
+        pointer-events: none;
+        animation: cardmenu-out .15s cubic-bezier(.4, 0, 1, 1) forwards;
+      }
+      @keyframes cardmenu-in { from { opacity: 0; transform: scale(.9); } }
+      @keyframes cardmenu-out { to { opacity: 0; transform: scale(.9); } }
+      @media (prefers-reduced-motion: reduce) {
+        .cardmenu, .cardmore.leaving > .cardmenu { animation: none; }
+      }

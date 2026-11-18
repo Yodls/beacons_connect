@@ -182,6 +182,14 @@
          flag's card in their place). */
       .map-pane-act { display: grid; gap: 14px; min-width: 0; align-content: start; }
       .actions .maplink { min-height: 40px; padding: 0 12px; font-size: .92rem; }
+      /* A meetup's keys on the board: one line, as on its card in a chat.
+         A card here can be 260px wide (a phone, or four to a row), so its
+         keys are a size down, as they are on a card in a chat on a phone:
+         Open chat, See on map and "..." come to 225px. */
+      {% include "_cardmenu.css" %}
+      #meetups .actions { gap: 6px; }
+      #meetups .actions > form > button[type="submit"],
+      #meetups .actions .maplink { min-height: 40px; padding: 0 8px; font-size: .8rem; }
 
       /* ---------- the campus map ---------- */
       {% include "_community_map.css" %}
@@ -418,9 +426,14 @@
         var parsed = new DOMParser().parseFromString(card.html, "text/html");
         var fresh = parsed.querySelector(".card");
         if (!fresh) { return; }
-        if (old && old.querySelector("details.confirm[open]")) {
-          var again = fresh.querySelector("details.confirm");
-          if (again) { again.setAttribute("open", ""); }
+        // Its "..." menu, if the reader has it open, stays open.
+        var asking = old ? old.querySelector("details.cardmore[open]") : null;
+        if (asking) {
+          var again = fresh.querySelector("details.cardmore");
+          if (again) {
+            again.setAttribute("open", "");
+            again.classList.toggle("up", asking.classList.contains("up"));
+          }
         }
         next.appendChild(fresh);
       });
