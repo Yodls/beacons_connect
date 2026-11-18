@@ -168,9 +168,11 @@ map window (`templates/_meetup_form.html`) and opens from the "Post a
 meetup" key or from the Post tab in the bottom bar. The key stands on the
 map's bottom right corner on a screen wider than 700px and across under the
 map on a phone; it steps aside while the form or a flag's card is open.
-Once a meetup is posted, the page scrolls back up to the map and opens the
-new flag's card, at the map's opening zoom rather than zoomed in. The form
-asks three things:
+Pressing the key scrolls the page to the form. Once a meetup is posted, the
+page scrolls back up to the map, which returns to its opening view with the
+new meetup's card open on its flag. A flag's card never moves the map: it
+opens above its flag, below it or beside it, wherever it fits whole (on a
+phone, in a window under the map). The form asks three things:
 
 | It asks | Choices | What follows |
 | --- | --- | --- |

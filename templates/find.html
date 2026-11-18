@@ -725,8 +725,11 @@
     // meetup landed, and start the next pin from the Campus Center again.
     // After the enhancer's reset, hence the timeout. The Post it key is at
     // the foot of the form, so without the scroll the page would be left
-    // wherever the form ended, below the map. A refused post keeps the form
-    // out, as typed, and the page where it is.
+    // wherever the form ended, below the map. The map goes back to the view
+    // the page opens with and the new meetup's card opens on its flag there
+    // (showPosted), beside the flag where there is room, so the campus
+    // stays in view. A refused post keeps the form out, as typed, and the
+    // page where it is.
     form.addEventListener("beacon:done", function (event) {
       if (event.detail && event.detail.refused) { return; }
       var posted = point;
@@ -737,7 +740,7 @@
         sync();
         narrow();
         toMap();
-        if (posted && window.BeaconMap) { window.BeaconMap.focusAt(posted.lat, posted.lng); }
+        if (posted && window.BeaconMap) { window.BeaconMap.showPosted(posted.lat, posted.lng); }
       }, 0);
     });
 

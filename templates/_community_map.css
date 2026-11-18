@@ -61,6 +61,14 @@
         font: 700 .85rem/1.3 var(--sans);
         pointer-events: none;
       }
+      /* While a card open on the map has had to take the status line's
+         corner, the line sits bottom right instead, above the credit line
+         (seatStatus in community-map.js): the Post a meetup key is off the
+         map while a card is open, so that corner is free. */
+      .map-status.aside { left: auto; right: 10px; bottom: 34px; }
+      /* A key of the map's that an open card has had to cover steps aside
+         until the card shuts (hideCovered in community-map.js). */
+      .campus-map-stage .covered { visibility: hidden; }
       .map-status.error { background: var(--danger); }
       .map-status.success { background: var(--beacon); }
       .map-status:empty { display: none; }
@@ -251,9 +259,10 @@
       }
       .fd-actions .fd-cancel:active { transform: translateY(2px); box-shadow: none; }
 
-      /* the callout: a Beacon OS window standing on the flag, its tail
-         pointing at the flag's pole */
-      .beacon-callout { margin-bottom: 12px; }
+      /* the callout: a Beacon OS window by its flag, on whichever side has
+         the room (placeCallout in community-map.js picks the side and
+         stands the window there), its tail pointing at the flag */
+      .beacon-callout { margin-bottom: 0; }
       .beacon-callout .leaflet-popup-content-wrapper {
         padding: 0; overflow: hidden;
         background: #fff; color: var(--navy);
@@ -262,13 +271,27 @@
       }
       .beacon-callout .leaflet-popup-content { margin: 0; font-size: 1rem; line-height: 1.35; }
       .beacon-callout .leaflet-popup-scrolled { border: 0; }
-      /* The tail: a white square turned on its corner, its lower two sides
-         navy, drawn over the window's bottom edge so the outline runs down
-         the tail unbroken. */
-      .beacon-callout .leaflet-popup-tip-container { margin-top: -3px; }
+      /* The tail: a square turned on its corner, two of its sides navy,
+         drawn over the window's edge so the outline runs round the tail
+         unbroken. Leaflet's own, a 40 by 20 box hung under the window with
+         the square's lower half showing in it: that is the window above
+         its flag. For the other three sides the box is turned and moved to
+         that edge, 3px over it. --tail (set with the side) is how far along
+         the edge, in px, the tail's point is; --tail-fill its colour, the
+         window's white or, where the tail meets the title bar, the bar's. */
+      .beacon-callout .leaflet-popup-tip-container { left: var(--tail, 50%); margin-top: -3px; }
+      .beacon-callout.at-below .leaflet-popup-tip-container {
+        top: -17px; margin-top: 0; transform: rotate(180deg);
+      }
+      .beacon-callout.at-right .leaflet-popup-tip-container {
+        left: -27px; top: var(--tail, 50%); margin: -10px 0 0; transform: rotate(90deg);
+      }
+      .beacon-callout.at-left .leaflet-popup-tip-container {
+        left: calc(100% - 13px); top: var(--tail, 50%); margin: -10px 0 0; transform: rotate(-90deg);
+      }
       .beacon-callout .leaflet-popup-tip {
         width: 16px; height: 16px; padding: 0; margin: -10px auto 0;
-        background: #fff; box-shadow: none;
+        background: var(--tail-fill, #fff); box-shadow: none;
         border: 2px solid var(--navy); border-top-color: transparent; border-left-color: transparent;
       }
 

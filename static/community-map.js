@@ -39,8 +39,8 @@
   // The campus area flags may go in (the dashed outline on the map).
   var CAMPUS_BOUNDS = [[42.3097, -71.0436], [42.3174, -71.0317]];
   // The zoom the map opens at, on the middle of that area: the whole campus
-  // in view on a computer, its edges a step out on a phone. A meetup just
-  // posted is shown at no closer than this (focusAt).
+  // in view on a computer, its edges a step out on a phone. The map comes
+  // back to this view when a meetup has just been posted (campusView).
   var CAMPUS_ZOOM = 16;
   // Close enough to put a pin on the right building: where the meetup
   // form's pin is placed (startPick).
@@ -107,6 +107,8 @@
     el.status.textContent = message || "";
     el.status.classList.toggle("error", kind === "error");
     el.status.classList.toggle("success", kind === "success");
+    // Said while a card is open on the map: not across the card (5a).
+    seatStatus();
   }
 
   function request(url, options) {
@@ -248,6 +250,30 @@
     3: "Finding you took too long. Try again."
   };
 
+  // The view the page opens with: the middle of the campus area at
+  // CAMPUS_ZOOM. Given a point (a meetup just posted), the view is moved the
+  // least it takes to have that point's flag whole on the map, off the
+  // status line along the map's foot. The campus is a little taller than a
+  // computer's map at this zoom, and a phone's map shows only its middle, so
+  // a pin put near an edge would otherwise be posted out of sight. Not
+  // animated: a card is placed against where its flag stands (placeCallout),
+  // and the flag has to be standing there.
+  function campusView(include) {
+    var zoom = CAMPUS_ZOOM;
+    var centre = map.project(L.latLngBounds(CAMPUS_BOUNDS).getCenter(), zoom);
+    if (include) {
+      var size = map.getSize(), at = map.project(include, zoom);
+      var x = at.x - centre.x, y = at.y - centre.y;   // the flag's foot, from the map's middle
+      // The room the flag needs round its foot. Above: the raised flag is
+      // about 64px tall. Beside: its cloth flies to the right of its pole.
+      // Under: the status line's one line.
+      var top = 76, left = 34, right = 64, foot = 62;
+      centre.x += Math.max(0, x - (size.x / 2 - right)) + Math.min(0, x + (size.x / 2 - left));
+      centre.y += Math.max(0, y - (size.y / 2 - foot)) + Math.min(0, y + (size.y / 2 - top));
+    }
+    map.setView(map.unproject(centre, zoom), zoom, { animate: false });
+  }
+
   function initMap() {
     map = L.map("beaconCampusMap", {
       zoomControl: true, minZoom: 15, maxZoom: 19,
@@ -256,7 +282,8 @@
       // on the flag, and one near the north edge, zoomed out, needs the
       // map to pan that far to show it.
       maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(1), maxBoundsViscosity: 0.85
-    }).setView(L.latLngBounds(CAMPUS_BOUNDS).getCenter(), CAMPUS_ZOOM);
+    });
+    campusView();
 
     var tiles = L.tileLayer(TILE_URL, {
       maxZoom: 19,
@@ -297,6 +324,15 @@
       if (dragging) { return; }
       renderMarkers();
       if (mode === "idle") { renderDetail(); }
+      // A zoom moves the flag on the map: its card finds its room again.
+      // (This is also where a link's flight to a flag ends.)
+      placeCallout(findFlag(selected || listing));
+    });
+    // The map dragged with a card open: the card goes with its flag, so
+    // what it covers of the map's keys and the status line is looked at
+    // again.
+    map.on("moveend", function () {
+      if (calling) { seatStatus(); hideCovered(); }
     });
     map.on("locationfound", locationFound);
     map.on("locationerror", function (event) {
@@ -523,7 +559,12 @@
     // The open callout stands on its flag (or its pile) where that is drawn
     // now.
     var open = findFlag(selected || listing);
-    if (callout && callout.isOpen() && open) { callout.setLatLng(drawnAt(open)); }
+    // Only if that is somewhere else (a flag moved, a pile split): a card
+    // that has not changed places is not put down again at every refresh.
+    if (callout && callout.isOpen() && open && !callout.getLatLng().equals(drawnAt(open))) {
+      callout.setLatLng(drawnAt(open));
+      placeCallout(open);
+    }
     if (pick) {
       // The flag the meetup will get, so the pin being placed already looks
       // like it: the meetup's navy one with a star, or, for an activity
@@ -541,26 +582,29 @@
 
   // ---------- 5. the flag card ----------
   // The flag you tapped opens in a callout on the map: a Beacon OS window
-  // standing on the flag with a tail pointing at it (a Leaflet popup,
-  // dressed by _community_map.css). On a phone, where a callout would not
+  // by the flag, wherever there is room for it, with a tail pointing at the
+  // flag (a Leaflet popup, placed by placeCallout and dressed by
+  // _community_map.css). On a phone, where a callout would not
   // fit over 300px of tiles, the same card opens as its own window under
   // the map instead (5b). One card is built either way; only its home
   // differs.
   var PHONE = window.matchMedia("(max-width: 560px)");
-  var CALLOUT_LIFT = 68;  // px from the flag's point up to the callout's foot
-  var CALLOUT_FOOT = 12;  // the callout's own margin under that, holding its tail
+  var CALLOUT_EDGE = 12;  // px the callout keeps from the map's top and sides
+  var CALLOUT_FOOT = 26;  // and from its foot: clear of the map's credit line
+  var CALLOUT_GAP = 12;   // px between the flag and the callout, where its tail is
   var callout = null;     // the Leaflet popup, made the first time it is needed
   var calling = false;    // it is open on the map (the Post a meetup key steps aside)
   var shutting = false;   // the callout is being closed from here, not by a tap
   var below = null;       // the phone's window under the map, made when first needed
   var belowHolds = "";    // what it holds ("pile:<id>" or "card:<id>")
-  var flying = false;     // select() is flying to the flag: no other nudges
+  var landing = null;     // the map is being brought to a flag: where the flag will stand on it
 
   function phone() { return PHONE.matches; }
   function still() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
 
-  // fly: false to open the card where the flag is; true to fly to it at
-  // FLAG_ZOOM; or the zoom to fly to it at.
+  // fly: the map is brought to the flag first (a link named it; it may be
+  // anywhere). A tap on a flag does not fly: the map stays where it is and
+  // the card opens where there is room (placeCallout).
   function select(id, fly, quiet) {
     selected = id;
     // A card takes the place of a pile's list, and shutting it (id null)
@@ -570,38 +614,31 @@
     // The markers first: the card opens on its flag (or its pile) where that
     // is drawn.
     if (!quiet) { renderMarkers(); }
-    // Flying there puts the card in view itself, so the callout's own
-    // nudge to fit on opening is not wanted on top of it.
-    flying = !!fly;
-    if (callout) { callout.options.autoPan = !fly; }
-    renderDetail();
-    flying = false;
-    if (callout) { callout.options.autoPan = true; }
     var flag = findFlag(id);
-    if (flag && fly && map) { flyToFlag(flag, typeof fly === "number" ? fly : FLAG_ZOOM); }
     // Your own flag can be dragged when it stands alone: said in the status
-    // line, on a wide screen.
+    // line, on a wide screen. Before the card opens, which keeps off that line.
     if (flag && flag.mine && !phone() && !pileOf[flag.id]) { announce("Drag your flag on the map to move it."); }
+    // The card is placed against where the flag will land, not where it is.
+    landing = flag && fly && map ? flyToFlag(flag) : null;
+    renderDetail();
+    landing = null;
   }
 
-  // Fly to a flag so that its card lands in the middle of the map: the
-  // point flown to is the flag's, moved by half the callout's height. On a
-  // phone the card is under the map, so the flag goes to the map's foot,
-  // just above it.
-  function flyToFlag(flag, zoom) {
-    var at = drawnAt(flag);
-    var lift = 0;
-    if (phone()) {
-      var high = map.getSize().y;
-      lift = Math.max(70, high - 40) - high / 2;
-    } else if (callout && callout.isOpen()) {
-      lift = callout.getElement().offsetHeight / 2 + CALLOUT_LIFT + CALLOUT_FOOT;
-      // Once there, let the callout nudge the map if any of it is still
-      // off the edge.
-      map.once("moveend", function () { if (callout.isOpen()) { callout.update(); } });
-    }
-    var centre = map.unproject(map.project(at, zoom).subtract([0, lift]), zoom);
-    map.flyTo(centre, zoom, { duration: 0.45 });
+  // Where a flag named by a link is brought to on the map, and the view
+  // that has it there. On a wide screen a little left of the middle, so its
+  // card has the room beside it; on a phone at the map's foot, just above
+  // the card under the map.
+  function viewFor(flag, zoom) {
+    var size = map.getSize();
+    var want = phone() ? L.point(size.x / 2, Math.max(70, size.y - 40))
+      : L.point(Math.round(size.x / 2 - Math.min(170, size.x / 4)), Math.round(size.y / 2 + 32));
+    var centre = map.unproject(map.project(drawnAt(flag), zoom).add(size.divideBy(2)).subtract(want), zoom);
+    return { centre: centre, want: want };
+  }
+  function flyToFlag(flag) {
+    var view = viewFor(flag, FLAG_ZOOM);
+    map.flyTo(view.centre, FLAG_ZOOM, { duration: 0.45 });
+    return view.want;
   }
 
   function tag(text, extra) { return node("span", "tag" + (extra ? " " + extra : ""), text); }
@@ -903,22 +940,159 @@
   }
 
   // ---------- 5a. the callout ----------
+  // A tap on a flag never moves the map. Leaflet's popup hangs a fixed way
+  // above its point and moves the map until it fits, and a card is most of
+  // a map tall, so nearly every flag slid the map down to its foot. Here the
+  // card is put, whole, in the first place it fits: above its flag, below
+  // it, to its right, to its left, inside the map and clear of what floats
+  // on it. It is still Leaflet's popup, so it rides with its flag when the
+  // map is dragged; only its offset from the flag is worked out each time.
+
+  // What floats on the map, as boxes in px on it: the map's keys (zoom,
+  // locate, fit), and the status line where it is saying something, in its
+  // own corner. (The credit line is kept clear of by CALLOUT_FOOT.)
+  function calloutBlocks() {
+    var box = map.getContainer(), m = box.getBoundingClientRect();
+    function boxOf(key) {
+      var r = key ? key.getBoundingClientRect() : null;
+      return !r || !r.width || !r.height ? null
+        : { left: r.left - m.left - 6, right: r.right - m.left + 6, top: r.top - m.top - 6, bottom: r.bottom - m.top + 6 };
+    }
+    el.status.classList.remove("aside");
+    el.status.style.maxWidth = "";
+    return {
+      keys: [box.querySelector(".leaflet-control-zoom"), el.locate, el.fit].map(boxOf).filter(Boolean),
+      status: boxOf(el.status)
+    };
+  }
+  // The card open on the map, as a box on the screen; null when none is.
+  function cardBox() {
+    return calling && callout && callout.isOpen() ? callout.getElement().getBoundingClientRect() : null;
+  }
+  function touching(a, b) {
+    return a.width > 0 && a.height > 0 &&
+           a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  }
+  // The status line sits bottom left, as wide as its words. Where an open
+  // card has had to take that corner, the line takes the room there is
+  // beside the card along the map's foot instead: on the card's left or
+  // (the stylesheet's .aside: the corner the Post a meetup key leaves free
+  // while a card is open) on its right, whichever is wider, wrapping if it
+  // must. So a message never lies across the card. Back as it was when the
+  // card shuts or stands clear of it.
+  function seatStatus() {
+    var line = el.status;
+    line.classList.remove("aside");
+    line.style.maxWidth = "";
+    var card = cardBox();
+    if (!card || !line.textContent || !touching(line.getBoundingClientRect(), card)) { return; }
+    var stage = el.stage.getBoundingClientRect();
+    var seats = [{ aside: false, room: card.left - stage.left - 22 },
+                 { aside: true, room: stage.right - card.right - 22 }]
+      .sort(function (a, b) { return b.room - a.room; });
+    for (var i = 0; i < seats.length; i += 1) {
+      if (seats[i].room < 150) { break; }
+      line.classList.toggle("aside", seats[i].aside);
+      line.style.maxWidth = Math.floor(seats[i].room) + "px";
+      if (!touching(line.getBoundingClientRect(), card)) { return; }
+    }
+    line.classList.remove("aside");
+    line.style.maxWidth = "";
+  }
+  // A key of the map's that the open card has had to cover (a short map: a
+  // card is nearly its height, and cannot clear them all) steps aside
+  // until the card shuts or moves off it, as the Post a meetup key does:
+  // a key is never drawn across the card, over the card's own keys.
+  function hideCovered() {
+    var card = cardBox();
+    [map.getContainer().querySelector(".leaflet-control-zoom"), el.locate, el.fit].forEach(function (key) {
+      if (!key) { return; }
+      key.classList.remove("covered");
+      if (card && touching(key.getBoundingClientRect(), card)) { key.classList.add("covered"); }
+    });
+  }
+  // `at`: where the flag's foot is on the map, or will be (select's landing).
+  function placeCallout(flag, at) {
+    if (!callout || !callout.isOpen() || !flag) { return; }
+    var box = callout.getElement();
+    var w = box.offsetWidth, h = box.offsetHeight, size = map.getSize();
+    var p = at || map.latLngToContainerPoint(drawnAt(flag));
+    // The flag itself, raised as a chosen one is: its pole at p, its cloth
+    // (and a pile's count) to the right.
+    var pin = { left: p.x - 24, right: p.x + (pileOf[flag.id] ? 62 : 46), top: p.y - 66, bottom: p.y + 2 };
+    var EDGE = CALLOUT_EDGE, FOOT = CALLOUT_FOOT, GAP = CALLOUT_GAP;
+    function within(v, low, high) { return Math.max(low, Math.min(v, Math.max(low, high))); }
+    var across = within(p.x - w / 2, EDGE, size.x - EDGE - w);
+    var down = within((pin.top + pin.bottom) / 2 - h / 2, EDGE, size.y - FOOT - h);
+    var places = [
+      { side: "above", left: across, top: pin.top - GAP - h },
+      { side: "below", left: across, top: pin.bottom + GAP },
+      { side: "right", left: pin.right + GAP, top: down },
+      { side: "left", left: pin.left - GAP - w, top: down }
+    ];
+    var blocks = calloutBlocks();
+    function covers(c, b) {
+      var across = Math.min(c.left + w, b.right) - Math.max(c.left, b.left);
+      var down = Math.min(c.top + h, b.bottom) - Math.max(c.top, b.top);
+      return across > 0 && down > 0 ? across * down : 0;
+    }
+    places.forEach(function (c) {
+      // How far it sticks out of the map, how much of the map's keys it
+      // lands on (px squared), and whether it lands on the status line.
+      c.out = Math.max(0, EDGE - c.left) + Math.max(0, c.left + w - (size.x - EDGE)) +
+              Math.max(0, EDGE - c.top) + Math.max(0, c.top + h - (size.y - FOOT));
+      c.over = blocks.keys.reduce(function (sum, b) { return sum + covers(c, b); }, 0);
+      c.said = blocks.status ? covers(c, blocks.status) : 0;
+    });
+    // The first that is whole on the map and on nothing. Failing that, the
+    // first that is on no key (the status line then moves beside the card:
+    // seatStatus). Failing that (a short map: a card is nearly its height),
+    // the whole one on the least of the keys, which step aside for it
+    // (hideCovered). And if none is whole, the one that sticks out least.
+    var whole = places.filter(function (c) { return !c.out; });
+    var best = whole.filter(function (c) { return !c.over && !c.said; })[0] ||
+               whole.filter(function (c) { return !c.over; })[0] ||
+               whole.slice().sort(function (a, b) { return a.over - b.over; })[0] ||
+               places.slice().sort(function (a, b) { return a.out - b.out; })[0];
+    // No place takes it whole: the best of them, kept inside the map.
+    var left = within(best.left, EDGE, size.x - EDGE - w);
+    var top = within(best.top, EDGE, size.y - FOOT - h);
+    // Leaflet stands the popup's bottom centre at its point plus this.
+    callout.options.offset = L.point(Math.round(left + w / 2 - p.x), Math.round(top + h - p.y));
+    callout.setLatLng(callout.getLatLng());
+    // The tail, on the side that faces the flag, level with it.
+    ["above", "below", "right", "left"].forEach(function (side) {
+      box.classList.toggle("at-" + side, side === best.side);
+    });
+    var upright = best.side === "above" || best.side === "below";
+    var tail = upright ? within(p.x - left, 24, w - 24)
+                       : within((pin.top + pin.bottom) / 2 - top, 24, h - 24);
+    box.style.setProperty("--tail", Math.round(tail) + "px");
+    // Where the tail meets the card's title bar (the card under its flag,
+    // or beside it with the flag level with the bar) it takes the bar's
+    // colour, so the bar does not get a white notch; elsewhere the card's
+    // white.
+    var card = box.querySelector(".flag-detail");
+    var onBar = best.side === "below" || (!upright && tail < 46);
+    box.style.setProperty("--tail-fill",
+      onBar && card ? (getComputedStyle(card).getPropertyValue("--flag-color").trim() || "#fff") : "#fff");
+    seatStatus();
+    hideCovered();
+  }
+
   function showCallout(card, flag) {
     if (!callout) {
       callout = L.popup({
         className: "beacon-callout", closeButton: false,
-        minWidth: 280, maxWidth: 320, offset: [0, -CALLOUT_LIFT],
-        // Leaflet fits the window itself; the room under it (the tail and
-        // the pin it points at) is added to the bottom margin, so the pin
-        // stays on the map too.
-        autoPan: true, autoPanPaddingTopLeft: [16, 12],
-        autoPanPaddingBottomRight: [64, CALLOUT_LIFT + CALLOUT_FOOT + 12]
+        minWidth: 280, maxWidth: 320,
+        // Never moved to fit: the card is put where there is room.
+        autoPan: false
       });
       // Leaflet shuts the callout on a tap on the map or Escape: the flag
       // (or the pile) is then no longer the chosen one, and its pin stands
       // down.
       map.on("popupclose", function (event) {
-        if (event.popup === callout) { calling = false; showKey(); }
+        if (event.popup === callout) { calling = false; showKey(); seatStatus(); hideCovered(); }
         if (event.popup !== callout || shutting || !(selected || listing)) { return; }
         selected = null;
         listing = null;
@@ -926,17 +1100,17 @@
         renderMarkers();
       });
     }
-    // A long card scrolls inside the callout rather than growing it past
-    // what fits over the flag: the flag and the tail stay in view.
-    callout.options.maxHeight = Math.max(160, map.getSize().y - CALLOUT_LIFT - CALLOUT_FOOT - 28);
+    // A long card scrolls inside the callout rather than growing past the
+    // map's height (its frame is 4px of that).
+    callout.options.maxHeight = Math.max(160, map.getSize().y - CALLOUT_EDGE - CALLOUT_FOOT - 4);
     callout.setLatLng(drawnAt(flag));
     callout.setContent(card);
     // The Post a meetup key steps off the map while a card is open on it
-    // (showKey): before the callout opens, so the map is fitted to the
-    // callout with the corner already clear.
+    // (showKey): the card has the whole map to open in.
     calling = true;
     showKey();
     if (!callout.isOpen()) { callout.openOn(map); }
+    placeCallout(flag, landing);
   }
   function closeCallout() {
     if (!callout || !callout.isOpen()) { return; }
@@ -948,9 +1122,11 @@
   // ---------- 5b. under the map (phones) ----------
   // The card as its own window right under the map, where the Post a
   // meetup key stands; it steps aside while the card is open and comes back
-  // when it shuts. The map keeps its size: the flag is moved to the foot
-  // of the map, just above the card, and the page scrolls so the two share
-  // the screen.
+  // when it shuts. The map keeps its size, and the page scrolls so the flag
+  // and its card share the screen. The map itself moves only when it has
+  // to: if the flag would be under the top bar once the page has scrolled
+  // to the card, it is moved down just far enough to stay in view (it used
+  // to be slid to the map's foot at every tap).
   function showBelow(card, flag) {
     if (!below) {
       below = node("div", "map-below");
@@ -980,18 +1156,30 @@
       below.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
                     { duration: 180, easing: "ease-out" });
     }
-    // The flag's foot low in the map, so it stands right above its card.
-    var size = map.getSize();
-    var want = L.point(size.x / 2, Math.max(70, size.y - 40));
-    if (!flying) {
-      var by = map.latLngToContainerPoint(drawnAt(flag)).subtract(want);
-      if (Math.abs(by.x) > 2 || Math.abs(by.y) > 2) { map.panBy(by, { animate: !still() }); }
+    // A link brought the map to the flag: it is landing at the map's foot,
+    // just above its card (viewFor), and nothing more is moved.
+    if (landing) {
+      var lands = landing.y;
+      window.requestAnimationFrame(function () { showTogether(lands); });
+      return;
     }
-    window.requestAnimationFrame(function () { showTogether(want.y); });
+    // A tap: the map stays, unless the flag would be hidden. Worked out
+    // once the card is laid out, so its height is known.
+    var foot = map.latLngToContainerPoint(drawnAt(flag)).y;
+    window.requestAnimationFrame(function () {
+      var view = screenFor(foot);
+      // Under the top bar by this much once the page has scrolled to show
+      // the whole card; and no lower than the map's own foot.
+      var hidden = Math.max(view.down, 0) - view.most;
+      var shift = Math.max(0, Math.min(hidden, map.getSize().y - 12 - foot));
+      if (shift > 2) { map.panBy([0, -shift], { animate: !still() }); } else { shift = 0; }
+      showTogether(foot + shift);
+    });
   }
-  // Scroll so the whole card is above the tab bar, but never so far that
-  // the flag (its foot `footY` px down the map) goes under the top bar.
-  function showTogether(footY) {
+  // With the flag's foot `footY` px down the map: how far the page has to
+  // scroll to show the whole card above the tab bar (down), and how far it
+  // can before the flag goes under the top bar (most).
+  function screenFor(footY) {
     var bar = document.querySelector("nav.tabbar");
     var floor = bar && getComputedStyle(bar).position === "fixed"
       ? bar.getBoundingClientRect().top : window.innerHeight;
@@ -999,9 +1187,13 @@
     var ceiling = head && /sticky|fixed/.test(getComputedStyle(head).position)
       ? head.getBoundingClientRect().bottom : 0;
     var pinTop = map.getContainer().getBoundingClientRect().top + footY - 64;
-    var down = below.getBoundingClientRect().bottom + 8 - floor;   // to show the whole card
-    var most = pinTop - (ceiling + 8);                             // before the flag goes under
-    var by = Math.min(Math.max(down, 0), most);
+    return { down: below.getBoundingClientRect().bottom + 8 - floor, most: pinTop - (ceiling + 8) };
+  }
+  // Scroll so the whole card is above the tab bar, but never so far that
+  // the flag goes under the top bar.
+  function showTogether(footY) {
+    var view = screenFor(footY);
+    var by = Math.min(Math.max(view.down, 0), view.most);
     if (Math.abs(by) > 2) { window.scrollBy({ top: by, behavior: still() ? "auto" : "smooth" }); }
   }
   function closeBelow() {
@@ -1211,10 +1403,10 @@
       var focus = focusId ? findFlag(focusId) : null;
       if (focus) { selected = focus.id; listing = null; focusId = ""; }
       if (!dragging) { renderMarkers(); }
-      // The flag first, then its card, which nudges the map to fit it. Not
-      // animated: a zoom still playing would end by putting the map back
-      // where it was aiming, undoing the card's nudge.
-      if (focus) { map.setView([focus.latitude, focus.longitude], FLAG_ZOOM, { animate: false }); }
+      // The map to the flag first (where a link's flag is brought: viewFor),
+      // then its card, put where there is room beside it. Not animated: the
+      // card is placed against where the flag stands.
+      if (focus) { map.setView(viewFor(focus, FLAG_ZOOM).centre, FLAG_ZOOM, { animate: false }); }
       if (mode === "idle") { renderDetail(); }
       // The first load's hint. Not over an error already on the line (the
       // locate key refused on an insecure page, say): an error outlasts a
@@ -1335,11 +1527,17 @@
       map.panTo([lat, lng]);
     },
     unpick: function () { endPick(); },
-    // After a meetup is posted: show its flag, found as your own meetup
-    // flag at the point it was posted with. The newest one there: a second
-    // meetup posted on the same spot (the Campus Center, where every pin
-    // starts) must open its own card, not the first one's.
-    focusAt: function (lat, lng) {
+    // After a meetup is posted: the map goes back to the view the page
+    // opens with, and the meetup's card opens on its flag there. The card
+    // is put where there is room beside the flag (placeCallout), so the
+    // campus stays in view: when it always stood above its flag, opening it
+    // slid the map down until the campus was half off it. The flag is found
+    // as your own meetup flag at the point it was posted with, the newest
+    // one there: a second meetup posted on the same spot (the Campus Center,
+    // where every pin starts) must open its own card, not the first one's.
+    showPosted: function (lat, lng) {
+      if (!map) { return Promise.resolve(false); }
+      campusView(L.latLng(lat, lng));
       return loadFlags(true).then(function () {
         var found = null;
         info.flags.forEach(function (f) {
@@ -1347,10 +1545,7 @@
               Math.abs(f.latitude - lat) < 1e-5 && Math.abs(f.longitude - lng) < 1e-5 &&
               (!found || f.created_at > found.created_at)) { found = f; }
         });
-        // Not zoomed in to it: at the map's own zoom, or further out if
-        // the person zoomed out to place the pin, so the meetup is seen
-        // among the buildings around it.
-        if (found) { select(found.id, Math.min(map.getZoom(), CAMPUS_ZOOM), true); renderMarkers(); }
+        if (found) { select(found.id); }
         return !!found;
       });
     }
