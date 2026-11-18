@@ -56,10 +56,13 @@
               <a class="key maplink" data-flag="{{ post.flag }}"
                  href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
             {% endif %}
-            {# A <details>, so it opens without JavaScript. With it, the
-               first tap on either key only asks (data-ask, _enhance.html)
-               and the second sends its form. #}
-            {% if post.im_going or post.mine %}
+            {# The same menu as on the card in a chat: Leave Meetup, Cancel
+               meetup on your own, Report on somebody else's. A <details>,
+               so it opens without JavaScript. With it, the first tap on
+               Leave or Cancel only asks (data-ask, _enhance.html) and the
+               second sends its form. Every card on the board has it: the
+               board holds open meetups only, so each offers you one of
+               Leave, Cancel or Report. #}
               <details class="cardmore">
                 <summary aria-label="More"><svg class="icon" aria-hidden="true"><use href="#icon-more" /></svg></summary>
                 <div class="cardmenu">
@@ -75,8 +78,10 @@
                       <button type="submit" data-ask="Tap again to cancel">Cancel meetup</button>
                     </form>
                   {% endif %}
+                  {% if not post.mine %}
+                    <a class="cardmenu-report" href="{{ url_for('report_new', kind='abuse', post=post.id) }}">Report</a>
+                  {% endif %}
                 </div>
               </details>
-            {% endif %}
           </div>
         </div>

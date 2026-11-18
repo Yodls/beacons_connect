@@ -78,33 +78,38 @@
         <a class="maplink" data-flag="{{ post.flag }}"
            href="{{ url_for('find_game', flag=post.flag) }}">See on map</a>
       {% endif %}
-      {# The two you cannot take back, in a menu (_cardmenu.css). A
-         <details>, like the bell and the game picker, so it opens without
-         JavaScript. With it, the first tap on either only asks: the key
-         reads its data-ask for four seconds (_enhance.html), and the second
-         tap sends its form. #}
-      {% if post.im_going or post.mine %}
-        <details class="cardmore">
-          <summary aria-label="More"><svg class="icon" aria-hidden="true"><use href="#icon-more" /></svg></summary>
-          <div class="cardmenu">
-            {% if post.im_going %}
-              <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
-                <button type="submit" data-ask="Tap again to leave">Leave Meetup</button>
-              </form>
-            {% endif %}
-            {% if post.mine %}
-              <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
-                <button type="submit" data-ask="Tap again to cancel">Cancel meetup</button>
-              </form>
-            {% endif %}
-          </div>
-        </details>
-      {% endif %}
-      {# Somebody else's meetup is reported from the message's bar in the
-         chat (its More menu), not from here as well: the message carrying
-         this card points that Report at the meetup (data-report in
-         chat.html), so the report names the meetup and its author
-         together, which is what whoever reads it needs. #}
+    {% endif %}
+    {# The rest, in a menu at the end of the row (_cardmenu.css): Leave
+       Meetup and Cancel meetup while it is open, and Report on somebody
+       else's, open or closed. A <details>, like the bell and the game
+       picker, so it opens without JavaScript. With it, the first tap on
+       Leave or Cancel only asks: the key reads its data-ask for four
+       seconds (_enhance.html), and the second tap sends its form.
+
+       This is the only Report a meetup has: the message carrying the card
+       offers no bar of its own (chat.html). The link carries the meetup,
+       so the report names it and its author together, which is what
+       whoever reads it needs. #}
+    {% set open = post.status == "open" %}
+    {% if (open and (post.im_going or post.mine)) or not post.mine %}
+      <details class="cardmore">
+        <summary aria-label="More"><svg class="icon" aria-hidden="true"><use href="#icon-more" /></svg></summary>
+        <div class="cardmenu">
+          {% if open and post.im_going %}
+            <form method="post" action="{{ url_for('post_rsvp', post_id=post.id) }}">{{ home_fields() }}
+              <button type="submit" data-ask="Tap again to leave">Leave Meetup</button>
+            </form>
+          {% endif %}
+          {% if open and post.mine %}
+            <form method="post" action="{{ url_for('post_close', post_id=post.id) }}">{{ home_fields() }}
+              <button type="submit" data-ask="Tap again to cancel">Cancel meetup</button>
+            </form>
+          {% endif %}
+          {% if not post.mine %}
+            <a class="cardmenu-report" href="{{ url_for('report_new', kind='abuse', post=post.id) }}">Report</a>
+          {% endif %}
+        </div>
+      </details>
     {% endif %}
   </div>
   </div>

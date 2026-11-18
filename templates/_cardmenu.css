@@ -50,6 +50,21 @@
       }
       .cardmenu button[type="submit"]:hover,
       .cardmenu button[type="submit"]:focus-visible { background: var(--danger-bg); }
+      /* Report, under them: a link to the report page, in navy, since it
+         takes nothing away from anybody. A thin rule above it where Leave
+         or Cancel is in the menu too. */
+      .cardmenu .cardmenu-report {
+        display: flex; align-items: center;
+        min-height: 38px; padding: 0 12px;
+        color: var(--navy); border-radius: var(--r-sm);
+        font: 700 .88rem/1.1 var(--sans); text-decoration: none; white-space: nowrap;
+      }
+      .cardmenu .cardmenu-report:hover,
+      .cardmenu .cardmenu-report:focus-visible { background: var(--paper); text-decoration: none; }
+      .cardmenu form + .cardmenu-report {
+        margin-top: 2px; border-top: 2px solid var(--line);
+        border-radius: 0 0 var(--r-sm) var(--r-sm);
+      }
       /* Asking: after its first tap a key is filled, and reads "Tap again
          to leave" until the second tap or four seconds. */
       .cardmenu button.armed, .cardmenu button.armed:hover,

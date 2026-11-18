@@ -1504,25 +1504,27 @@
          live builder below writes the same words, so a message is as
          answerable after a live update as before it.
 
-           react, reply  not on a meetup card, nor once the chat has closed
+           react, reply  not once the chat has closed
            report        not on your own messages
            delete        your own words at any time (a closed chat too),
-                         and anybody's for an admin; never a meetup card,
-                         which is cancelled from the card
+                         and anybody's for an admin
+
+         A meetup's card offers none of these, and no bar: it has its own
+         keys, and its "..." menu holds Leave Meetup, Cancel meetup and
+         Report (_postcard.html).
 
          tabindex: a row that offers something can be focused, and Enter
          opens its bar. #}
       {% set answerable = not ended and not message.post %}
       {% set deletable = (message.mine or current_user.is_admin) and not message.post %}
-      {% set reported = url_for('report_new', kind='abuse', post=message.post.id) if message.post
-                        else url_for('report_new', kind='abuse', message=message.id) %}
-      {% set acts = (["react", "reply"] if answerable else [])
+      {% set acts = [] if message.post else
+                    (["react", "reply"] if answerable else [])
                     + ([] if message.mine else ["report"])
                     + (["delete"] if deletable else []) %}
       <div class="msg{% if message.mine %} mine{% endif %}{% if message.post %} has-card has-post{% endif %}{% if message.reactions and not message.post %} has-reacts{% endif %}"
            data-id="{{ message.id }}" data-ts="{{ message.ts }}"
            {%- if acts %} data-acts="{{ acts | join(' ') }}" tabindex="0"{% endif %}
-           {%- if not message.mine %} data-report="{{ reported }}"{% endif %}
+           {%- if not message.mine and not message.post %} data-report="{{ url_for('report_new', kind='abuse', message=message.id) }}"{% endif %}
            {%- if deletable %} data-delete="{{ url_for('message_delete', message_id=message.id) }}"{% endif %}>
         {% if not message.mine %}{{ ui.face(message.name, message.user_id, sm=true) }}{% endif %}
         <span class="who">{{ message.name }}</span>
@@ -1546,9 +1548,10 @@
           {% endwith %}
         {% endif %}
         {# With no script there is no bar: Report, the one thing here that
-           is a plain link, is still to be had. #}
-        {% if not message.mine %}
-          <noscript><a class="report-link" href="{{ reported }}">Report</a></noscript>
+           is a plain link, is still to be had. A meetup's card has its own,
+           in its menu, which opens with no script too. #}
+        {% if not message.mine and not message.post %}
+          <noscript><a class="report-link" href="{{ url_for('report_new', kind='abuse', message=message.id) }}">Report</a></noscript>
         {% endif %}
         {# The reactions, as one key: it opens the card of who reacted
            (showWho), read from data-who. Drawn the same way by paintReacts
@@ -2730,11 +2733,14 @@
         var at = msg.querySelector(".at");
         if (at) { msg.insertBefore(fresh, at); } else { msg.appendChild(fresh); }
         // Now it is a meetup's message: the card stands in for the bubble,
-        // and Report (somebody else's) names the meetup.
+        // and has its own keys, Report among them, so the message offers
+        // no bar of its own (as the server draws it).
         msg.classList.add("has-card", "has-post");
-        if (msg.dataset.report && fresh.dataset.post) {
-          msg.dataset.report = "/report?kind=abuse&post=" + encodeURIComponent(fresh.dataset.post);
-        }
+        if (barRow === msg) { closeBar(); }
+        delete msg.dataset.acts;
+        delete msg.dataset.report;
+        delete msg.dataset.delete;
+        msg.removeAttribute("tabindex");
         return;
       }
       // Whether the card's menu is open is the reader's business, not the
@@ -2920,24 +2926,20 @@
       p.appendChild(span("body", message.body));
       // What the message offers, in the same words the server writes in
       // data-acts: its bar (openBar) is drawn from them. React and Reply
-      // not on a meetup card nor in a closed chat; Report not on your own;
-      // Delete on your own, or anybody's for an admin, never a meetup card.
-      var answerable = !closed && !message.post;
+      // not in a closed chat; Report not on your own; Delete on your own,
+      // or anybody's for an admin. A meetup's card offers none of them: it
+      // has its own keys, Report among them (_postcard.html).
+      var card = !!message.post;
+      var answerable = !closed && !card;
       var theirs = message.user_id !== me;
-      var deletable = (!theirs || admin) && !message.post;
-      var acts = (answerable ? ["react", "reply"] : [])
+      var deletable = (!theirs || admin) && !card;
+      var acts = card ? [] : (answerable ? ["react", "reply"] : [])
         .concat(theirs ? ["report"] : [], deletable ? ["delete"] : []);
       if (acts.length) {
         p.dataset.acts = acts.join(" ");
         p.tabIndex = 0;
       }
-      // Report names the meetup on a message carrying one, as the card's
-      // own Report link used to; otherwise the message.
-      if (theirs) {
-        p.dataset.report = message.post && message.post.id
-          ? "/report?kind=abuse&post=" + encodeURIComponent(message.post.id)
-          : "/report?kind=abuse&message=" + encodeURIComponent(message.id);
-      }
+      if (theirs && !card) { p.dataset.report = "/report?kind=abuse&message=" + encodeURIComponent(message.id); }
       if (deletable) { p.dataset.delete = "/messages/" + encodeURIComponent(message.id) + "/delete"; }
       p.appendChild(span("at", message.at || ""));
       paintReacts(p, message.reactions);
@@ -2970,6 +2972,9 @@
     // What a row offers (data-acts). A row drawn as a card has no bubble to
     // react to or quote, so only Report and Delete are left of it.
     function offers(row) {
+      // A meetup's card: nothing (its own keys and menu, _postcard.html).
+      // A shared map flag: Report and Delete for the words sent with it.
+      if (row.classList.contains("has-post")) { return []; }
       var acts = (row.dataset.acts || "").split(" ").filter(Boolean);
       return row.classList.contains("has-card")
         ? acts.filter(function (a) { return a === "report" || a === "delete"; }) : acts;

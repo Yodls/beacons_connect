@@ -204,9 +204,11 @@ spot, which rewrites the meetup's place to match, and takes it down by
 cancelling the meetup from its card; nobody else can do either. Meetup cards
 in chats and on Meet up get a "See on map" link for anyone who can see the
 flag. Those cards keep their keys on one line: "I'm in" (or "Open chat" once
-you are in), "See on map", and a "..." menu that holds "Leave Meetup" and
-"Cancel meetup". Each of those two asks for a second tap before it acts
-("Tap again to leave"), and goes back by itself after four seconds.
+you are in), "See on map", and a "..." menu that holds "Leave Meetup",
+"Cancel meetup" on your own meetup, and "Report" on somebody else's. Leave
+and Cancel each ask for a second tap before they act ("Tap again to
+leave"), and go back by themselves after four seconds. A meetup's card in a
+chat has no hover bar of its own: its Report is the one in that menu.
 Unfriending or blocking somebody takes them off the flags they were
 picked for.
 
