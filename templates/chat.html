@@ -2250,7 +2250,8 @@
       // refresh. The copy starts clean: not with a menu that is open on the
       // card in the log, nor with a key there that is half way through
       // asking ("Tap again to leave"), which here would act at one tap.
-      var asking = aboutCard.querySelector("details.cardmore[open]");
+      // Not one being put away (fading after a click out): that stays shut.
+      var asking = aboutCard.querySelector("details.cardmore[open]:not(.leaving)");
       var copy = card.cloneNode(true);
       copy.removeAttribute("data-post");
       Array.prototype.forEach.call(copy.querySelectorAll("details.cardmore"), function (menu) {
@@ -2747,7 +2748,8 @@
       // server's -- the same care the roster takes. Somebody deciding whether
       // to give up their place must not have the menu shut under them
       // because a third person joined.
-      var asking = had.querySelector("details.cardmore[open]");
+      // Not one being put away (fading after a click out): that stays shut.
+      var asking = had.querySelector("details.cardmore[open]:not(.leaving)");
       if (asking) {
         var again = fresh.querySelector("details.cardmore");
         if (again) {

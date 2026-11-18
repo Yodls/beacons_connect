@@ -426,8 +426,9 @@
         var parsed = new DOMParser().parseFromString(card.html, "text/html");
         var fresh = parsed.querySelector(".card");
         if (!fresh) { return; }
-        // Its "..." menu, if the reader has it open, stays open.
-        var asking = old ? old.querySelector("details.cardmore[open]") : null;
+        // Its "..." menu, if the reader has it open, stays open; not one
+        // being put away (fading after a click out), which stays shut.
+        var asking = old ? old.querySelector("details.cardmore[open]:not(.leaving)") : null;
         if (asking) {
           var again = fresh.querySelector("details.cardmore");
           if (again) {
