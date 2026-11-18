@@ -1,0 +1,155 @@
+{#
+  The presentation's ending on Home (templates/_finale.html), included by
+  home.html for admins only. The Harborwalk and the sign-in brand panel it
+  uses are styled in base.html, so nothing of theirs is repeated here.
+#}
+  /* ---------- the finale ---------- */
+  /* The lighthouse on the welcome window's island is the way in: a clear
+     button laid over it. The harbour ignores the pointer and the greeting
+     lies over part of the tower, so the button takes the pointer back and
+     the greeting lets it through. */
+  .fin-light {
+    position: absolute; left: 30px; top: 0; width: 48px; height: 72px;
+    padding: 0; background: none; border: 0; border-radius: 4px;
+    pointer-events: auto; cursor: pointer;
+  }
+  .fin-light[hidden] { display: none; }
+  .scene:has(.fin-light) .scene-copy { pointer-events: none; }
+
+  /* "Fire cannons?": the safeguard, over the dimmed page. */
+  .fin-ask {
+    position: fixed; inset: 0; z-index: 90;
+    display: grid; place-items: center; padding: 16px;
+    background: rgba(12, 22, 49, .72);
+  }
+  .fin-ask[hidden] { display: none; }
+  .fin-card {
+    display: grid; gap: 16px; justify-items: center; text-align: center;
+    max-width: 24rem; padding: 24px 28px 22px;
+    background: #fff; color: var(--navy);
+    border: 2px solid var(--navy); border-radius: 8px;
+    box-shadow: 4px 4px 0 var(--navy);
+    font-family: var(--sans);
+  }
+  .fin-card h2 { margin: 0; }
+  .fin-card p { margin: 0; color: #4f5f7e; line-height: 1.45; }
+  .fin-keys { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  /* the finale's keys: raised and navy-edged, gold for the one to press */
+  .fin-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 48px; min-width: 7rem; padding: 0 20px;
+    background: #fff; color: var(--navy);
+    border: 2px solid var(--navy); border-radius: 8px;
+    box-shadow: 0 4px 0 var(--navy);
+    font: 700 1rem/1 var(--sans); text-decoration: none; cursor: pointer;
+  }
+  .fin-key.gold { background: var(--gold); }
+  .fin-key:hover { background: var(--paper); text-decoration: none; }
+  .fin-key.gold:hover { background: #fff2a8; }
+  .fin-key:active { transform: translateY(4px); box-shadow: none; }
+
+  /* While it plays, the page steps aside (top bar, windows, taskbar,
+     toasts), leaving the Harborwalk that is already behind every page. */
+  html[data-finale] body { overflow: hidden; }
+  html[data-finale] :is(.topbar, .tabbar, #toasts, .dbbanner),
+  html[data-finale] .page > :not(.finale) {
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .7s ease, visibility 0s .7s;
+  }
+
+  /* The finale itself, clear over the Harborwalk: the cannons on its
+     grass, smoke and sparks on two canvases, then the closing tile. */
+  .finale {
+    --drop: 2px 2px 0 rgba(19, 34, 69, .3);  /* the sign-in pages' thin shadow */
+    position: fixed; inset: 0; z-index: 85; overflow: hidden;
+    opacity: 0; transition: opacity .7s ease;
+  }
+  .finale.on { opacity: 1; }
+  .finale[hidden] { display: none; }
+  .finale:focus { outline: 0; }
+  /* Night falls in about two seconds here, half the time the top bar's
+     switch takes (base.html has its timings; these only shorten them). */
+  html[data-finale] :is(.hw-sky-n, .hw-tint, .hw-shore, .hw-pole, .hw-lamp, .hw-lampbase),
+  html[data-finale] .hw-art .hw-cl { transition-duration: 1.6s; }
+  html[data-finale][data-sky="night"] .hw-stars { transition: opacity .9s ease .9s; }
+  html[data-finale][data-sky="night"] .hw-lit-a { transition: opacity .4s ease .6s; }
+  html[data-finale][data-sky="night"] .hw-lit-b { transition: opacity .4s ease 1s; }
+  html[data-finale][data-sky="night"] .hw-lit-c { transition: opacity .4s ease 1.4s; }
+  html[data-finale][data-sky="night"] .hw-reflect { transition: opacity .6s ease 1.2s; }
+  html[data-finale][data-sky="night"] :is(.hw-lampglow, .hw-lamppool, .hw-lamplit) { transition: opacity .5s ease .5s; }
+
+  /* The cannons, at the Harborwalk's own scale so their pixels match its. */
+  .fin-art {
+    --k: 2;
+    position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none;
+    width: calc(100% / var(--k)); height: calc(100% / var(--k));
+    transform: scale(var(--k)); transform-origin: 0 0;
+  }
+  @media (min-width: 480px) { .fin-art { --k: 3; } }
+  @media (min-width: 2000px) { .fin-art { --k: 4; } }
+  .fin-art i, .fin-art svg { position: absolute; display: block; }
+  /* They wait off either edge and roll in when the finale opens. */
+  .fin-cannon {
+    bottom: 3px; width: 32px; height: 28px;
+    transition: transform 1.1s cubic-bezier(.2, .7, .3, 1);
+  }
+  .fin-cannon.left { left: 2%; transform: translateX(-90px); }
+  .fin-cannon.right { right: 2%; transform: translateX(90px); }
+  .finale.roll .fin-cannon { transform: none; }
+  .fin-flip, .fin-gun { left: 0; top: 0; width: 32px; height: 28px; }
+  .fin-cannon.right .fin-flip { transform: scaleX(-1); }
+  .fin-gun svg { left: 0; top: 0; transition: filter 1.6s ease-in-out .4s; }
+  html[data-sky="night"] .fin-gun svg { filter: brightness(.55) saturate(.8); transition-delay: 0s; }
+  /* where a shot leaves the barrel (read by the script) */
+  .fin-muzzle { left: 27.5px; top: 2.5px; width: 0; height: 0; }
+  /* the muzzle flash: a few lit pixels for an instant */
+  .fin-flash {
+    left: 28px; top: 1px; width: 1px; height: 1px; opacity: 0;
+    background: #FFFFFF;
+    box-shadow: 1px -1px #FFFFFF, 0 -1px #FFF6C8, 1px 0 #FFF6C8, 2px -2px #FEDE42,
+                2px -1px #FEDE42, 1px -2px #FEDE42, 3px -3px #FEDE42, 2px 0 #FF791F,
+                0 -2px #FF791F, 3px -2px #FF791F, 2px -3px #FF791F, 4px -4px #FF791F;
+  }
+  .fin-cannon.bang .fin-gun { animation: fin-recoil .55s ease-out; }
+  .fin-cannon.bang .fin-gun svg { animation: fin-lit .45s ease-out; }
+  .fin-cannon.bang .fin-flash { animation: fin-flash .16s steps(1, end); }
+  @keyframes fin-recoil { 0% { transform: none; } 12% { transform: translate(-3px, 2px); } 100% { transform: none; } }
+  @keyframes fin-lit { 0% { filter: brightness(1.5); } 100% { filter: brightness(.55) saturate(.8); } }
+  @keyframes fin-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+  .fin-canvas {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    image-rendering: crisp-edges; image-rendering: pixelated;
+  }
+  .fin-smoke { z-index: 2; image-rendering: auto; }  /* smoke is soft, not pixels */
+  .fin-sparks { z-index: 3; }
+
+  /* The closing tile: the sign-in page's brand panel (gull, pigeon and
+     all), arriving a piece at a time once the smoke has cleared, with
+     Return to home right under it. It then stays until that key is pressed. */
+  .fin-stage {
+    position: absolute; inset: 0; z-index: 4; overflow: auto;
+    display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px;
+    visibility: hidden;
+  }
+  .fin-stage.show { visibility: visible; }
+  .fin-tile {
+    width: 100%; max-width: 26rem;
+    display: flex; flex-direction: column; gap: 18px;
+    font-family: var(--sans);
+  }
+  .fin-tile .goldline { display: none; }  /* the panel's yellow line is not part of this */
+  .fin-tile .brandpanel { opacity: 0; transition: opacity .8s ease; }
+  .fin-tile :is(.plaque, .perch) { opacity: 0; transition: opacity .6s ease; }
+  .fin-home {
+    align-self: center; min-height: 52px; padding: 0 26px; font-size: 1.05rem;
+    /* not there to be pressed until it has arrived */
+    opacity: 0; visibility: hidden; transition: opacity .6s ease, visibility 0s;
+  }
+  .fin-stage.show .brandpanel { opacity: 1; }
+  .fin-stage.show .plaque-main { opacity: 1; transition-delay: .5s; }
+  .fin-stage.show .plaque-sub { opacity: 1; transition-delay: .9s; }
+  .fin-stage.show .gull-perch { opacity: 1; transition-delay: 1.3s; }
+  .fin-stage.show .pigeon-perch { opacity: 1; transition-delay: 1.6s; }
+  .fin-stage.show .fin-home { opacity: 1; visibility: visible; transition-delay: 2.1s; }
