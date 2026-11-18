@@ -160,14 +160,17 @@ Fonts.
 ## Campus map flags
 
 The Meet up page's map (Leaflet with OpenStreetMap tiles) shows meetups as
-flags inside the campus area.
+flags inside the campus area. It opens on the middle of that area at zoom 16,
+the whole campus in view on a computer.
 
 **One way to put a flag on the map: post a meetup.** The form sits in the
 map window (`templates/_meetup_form.html`) and opens from the "Post a
 meetup" key or from the Post tab in the bottom bar. The key stands on the
 map's bottom right corner on a screen wider than 700px and across under the
-map on a phone; it steps aside while the form or a flag's card is open. The
-form asks three things:
+map on a phone; it steps aside while the form or a flag's card is open.
+Once a meetup is posted, the page scrolls back up to the map and opens the
+new flag's card, at the map's opening zoom rather than zoomed in. The form
+asks three things:
 
 | It asks | Choices | What follows |
 | --- | --- | --- |

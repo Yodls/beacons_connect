@@ -36,8 +36,18 @@
   // OpenStreetMap's own tiles. They need the site's address as the referrer,
   // so they load on the live site but not from a file opened on a computer.
   var TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-  var CAMPUS_CENTER = [42.31335, -71.03815];
+  // The campus area flags may go in (the dashed outline on the map).
   var CAMPUS_BOUNDS = [[42.3097, -71.0436], [42.3174, -71.0317]];
+  // The zoom the map opens at, on the middle of that area: the whole campus
+  // in view on a computer, its edges a step out on a phone. A meetup just
+  // posted is shown at no closer than this (focusAt).
+  var CAMPUS_ZOOM = 16;
+  // Close enough to put a pin on the right building: where the meetup
+  // form's pin is placed (startPick).
+  var PLACE_ZOOM = 17;
+  // Close enough to tell one building's flags from the next: where a "See
+  // on map" link or a flag picked from a list flies to.
+  var FLAG_ZOOM = 18;
   var CAMPUS_CENTER_KEY = "campus-center";
   var REFRESH_MS = 20000;
   var SVG_NS = "http://www.w3.org/2000/svg";
@@ -277,7 +287,7 @@
       // on the flag, and one near the north edge, zoomed out, needs the
       // map to pan that far to show it.
       maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(1), maxBoundsViscosity: 0.85
-    }).setView(CAMPUS_CENTER, 17);
+    }).setView(L.latLngBounds(CAMPUS_BOUNDS).getCenter(), CAMPUS_ZOOM);
     lockUntilTap(document.getElementById("beaconCampusMap"));
 
     var tiles = L.tileLayer(TILE_URL, {
@@ -581,6 +591,8 @@
   function phone() { return PHONE.matches; }
   function still() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
 
+  // fly: false to open the card where the flag is; true to fly to it at
+  // FLAG_ZOOM; or the zoom to fly to it at.
   function select(id, fly, quiet) {
     selected = id;
     // A card takes the place of a pile's list, and shutting it (id null)
@@ -598,7 +610,7 @@
     flying = false;
     if (callout) { callout.options.autoPan = true; }
     var flag = findFlag(id);
-    if (flag && fly && map) { flyToFlag(flag); }
+    if (flag && fly && map) { flyToFlag(flag, typeof fly === "number" ? fly : FLAG_ZOOM); }
     // Your own flag can be dragged when it stands alone: said in the status
     // line, on a wide screen.
     if (flag && flag.mine && !phone() && !pileOf[flag.id]) { announce("Drag your flag on the map to move it."); }
@@ -608,8 +620,7 @@
   // point flown to is the flag's, moved by half the callout's height. On a
   // phone the card is under the map, so the flag goes to the map's foot,
   // just above it.
-  function flyToFlag(flag) {
-    var zoom = 18;
+  function flyToFlag(flag, zoom) {
     var at = drawnAt(flag);
     var lift = 0;
     if (phone()) {
@@ -1132,7 +1143,7 @@
              onMove: options.onMove, onDone: options.onDone };
     setMode("pick");
     unlockMap();
-    map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), 17));
+    map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), PLACE_ZOOM));
     announce("Tap the map or drag the pin to where you'll meet.");
   }
 
@@ -1224,7 +1235,7 @@
       // The flag first, then its card, which nudges the map to fit it. Not
       // animated: a zoom still playing would end by putting the map back
       // where it was aiming, undoing the card's nudge.
-      if (focus) { map.setView([focus.latitude, focus.longitude], 18, { animate: false }); }
+      if (focus) { map.setView([focus.latitude, focus.longitude], FLAG_ZOOM, { animate: false }); }
       if (mode === "idle") { renderDetail(); }
       // The first load's hint. Not over an error already on the line (the
       // locate key refused on an insecure page, say): an error outlasts a
@@ -1360,7 +1371,10 @@
               Math.abs(f.latitude - lat) < 1e-5 && Math.abs(f.longitude - lng) < 1e-5 &&
               (!found || f.created_at > found.created_at)) { found = f; }
         });
-        if (found) { select(found.id, true, true); renderMarkers(); }
+        // Not zoomed in to it: at the map's own zoom, or further out if
+        // the person zoomed out to place the pin, so the meetup is seen
+        // among the buildings around it.
+        if (found) { select(found.id, Math.min(map.getZoom(), CAMPUS_ZOOM), true); renderMarkers(); }
         return !!found;
       });
     }

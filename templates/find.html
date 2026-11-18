@@ -629,13 +629,20 @@
       nobody.hidden = any;
     }
 
-    function openForm() {
+    // The map window to the top of the page, just under the top bar: where
+    // the form opens, and where a posted meetup is shown.
+    function toMap() {
       var bar = document.querySelector(".topbar");
       var top = card.getBoundingClientRect().top + window.pageYOffset
                 - (bar ? bar.offsetHeight : 0) - 8;
+      var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: Math.max(top, 0), behavior: still ? "auto" : "smooth" });
+    }
+
+    function openForm() {
       if (open) {
         // Already out (the Post tab pressed again): bring it back into view.
-        window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+        toMap();
         return;
       }
       if (!point) { point = campusCentre(); }
@@ -650,9 +657,8 @@
       if (!started) { return; }
       open = true;
       show();
-      // Map and form on one screen: the map window to the top of the page,
-      // just under the top bar.
-      window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+      // Map and form on one screen.
+      toMap();
     }
 
     key.addEventListener("click", openForm);
@@ -683,9 +689,12 @@
     search.addEventListener("keydown", function (event) {
       if (event.key === "Enter") { event.preventDefault(); }
     });
-    // Posted: put the form away, show where the meetup landed, and start
-    // the next pin from the Campus Center again. After the enhancer's
-    // reset, hence the timeout. A refused post keeps the form out, as typed.
+    // Posted: put the form away, go back up to the map, show where the
+    // meetup landed, and start the next pin from the Campus Center again.
+    // After the enhancer's reset, hence the timeout. The Post it key is at
+    // the foot of the form, so without the scroll the page would be left
+    // wherever the form ended, below the map. A refused post keeps the form
+    // out, as typed, and the page where it is.
     form.addEventListener("beacon:done", function (event) {
       if (event.detail && event.detail.refused) { return; }
       var posted = point;
@@ -695,6 +704,7 @@
         show();
         sync();
         narrow();
+        toMap();
         if (posted && window.BeaconMap) { window.BeaconMap.focusAt(posted.lat, posted.lng); }
       }, 0);
     });
