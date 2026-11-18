@@ -107,7 +107,9 @@
       /* ---------- the category keys and the search ---------- */
       .catbar {
         display: flex; flex-wrap: wrap; gap: 8px;
-        margin-top: 20px;
+        /* a window's margin: the title bar above takes 10px of it back
+           (base.html), leaving the 14px every page has under its title */
+        margin-top: 24px;
       }
       .catkey {
         display: inline-flex; align-items: center; gap: 8px;
@@ -173,9 +175,6 @@
       .joined { background: var(--beacon); color: #fff; }
       .joined::before { content: "\2713"; }
       .pick { background: var(--sky); color: var(--navy); }
-      /* the quiet hint beside the page heading */
-      .titleline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
-      .titlehint { color: var(--muted); font: 400 .9rem/1.3 var(--sans); }
       /* new in the club's chat: the alert red the palette keeps for unread counts */
       .clubnew {
         display: inline-flex; align-items: center; height: 20px; margin: 6px 0 0 4px; padding: 0 6px;
@@ -186,23 +185,16 @@
       /* Why a club is suggested. The same chips /matches and the welcome
          page use, so a reason reads the same wherever it is given. */
       .why-lead { margin: 10px 0 0; color: var(--muted); font-size: .88rem; }
-
-      .counter {
-        display: inline-flex; align-items: center; height: 26px; margin-left: 4px; padding: 0 8px;
-        background: var(--gold); color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        font-size: .85rem; font-weight: 700; vertical-align: 1px;
-      }
 {% endblock %}
 
 {% block main %}
+  {# One line: the title, what the page is for, and the count (base.html's
+     .pagehead). The words sit beside the heading, outside the h1, so the
+     heading stays exactly "My Clubs". #}
   <div class="pagehead">
-    {# The hint sits beside the heading, outside the h1, so the heading
-       stays exactly "My Clubs". #}
-    <div class="titleline"><h1>My Clubs</h1><span class="titlehint">Find and join clubs below.</span></div>
-    <p class="lede">
-      <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
-    </p>
+    <h1>My Clubs</h1>
+    <p class="lede">Find and join clubs below.</p>
+    <span class="counter">{{ joined_ids | length }} of {{ clubs | length }} joined</span>
   </div>
 
   {# Links to each window. The script turns them into a filter. #}

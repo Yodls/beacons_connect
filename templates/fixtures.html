@@ -19,7 +19,6 @@
 #}
 
 {% block appstyle %}
-      .upnext { color: var(--navy); font-weight: 700; white-space: nowrap; }
       .fix { margin-top: 18px; }
       .fix-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
       .fix-top h3 { margin: 0; font-size: 1.1rem; }
@@ -42,10 +41,8 @@
 {% block main %}
   <div class="pagehead">
     <h1>Campus Events</h1>
-    <p class="lede">
-      Events happening around campus.
-      <b class="upnext">{{ fixtures | length }} coming up.</b>
-    </p>
+    <p class="lede">Events happening around campus.</p>
+    <span class="counter">{{ fixtures | length }} coming up</span>
   </div>
 
   {% if can_post %}

@@ -185,10 +185,8 @@
 {% block main %}
   <div class="pagehead">
     <h1>Admin</h1>
-    <p class="lede">
-      What students have asked for, and who is allowed to do what.
-      <span class="counter">{{ pending | length }} waiting</span>
-    </p>
+    <p class="lede">What students have asked for, and who is allowed to do what.</p>
+    <span class="counter">{{ pending | length }} waiting</span>
   </div>
 
   {# Reports first: a complaint about somebody is more urgent than a hub

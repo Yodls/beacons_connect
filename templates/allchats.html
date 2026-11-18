@@ -21,7 +21,7 @@
 {% block main %}
   <div class="pagehead">
     <h1>All chats</h1>
-    <p class="lede">{{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }}.</p>
+    <span class="counter">{{ chat_total }} conversation{{ "" if chat_total == 1 else "s" }}</span>
   </div>
 
   {% for sec in sections %}

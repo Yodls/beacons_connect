@@ -5,7 +5,17 @@
 {% block appstyle %}
       /* ---------- the heading: the title, the way back, and counts ---------- */
       .fc-head { display: grid; gap: 12px; }
-      .fc-head .lede { margin-top: .3rem; }
+      /* The title and its sentence on one line where there is room, the
+         title the size every page's title bar has (base.html's .pagehead).
+         The sentence holds two links, so unlike the other title bars it
+         stays on a phone, under the title. */
+      .fc-head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+      .fc-head h1 { flex: none; font-size: 34px; }
+      .fc-head .lede { flex: 1 1 16rem; min-width: 0; margin: 0; font-size: .98rem; line-height: 1.35; }
+      .fc-head .lede a { white-space: nowrap; }
+      @media (max-width: 700px) { .fc-head h1 { font-size: 30px; } }
+      @media (max-width: 400px) { .fc-head h1 { font-size: 26px; } }
+      @media (max-width: 340px) { .fc-head h1 { font-size: 24px; } }
       @media (min-width: 700px) {
         .fc-head { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
         .fc-head > .continue { margin-top: 4px; }

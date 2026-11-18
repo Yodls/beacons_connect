@@ -710,17 +710,52 @@
       .nav a:hover { background: var(--paper); text-decoration: none; }
       .nav a:active { transform: translateY(3px); box-shadow: none; }
 
-      /* A page's title and its one-line explanation, on a frosted label so
-         dark text stays readable over the grid. Wrap the page title and
-         its .lede in a div with class "pagehead". */
+      /* A page's title, its one-line explanation and its count (if it has
+         one), on one short line on a frosted label so dark text stays
+         readable over the grid. Wrap the page title, its .lede and a
+         .counter in a div with class "pagehead". The title is a size down
+         from a page h1, so the label stays one line; the sentence takes the
+         rest of the row beside it, wrapping there only where the row is too
+         narrow; the count is a gold chip at the row's end. On a phone the
+         sentence is left out: the title and the count are what fit on a
+         line, and the page under them shows what the sentence says. */
       .pagehead {
-        padding: 14px 16px 16px;
+        display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+        padding: 10px 16px;
         background: rgba(255, 255, 255, .86);
         -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 4px 4px 0 rgba(19, 34, 69, .22);
       }
-      .pagehead .lede { max-width: 62ch; }
+      .pagehead > h1 { flex: 0 1 auto; min-width: 0; font-size: 34px; }
+      .pagehead > .lede { flex: 1 1 16rem; min-width: 0; margin: 0; font-size: .98rem; line-height: 1.35; }
+      .pagehead > .counter {
+        flex: none; align-self: center; margin-left: auto;
+        display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px;
+        background: var(--gold); color: var(--navy);
+        border: 2px solid var(--navy); border-radius: var(--r-sm);
+        font: 700 .85rem/1 var(--sans); white-space: nowrap;
+      }
+      /* The space around it, on a page that has one: 14px above it (the
+         page's own top is 22px) and 14px under it to the first window. The
+         windows keep their 24px top margin, which is the space between
+         windows, and the bar takes 10px of it back; where a page wraps its
+         first windows in a grid (Games, the campus-meetup form) the wrapper
+         moves up instead, by the same 10px. */
+      .page:has(> .pagehead) { padding-top: 14px; }
+      .page > .pagehead { margin-bottom: -10px; }
+      @media (max-width: 700px) {
+        .page:has(> .pagehead) { padding-top: 10px; }
+        .pagehead { align-items: center; gap: 4px 10px; padding: 8px 12px; }
+        .pagehead > h1 { font-size: 30px; }
+        .pagehead > .lede { display: none; }
+      }
+      /* The narrowest phones, measured: at 320 the bar has 260px inside,
+         where "Campus Events" with its count and "Post campus-wide
+         meetups" need 24px type to stay on one line; 26px does at 360 and
+         375. A title longer still wraps rather than run out of the bar. */
+      @media (max-width: 400px) { .pagehead > h1 { font-size: 26px; } }
+      @media (max-width: 340px) { .pagehead > h1 { font-size: 24px; } }
 
       /* ---------- the foot of every page ----------
          What this is, who to write to, where the code lives and the

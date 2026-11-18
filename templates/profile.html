@@ -123,7 +123,9 @@
       .pf-note ul { margin: 4px 0 0; padding-left: 20px; }
 
       /* ---------- jump links under the heading ---------- */
-      .pf-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+      /* 24px, a window's margin: the title bar above takes 10px of it back
+         (base.html), leaving the 14px every page has under its title. */
+      .pf-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; }
 
       /* ---------- the locked email line ---------- */
       .pf-locked { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: .88rem; }

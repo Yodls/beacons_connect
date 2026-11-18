@@ -20,7 +20,10 @@
 #}
 
 {% block appstyle %}
-      .fixform { display: flex; flex-direction: column; gap: 14px; }
+      /* A window's 24px above the first meetup: the title bar takes 10px of
+         it back (base.html), leaving the 14px every page has under its
+         title. Without it the first meetup touched the title bar. */
+      .fixform { display: flex; flex-direction: column; gap: 14px; margin-top: 24px; }
       .fixform label { display: block; color: var(--navy); font-size: .88rem; font-weight: 700; }
       .fixform input[type="text"], .fixform input[type="date"],
       .fixform input[type="number"], .fixform textarea, .fixform select {
