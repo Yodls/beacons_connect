@@ -1,21 +1,40 @@
 {#
   Post a meetup, inside the campus map's window (_community_map.html), so
-  the pin and the form are one thing. The map script shows this box when its
-  "Post a meetup" key is pressed and puts a draggable pin on the map; the
-  script at the foot of find.html keeps the pin and the fields in step
-  (choosing a place moves the pin to its landmark, dragging the pin rewrites
-  the "Near ..." line). Cancel, Escape or posting puts it away again.
+  the pin and the form are one thing. This is the one way a student puts
+  anything on the map: a meetup for right now or for a date, for everyone,
+  for friends they pick or for one of their clubs. The map script shows this
+  box when its "Post a meetup" key is pressed and puts a draggable pin on
+  the map; the script at the foot of find.html keeps the pin and the fields
+  in step (dragging the pin rewrites the "Near ..." line) and shows only the
+  parts of the form that the choices made so far call for. Cancel, Escape or
+  posting puts it away again.
+
+  It is laid out as the Meet up form in a chat is (_meetwin.html): a
+  section each for what, when, who can see it and a note, under a small
+  caption, ruled off from the next. The captions and the people counter are
+  that form's own, shared in _meet_parts.css. The choices are switches (one
+  frame, a part for each choice, the chosen part filled): radio buttons, so
+  the form posts the same names and values with or without a script.
 
   There is no "where" to pick: the pin is the where. The server keeps the
   pin's words (the nearest landmark, "Near Campus Center") as the meetup's
   place. Without JavaScript the box is simply here, under the map, with the
-  pin line, the note and Cancel hidden: the form posts as it always did and
-  the meetup goes on the Campus Center, where the pin would have started.
+  pin line, the note and Cancel hidden and every part of the form showing:
+  it posts as it always did, the server reads only the parts that go with
+  what was chosen, and the meetup goes on the Campus Center, where the pin
+  would have started.
 
-  Two positions in here are asserted rather than chosen: <select name="game"
-  is the first select in the form, with that attribute order, and the
-  form's class is "newpost" (the tests cut the form out of the page by it).
+  Who it can be for (meet_friends, meet_clubs), how long "Now" can run
+  (meet_durations) and the types a write-in can be (meet_kinds) come from
+  the page (find_game), so nothing here waits on the map's script.
+
+  Positions in here that are asserted rather than chosen: <select
+  name="game" is the first select in the form, with that attribute order;
+  the form's class is "newpost" (the tests cut the form out of the page by
+  it); name="when" value="later" is written in that order; and a friend's
+  row is <label class="pickrow">.
 #}
+{% import "_ui.html" as ui %}
 <div class="draftbox meetbox" id="mapMeetForm">
   {# The head carries where the pin is, in words, so it is the first thing
      under the map even on a short phone. Hidden until the script shows it:
@@ -36,51 +55,184 @@
     <input type="hidden" name="back" value="find" />
     <input type="hidden" name="latitude" />
     <input type="hidden" name="longitude" />
-    <select name="game" class="act" required>
-      {% for a in catalogue %}
-        {% if a.in_person %}
-          <option value="{{ a.name }}"
-                  data-online="{{ 1 if a.online else 0 }}"
-                  data-inperson="1">{{ a.name }}</option>
-        {% endif %}
-      {% endfor %}
-      {# The write-in. See the chat form for why it carries no
-         location of its own until it is chosen. #}
-      <option value="other" data-online="0"
-              data-inperson="1">Other&hellip;</option>
-    </select>
-    {# Shown only for a write-in, and rendered plainly so the form still
-       works with no JavaScript. #}
-    <input name="custom_game" class="custom" maxlength="60"
-           placeholder="What are you playing?" aria-label="Activity" />
-    <input name="max_players" type="number" min="2" max="50" value="4"
-           aria-label="How many players" title="How many players" />
-    {# The day as a date, and the time as three choices. AM/PM starts blank
-       on purpose -- a preselected one is exactly the guess that makes a
-       meetup's time ambiguous -- and the server refuses an hour without it.
-       The date is required: the meetup's chat ends after it. The time
-       beside it stays optional. #}
-    <input name="when_on" type="date" class="ondate" required
-           aria-label="Date" title="Date" />
-    <span class="whenrow">
-      {# One group, not three boxes: a single border with hairlines between,
-         so the hour, the minutes and the half of the day read as one time
-         and cannot be split across two lines by wrapping. #}
-      <span class="timeset">
-        <select name="when_hour" aria-label="Hour">
-          <option value="">Hour</option>
-          {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-        </select>
-        <select name="when_minute" aria-label="Minutes">
-          {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
-        </select>
-        <select name="when_ampm" aria-label="AM or PM">
-          <option value="">AM/PM</option>
-          {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-        </select>
-      </span>
-    </span>
-    <input name="note" maxlength="300" placeholder="Note (optional)" />
+
+    {# Two columns on a wide screen (what and when; who and the note), one
+       on a narrow one. #}
+    <div class="meet-cols">
+      <div class="meet-col">
+        <div class="meet-sec meet-what">
+          <span class="meet-cap">{{ ui.icon("game") }}What</span>
+          <div class="meet-row">
+            <select name="game" class="act" required aria-label="Activity">
+              {% for a in catalogue %}
+                {% if a.in_person %}
+                  <option value="{{ a.name }}"
+                          data-online="{{ 1 if a.online else 0 }}"
+                          data-inperson="1">{{ a.name }}</option>
+                {% endif %}
+              {% endfor %}
+              {# The write-in. See the chat form for why it carries no
+                 location of its own until it is chosen. #}
+              <option value="other" data-online="0"
+                      data-inperson="1">Other&hellip;</option>
+            </select>
+            {# How many, you included: the chat form's counter, a minus key,
+               the number and a plus key. The keys are the page script's;
+               the number can be typed. #}
+            <span class="meet-count" title="How many people, you included">
+              <button type="button" class="step" data-step="-1" aria-label="Fewer people">&minus;</button>
+              <input name="max_players" type="number" min="2" max="50" value="4"
+                     aria-label="How many people, you included" />
+              <button type="button" class="step" data-step="1" aria-label="More people">+</button>
+              <small>people</small>
+            </span>
+          </div>
+          {# Shown only for a write-in, and rendered plainly so the form
+             still works with no JavaScript. #}
+          <input name="custom_game" class="custom" maxlength="60"
+                 placeholder="What are you doing?" aria-label="Activity" />
+          {# What a write-in is, which is what colours its flag. Only for a
+             write-in: an activity from the list keeps the flag a meetup has
+             always had, navy with a star. The "custom" class is what shows
+             and enables it with the box above (find.html's first script);
+             disabled, it sends nothing. #}
+          <fieldset class="custom draft-kinds">
+            <legend>What kind of meetup is it?</legend>
+            <div class="kind-chips">
+              {% for key, label in meet_kinds %}
+                <label class="kind-chip kind-{{ key }}">
+                  <input type="radio" name="category" value="{{ key }}"{% if key == meet_kind %} checked{% endif %} />
+                  <span><i></i>{{ label }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        </div>
+
+        {# Now, for a while, or a date. Now is first and chosen: the quickest
+           meetup to post is the one happening already. AM/PM starts blank
+           on purpose -- a preselected one is exactly the guess that makes a
+           meetup's time ambiguous -- and the server refuses an hour without
+           it. The date carries no `required` here, because under Now there
+           is none to give; the script asks for it under Later, and the
+           server refuses a dated meetup without one either way. #}
+        <div class="meet-sec meet-when">
+          <span class="meet-cap" id="meetWhenCap">{{ ui.icon("calendar") }}When</span>
+          <div class="seg" role="radiogroup" aria-labelledby="meetWhenCap">
+            <label class="seg-opt">
+              <input type="radio" name="when" value="now" checked /><span>Now</span>
+            </label>
+            <label class="seg-opt">
+              <input type="radio" name="when" value="later" /><span>Later</span>
+            </label>
+          </div>
+          <div class="meet-now meet-row">
+            <span class="meet-sub" id="meetLongCap">How long</span>
+            <div class="seg seg-many" role="radiogroup" aria-labelledby="meetLongCap">
+              {% for minutes in meet_durations %}
+                <label class="seg-opt">
+                  <input type="radio" name="duration" value="{{ minutes }}"{% if minutes == meet_duration %} checked{% endif %} />
+                  <span>{% if minutes < 60 %}{{ minutes }} min{% else %}{{ minutes // 60 }} hr{% endif %}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="meet-later meet-row">
+            <input name="when_on" type="date" class="ondate"
+                   aria-label="Date" title="Date" />
+            <span class="whenrow">
+              {# One group, not three boxes: a single border with hairlines
+                 between, so the hour, the minutes and the half of the day
+                 read as one time and cannot be split across two lines by
+                 wrapping. #}
+              <span class="timeset">
+                <select name="when_hour" aria-label="Hour">
+                  <option value="">Hour</option>
+                  {% for h in when_hours %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+                </select>
+                <select name="when_minute" aria-label="Minutes">
+                  {% for m in when_minutes %}<option value="{{ m }}">:{{ m }}</option>{% endfor %}
+                </select>
+                <select name="when_ampm" aria-label="AM or PM">
+                  <option value="">AM/PM</option>
+                  {% for p in when_meridiem %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                </select>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="meet-col">
+        {# Who it is for. Everyone is the campus: the meetup is on every map
+           and in Community Chat. A club's goes in that club's chat and on
+           its members' maps. Friends are ticked below, and only they see
+           it. A choice with nobody behind it cannot be made. The line under
+           the switch says what the chosen one means (the script rewrites it
+           from the data- attributes). #}
+        <div class="meet-sec meet-who">
+          <span class="meet-cap" id="meetWhoCap">{{ ui.icon("people") }}Who can see it</span>
+          <div class="seg" role="radiogroup" aria-labelledby="meetWhoCap">
+            <label class="seg-opt">
+              <input type="radio" name="audience" value="everyone" checked /><span>Everyone</span>
+            </label>
+            <label class="seg-opt"{% if not meet_friends %} title="Add a friend first"{% endif %}>
+              <input type="radio" name="audience" value="friends"{% if not meet_friends %} disabled{% endif %} /><span>My friends</span>
+            </label>
+            <label class="seg-opt"{% if not meet_clubs %} title="Join a club first"{% endif %}>
+              <input type="radio" name="audience" value="club"{% if not meet_clubs %} disabled{% endif %} /><span>A club</span>
+            </label>
+          </div>
+          <p class="meet-says" aria-live="polite"
+             data-everyone="Every student can see it and join."
+             data-friends="Only the friends you tick can see it and join."
+             data-club="It posts in the club's chat, and its members can see it and join.">Every student can see it and join.</p>
+          {% if not meet_friends or not meet_clubs %}
+            <p class="meet-says meet-cant">
+              {%- if not meet_friends and not meet_clubs -%}
+                Add friends or join a club to post just for them.
+              {%- elif not meet_friends -%}
+                Add friends to post just for them.
+              {%- else -%}
+                Join a club to post for its members.
+              {%- endif -%}
+            </p>
+          {% endif %}
+          <label class="meet-club">Which club
+            <select name="club_id">
+              {% for club in meet_clubs %}
+                <option value="{{ club.id }}">{{ club.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {# The friends to pick from, each with their picture, and a box to
+             find one by name. data-name is the name folded, for that box. #}
+          <div class="fpick meet-friends" role="group" aria-labelledby="meetFriendsLabel">
+            <p class="fpick-label" id="meetFriendsLabel">Pick friends</p>
+            <input type="search" autocomplete="off" placeholder="Find a friend by name"
+                   aria-label="Find a friend by name" />
+            <div class="flist">
+              {% for friend in meet_friends %}
+                <label class="pickrow" data-name="{{ friend.name | lower }}">
+                  <input type="checkbox" name="friend_ids" value="{{ friend.user_id }}" />
+                  <span class="cbox">{{ ui.icon("check") }}</span>
+                  {{ ui.face(friend.name, friend.user_id, sm=true) }}
+                  <span class="grow">{{ friend.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            <p class="fmore" hidden>No friends by that name.</p>
+          </div>
+        </div>
+
+        <div class="meet-sec meet-note">
+          <span class="meet-cap">{{ ui.icon("pencil") }}Note <small>optional</small></span>
+          <textarea name="note" maxlength="300" rows="2" aria-label="Note"
+                    placeholder="Bring a ball, meet by the main doors&hellip;"></textarea>
+        </div>
+      </div>
+    </div>
+
     <div class="draft-actions">
       <button type="submit">Post it</button>
       <button type="button" class="map-button meet-cancel" hidden>Cancel</button>

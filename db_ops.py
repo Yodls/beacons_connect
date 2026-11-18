@@ -2772,6 +2772,78 @@ def _applied_fixture_schedule(cur):
             and column_exists(cur, "fixtures", "published_at"))
 
 
+# Who a meetup is for. 'friends' is the new one: a meetup posted from the map
+# for the friends its author picked.
+_POST_AUDIENCES = ("campus", "chat", "friends")
+# A row the audience CHECK is tried against, in a savepoint that is always
+# rolled back. Every column without a database default is named.
+_POST_PROBE = ("INSERT INTO game_posts (author_id, game, mode, max_players, "
+               "status, audience, created_at) "
+               "VALUES (%s, 'x', 'inperson', 2, 'open', {}, now())")
+
+
+def _work_meetup_now(cur, dbname, say):
+    """Meetups for right now, and meetups for picked friends.
+
+    One column and one wider CHECK on game_posts. ends_at is when a meetup
+    posted for "Now" is over (its author said how long they would be there);
+    every meetup already there keeps none and is listed by its date or its
+    age, as before. The audience CHECK gains 'friends'. Nothing is removed
+    and no existing row changes.
+    """
+    if not table_exists(cur, "game_posts"):
+        raise Refuse(f"{dbname} has no game_posts table.")
+
+    before = count(cur, "game_posts")
+    private = count(cur, "game_posts", "audience <> 'campus'")
+    say(f"  {dbname}: {before} meetup(s), {private} of them not campus-wide")
+
+    changed = 0
+    added = not column_exists(cur, "game_posts", "ends_at")
+    if added:
+        cur.execute("ALTER TABLE game_posts ADD COLUMN ends_at TIMESTAMP")
+        say("  + added game_posts.ends_at")
+        changed += 1
+    else:
+        say("  = game_posts.ends_at already exists")
+
+    changed += widen(cur, "game_posts", "ck_post_audience",
+                     f"audience IN ({quoted(_POST_AUDIENCES)})", "friends", say)
+
+    # A CHECK that exists proves nothing about what it allows: try one
+    # audience it must refuse and the one it must now take. Needs somebody to
+    # be the author; a database with no accounts has no meetups to protect.
+    cur.execute('SELECT id FROM "user" ORDER BY id LIMIT 1')
+    row = cur.fetchone()
+    if row:
+        if not rejects(cur, _POST_PROBE.format("'everyone'"), (row[0],),
+                       "an unknown audience"):
+            raise Refuse("ck_post_audience accepted an audience that is not one.")
+        if rejects(cur, _POST_PROBE.format("'friends'"), (row[0],), "friends"):
+            raise Refuse("ck_post_audience still refuses 'friends'.")
+        say("  . the audience check refuses an unknown value and takes 'friends'")
+
+    # Only when the column is new: after that, a meetup posted for "Now" has
+    # an end time, and running this again must not object to it.
+    ended = count(cur, "game_posts", "ends_at IS NOT NULL")
+    if added and ended:
+        raise Refuse(f"{ended} existing meetup(s) came out with an end time "
+                     "nobody entered.")
+    after = count(cur, "game_posts")
+    if after != before:
+        raise Refuse(f"game_posts changed {before} -> {after}")
+    still = count(cur, "game_posts", "audience <> 'campus'")
+    if still != private:
+        raise Refuse(f"meetups that are not campus-wide changed {private} -> {still}")
+    say(f"  . all {before} existing meetup(s) are still for who they were for")
+    return changed
+
+
+def _applied_meetup_now(cur):
+    return (column_exists(cur, "game_posts", "ends_at")
+            and "friends" in (constraint_def(cur, "ck_post_audience") or ""))
+
+
 # ---------------------------------------------------------- the registry
 #
 # In the order they were written, which is the order they have to run in:
@@ -2852,6 +2924,8 @@ MIGRATIONS = [
      _work_fixture_schedule, _applied_fixture_schedule),
     ("add_site_settings", "site_settings, for the admin's sign-up switches",
      _work_site_settings, _applied_site_settings),
+    ("add_meetup_now", "game_posts.ends_at and the 'friends' audience",
+     _work_meetup_now, _applied_meetup_now),
 ]
 
 MIGRATION_NAMES = [m[0] for m in MIGRATIONS]

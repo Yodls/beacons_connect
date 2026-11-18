@@ -724,11 +724,19 @@ class GamePost(db.Model):
     # by somebody else. Without it the board falls back to the date, and
     # failing that to the same 36-hour horizon the meetup's chat uses.
     starts_at = db.Column(db.DateTime)
+    # When it is over, for a meetup posted for "Now": its author said how
+    # long they would be there, so this is a fact and not the guess the
+    # board otherwise makes. Null for every meetup with a date, which is
+    # over by its date or its start time as before.
+    ends_at = db.Column(db.DateTime)
     max_players = db.Column(db.Integer, nullable=False, default=2)
     status = db.Column(db.Text, nullable=False, default="open")
     # Who this meetup is for. 'campus' is the posting /find has always done:
     # anybody may see it and join it. 'chat' is an arrangement between the
-    # people in one conversation, and /find must not list it.
+    # people in one conversation (a one-on-one, or a club), and /find must
+    # not list it. 'friends' is for the friends its author picked when
+    # posting it from the map: they are named on its pin (map_flag_viewers),
+    # and nobody else may see or join it.
     #
     # A column rather than "look at where its announcing message went", which
     # would answer the same question most of the time. A message can be
@@ -742,7 +750,7 @@ class GamePost(db.Model):
     __table_args__ = (
         db.CheckConstraint("mode IN ('online', 'inperson')", name="ck_post_mode"),
         db.CheckConstraint("status IN ('open', 'closed')", name="ck_post_status"),
-        db.CheckConstraint("audience IN ('campus', 'chat')",
+        db.CheckConstraint("audience IN ('campus', 'chat', 'friends')",
                            name="ck_post_audience"),
         db.CheckConstraint("max_players >= 2", name="ck_post_players"),
         db.Index("ix_game_posts_created", "created_at"),
@@ -1236,16 +1244,19 @@ MAP_FLAG_AUDIENCES = (
 
 
 class MapFlag(db.Model):
-    """A short-lived meetup beacon inside the approved campus boundary.
+    """A meetup's pin inside the approved campus boundary.
 
-    Two kinds share this table:
-      - a flag a student drops by hand on the map (post_id is null), which
-        counts toward their limit and ends after a chosen duration;
-      - an event flag (post_id set), dropped automatically when somebody posts
-        an in-person meetup. It lives as long as the meetup, does not count
-        toward the limit, and starts out visible only to the people who said
-        they're in ("going") until its owner makes it public.
-    Either kind can be moved and edited by its owner and nobody else.
+    Three kinds share this table:
+      - a meetup's pin (post_id set), made when somebody posts an in-person
+        meetup. It lives as long as the meetup and is seen by whoever the
+        meetup is for: everyone, one club's members, the friends its author
+        picked, or (in a one-on-one, or once its author locks it) only the
+        people who said they're in ("going");
+      - a campus-wide meetup's pin (fixture_id set), public, category "home";
+      - a flag a student dropped by hand (neither set). Nothing makes these
+        any more, since posting a meetup does that job; ones already up
+        stay until they expire, which is eight hours at most.
+    Its owner, and nobody else, can move it.
     """
 
     __tablename__ = "map_flags"

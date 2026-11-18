@@ -2481,7 +2481,8 @@
       card.style.setProperty("--bar-ink", look.ink);
       var bar = el("div", "cardbar");
       bar.appendChild(icon(look.icon));
-      bar.appendChild(el("span", "", flag.category_label || "Flag"));
+      // "Study meetup", as the map's own card titles it.
+      bar.appendChild(el("span", "", flag.bar_label || flag.category_label || "Flag"));
       card.appendChild(bar);
       var pane = el("div", "cardpane");
       pane.appendChild(el("b", "", flag.title));

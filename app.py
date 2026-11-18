@@ -1373,20 +1373,36 @@ def still_on(now=None):
     A clause rather than a Python filter so the board can still ask the
     database for ten rows instead of reading every open meetup and throwing
     most of them away.
+
+    And a fourth, which comes first: a meetup posted for "Now" says when it
+    ends (ends_at), so nothing is guessed for it. It is on until then and
+    not a minute after, whatever the three rules above would have said.
     """
     now = now or datetime.utcnow()
     # The Boston day a meetup's date is still "today" for. Computed here
     # rather than in SQL, which has no idea where the campus is.
     today = utc_to_boston(now).date()
     return db.or_(
-        db.and_(GamePost.starts_at.is_not(None),
-                GamePost.starts_at > now - MEETUP_OVER_AFTER),
-        db.and_(GamePost.starts_at.is_(None),
-                GamePost.when_on.is_not(None),
-                GamePost.when_on >= today),
-        db.and_(GamePost.starts_at.is_(None), GamePost.when_on.is_(None),
-                GamePost.created_at > now - MEETUP_CHAT_DEFAULT),
+        db.and_(GamePost.ends_at.is_not(None), GamePost.ends_at > now),
+        db.and_(GamePost.ends_at.is_(None), db.or_(
+            db.and_(GamePost.starts_at.is_not(None),
+                    GamePost.starts_at > now - MEETUP_OVER_AFTER),
+            db.and_(GamePost.starts_at.is_(None),
+                    GamePost.when_on.is_not(None),
+                    GamePost.when_on >= today),
+            db.and_(GamePost.starts_at.is_(None), GamePost.when_on.is_(None),
+                    GamePost.created_at > now - MEETUP_CHAT_DEFAULT),
+        )),
     )
+
+
+def now_label(ends_at):
+    """What a meetup posted for "Now" says for its when: "Now until 6:30 PM",
+    in Boston time. Built by hand, as when_label is: the format code for an
+    hour with no leading zero is not the same on every machine."""
+    local = utc_to_boston(ends_at)
+    hour = local.hour % 12 or 12
+    return f"Now until {hour}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
 
 
 def meetup_chat_deadline(post):
@@ -1395,7 +1411,10 @@ def meetup_chat_deadline(post):
     The end of its date plus a grace window, or a fixed horizon from the
     posting when the date was left out. Computed once, when the chat is made:
     a meetup cannot be edited, so there is nothing for this to drift from.
+    One posted for "Now" says when it ends, and the grace runs from there.
     """
+    if post.ends_at is not None:
+        return post.ends_at + MEETUP_CHAT_GRACE
     if post.when_on is not None:
         # datetime.max.time() rather than the `time` class: the name `time` is
         # taken here by the stdlib module the live loop uses for monotonic().
@@ -1954,7 +1973,7 @@ def chats_for(post_ids):
 # and the card would then sit stale under somebody watching it.
 CARD_SHOWS = ("id", "game", "mode_label", "location", "when_text", "note",
               "max_players", "status", "count", "full", "im_going", "mine",
-              "chat_id", "flag")
+              "chat_id", "flag", "for_friends")
 
 
 def post_card_token(payload):
@@ -1974,10 +1993,14 @@ def post_card_token(payload):
 
 
 def flags_for(post_ids):
-    """Each meetup's map flag, for a whole page in one query.
+    """Each meetup's map flag that this reader may see, for a whole page in
+    one query.
 
     chats_for's shape: {post_id: (public_id, visibility)}. Meetups with no
-    flag (online ones, or ones whose owner took the flag down) are absent.
+    flag (online ones, or ones whose flag has expired) are absent, and so
+    are ones whose flag is not for this reader. That is decided by
+    map_flag_visible_to, the one rule the map itself uses, so a card never
+    offers "See on map" for a pin the map would not show.
     """
     if not post_ids:
         return {}
@@ -1985,7 +2008,8 @@ def flags_for(post_ids):
             in db.session.execute(
                 db.select(MapFlag.post_id, MapFlag.public_id, MapFlag.visibility)
                 .where(MapFlag.post_id.in_(post_ids),
-                       MapFlag.expires_at > datetime.utcnow()))}
+                       MapFlag.expires_at > datetime.utcnow(),
+                       map_flag_visible_to(current_user.id)))}
 
 
 def post_payload(post, going=None, im_going=None, chats=None, flags=None):
@@ -1997,11 +2021,9 @@ def post_payload(post, going=None, im_going=None, chats=None, flags=None):
         chats = chats_for([post.id])
     if flags is None:
         flags = flags_for([post.id])
-    # The meetup's flag, but only for someone allowed to see it: everyone
-    # once its owner made it public, otherwise the people who are in.
-    flag_id, flag_audience = flags.get(post.id, (None, None))
-    can_see_flag = flag_id is not None and (
-        flag_audience == "public" or im_going or post.author_id == current_user.id)
+    # The meetup's flag, when this reader may see it (flags_for leaves out
+    # the ones they may not).
+    flag_id, _ = flags.get(post.id, (None, None))
     data = {
         "id": post.id,
         "game": post.game,
@@ -2022,7 +2044,10 @@ def post_payload(post, going=None, im_going=None, chats=None, flags=None):
         # before meetups had chats.
         "chat_id": chats.get(post.id),
         # Its flag on the campus map, when this reader may see it.
-        "flag": flag_id if can_see_flag else None,
+        "flag": flag_id,
+        # Posted for picked friends, so its card on the board can say so:
+        # there it sits among meetups that are for everybody.
+        "for_friends": post.audience == "friends",
     }
     # Last, and from the finished dict: the card's own token is a digest of
     # what is in here, so it has to be built after the rest of it.
@@ -4913,20 +4938,32 @@ POST_NOTE_MAX = 300
 
 
 def open_campus_posts():
-    """The /find board: open, in person, campus-wide, and not yet past.
+    """The /find board, for whoever is reading it: open, in person, not yet
+    past, and theirs to join.
 
-    Campus-wide only. A meetup arranged inside a conversation belongs to the
-    people in it and has no business on a public board -- this is the filter
-    that makes "private" mean anything. Newest first, and only a screenful:
+    That is every campus-wide meetup, and the ones posted for picked friends
+    that are this reader's own or name them on their pin (map_flag_viewers).
+    A meetup arranged inside a conversation belongs to the people in it and
+    has no business on the board -- this is the filter that makes "private"
+    mean anything, and a friends meetup is on nobody's board but its
+    author's and the friends it is for. Newest first, and only a screenful:
     the board is for finding something to do now, not an archive.
 
     One query for the page and for the live channel, so what the board
     shows and what it is told has changed can never be two different sets.
     """
+    me = current_user.id
+    for_me = (db.select(MapFlag.post_id)
+              .join(MapFlagViewer, MapFlagViewer.flag_id == MapFlag.id)
+              .where(MapFlagViewer.user_id == me, MapFlag.post_id.is_not(None)))
     return db.session.scalars(
         db.select(GamePost)
         .where(GamePost.mode == "inperson", GamePost.status == "open",
-               GamePost.audience == "campus", still_on())
+               still_on(),
+               db.or_(GamePost.audience == "campus",
+                      db.and_(GamePost.audience == "friends",
+                              db.or_(GamePost.author_id == me,
+                                     GamePost.id.in_(for_me)))))
         .order_by(GamePost.created_at.desc())
         .limit(FIND_POSTS)
     ).all()
@@ -5019,8 +5056,31 @@ def find_game():
     rooms = chats_for([p.id for p in posts])
     pins = flags_for([p.id for p in posts])
 
+    # Arrived from the bell at a meetup a friend invited them to: the pin it
+    # opens is on screen, so the bell stops asking. The same thing reading a
+    # chat does for the notices that point at the chat.
+    opened = request.args.get("flag", "")
+    if opened and notices.clear_url(current_user.id, f"/find?flag={opened}"):
+        db.session.commit()
+
+    # Who the meetup form can be for: their friends, by name, and the clubs
+    # they are in. Rendered into the form, so it works before the map's
+    # script has loaded and with no script at all.
+    friends = sorted(matching.friend_names(current_user.id),
+                     key=lambda f: f["name"].lower())
+
     return render_template(
         "find.html",
+        meet_friends=friends,
+        meet_clubs=joined_clubs(current_user.id),
+        # How long a meetup posted for "Now" can run (in minutes; the form
+        # words them), and the types one written in can be.
+        meet_durations=sorted(MAP_FLAG_DURATIONS),
+        meet_duration=MEETUP_NOW_DEFAULT,
+        meet_kinds=[(k, MAP_FLAG_CATEGORIES[k]) for k in MEETUP_KINDS],
+        meet_kind=MEETUP_KIND_DEFAULT,
+        # Every kind of flag and its name, for the key under the map.
+        map_kinds=list(MAP_FLAG_CATEGORIES.items()),
         # The picker is the focused set, plus a write-in. It used to have none
         # -- pairing matched two people on the string as typed, so one typing
         # "basketball" and another "Basketball" would have waited for ever
@@ -5185,6 +5245,11 @@ def post_new():
     # else's conversation.
     home = card_home()
     here, from_id, here_parent = home if home else (None, None, None)
+    # Whether it came from a conversation, kept apart from `here`: a meetup
+    # posted from the map for one of your clubs sets `here` below, so that it
+    # is posted exactly as the club's own Meet up key posts one, but it goes
+    # back to the map it was posted from.
+    from_chat = home is not None
 
     # Named a conversation and did not get one. Refused rather than quietly
     # posted to the campus room: the difference between those two outcomes is
@@ -5202,6 +5267,43 @@ def post_new():
     mode = request.form.get("mode", "online")
     note = request.form.get("note", "").strip()
     location = request.form.get("location", "").strip()
+
+    # What only the map's form asks: when (now, for a while, or a date), who
+    # it is for, and what kind of thing it is. All three are optional, and a
+    # form that sends none of them posts as it always did: a date, the whole
+    # campus, and a type worked out below. A form in a conversation is never
+    # asked, because the conversation is who it is for.
+    now = datetime.utcnow()
+    when_now, duration = False, None
+    reach, reach_error, friend_ids = "everyone", None, []
+    kind_sent = ""
+    if not from_chat:
+        when_now = request.form.get("when") == "now"
+        duration = request.form.get("duration", type=int)
+        kind_sent = request.form.get("category", "").strip()
+        reach = request.form.get("audience", "").strip() or "everyone"
+        if reach == "club":
+            # The same door the club's chat is behind (chat_target), so this
+            # cannot post into a club its sender is not in. From here on it
+            # is a meetup posted from that club.
+            club_id = request.form.get("club_id", type=int)
+            club = chat_target("club", club_id)[0] if club_id is not None else None
+            if club is None:
+                reach_error = "Pick one of your clubs."
+            else:
+                here, from_id, here_parent = "club", club_id, club
+        elif reach == "friends":
+            try:
+                friend_ids = picked_friends(request.form.getlist("friend_ids"))
+            except FlagError as error:
+                reach_error = error.message
+        elif reach != "everyone":
+            reach_error = "Choose who can see this meetup."
+        if reach != "everyone":
+            # A meetup for friends or a club from the map is one to turn up
+            # to: its pin is how they find it.
+            mode = "inperson"
+
     # Where its pin goes, when it was put on the map on /find. Optional --
     # every other form, and /find without JavaScript, sends none and the
     # pin goes on the place's landmark -- but a point that is sent has to be
@@ -5225,16 +5327,25 @@ def post_new():
     #
     # Parsed rather than trusted, so a malformed one is refused below instead
     # of quietly becoming no date at all.
-    on_text = request.form.get("when_on", "").strip()
+    #
+    # Unless it is for now. Then the date is today's in Boston and nothing
+    # else in these fields is read: the form hides them, and one that sent
+    # them anyway said two things at once, of which "now" is the one meant.
+    today = utc_to_boston(now).date()
     on, on_bad = None, False
-    if on_text:
-        try:
-            on = datetime.strptime(on_text, "%Y-%m-%d").date()
-        except ValueError:
-            on_bad = True
-    hour = request.form.get("when_hour", "").strip()
+    hour = minute = ampm = ""
+    if when_now:
+        on = today
+    else:
+        on_text = request.form.get("when_on", "").strip()
+        if on_text:
+            try:
+                on = datetime.strptime(on_text, "%Y-%m-%d").date()
+            except ValueError:
+                on_bad = True
+        hour = request.form.get("when_hour", "").strip()
+        ampm = request.form.get("when_ampm", "").strip()
     minute = request.form.get("when_minute", "").strip() or WHEN_MINUTES[0]
-    ampm = request.form.get("when_ampm", "").strip()
     players = request.form.get("max_players", type=int) or 2
 
     # A write-in: the activity and the place both come from the student, so
@@ -5287,6 +5398,11 @@ def post_new():
         refused(f"Keep the location under {CUSTOM_LOCATION_MAX} characters.")
     elif not wrote_in and activity is None:
         refused("Pick an activity from the list.")
+    # The type of a write-in, when its form asked. Only the four the form
+    # offers: "home" is a campus-wide meetup's and not a student's to pick,
+    # and "event" is what a meetup's flag is when no type is given at all.
+    elif wrote_in and kind_sent and kind_sent not in MEETUP_KINDS:
+        refused("Pick what kind of meetup it is.")
     elif mode not in POST_MODES:
         refused("Pick online or in person.")
     elif not wrote_in and mode == "online" and not activity.online:
@@ -5297,6 +5413,8 @@ def post_new():
         refused("Pick where you'll be playing.")
     elif not wrote_in and mode == "inperson" and not pinned and location not in allowed:
         refused(f"You can't play {activity.name} at that spot.")
+    elif when_now and duration not in MAP_FLAG_DURATIONS:
+        refused("Pick how long you'll be there.")
     # Only once an hour has been picked. Asking for AM or PM when nobody has
     # named a time would turn an optional field into a required one.
     elif hour and not ampm:
@@ -5313,6 +5431,12 @@ def post_new():
         # Required, so its chat has a day to end after and so two meetups can
         # be told apart by when they are.
         refused("Pick the date of the meetup.")
+    elif reach_error:
+        refused(reach_error)
+    elif reach == "friends" and on < today:
+        # A meetup for picked friends is found through its pin and nothing
+        # else, and a day that has gone gets no pin (make_event_flag).
+        refused("Pick a date that hasn't passed.")
     elif len(note) > POST_NOTE_MAX:
         refused(f"Keep the note under {POST_NOTE_MAX} characters.")
     elif not 2 <= players <= 50:
@@ -5320,21 +5444,33 @@ def post_new():
     elif point_bad and mode == "inperson":
         refused("That spot is off campus. Move the pin onto the map's campus area.")
     else:
+        # One posted for now starts now and ends when its author said they
+        # would be done. Kept as a fact (ends_at), so the board and the pin
+        # stop at that moment instead of at a guess.
+        ends = now + timedelta(minutes=duration) if when_now else None
+        if when_now:
+            starts = now
+        else:
+            # Kept now, rather than only rendered into when_text. Without it
+            # nothing can tell a meetup that has happened from one that has
+            # not. Null when no hour was picked, which the form allows.
+            starts = boston_to_utc(on, hour, minute, ampm) if hour and ampm else None
+        if reach == "friends":
+            audience = "friends"
+        else:
+            audience = "chat" if here else "campus"
         post = GamePost(
             author_id=current_user.id,
             game=game[:120],
             mode=mode,
             note=note or None,
             location=(location if mode == "inperson" else None),
-            when_text=when_label(on, hour, minute, ampm),
+            when_text=now_label(ends) if when_now else when_label(on, hour, minute, ampm),
             when_on=on,
-            # Kept now, rather than only rendered into when_text. Without it
-            # nothing can tell a meetup that has happened from one that has
-            # not. Null when no hour was picked, which the form allows.
-            starts_at=(boston_to_utc(on, hour, minute, ampm)
-                       if on and hour and ampm else None),
+            starts_at=starts,
+            ends_at=ends,
             max_players=players,
-            audience="chat" if here else "campus",
+            audience=audience,
         )
         db.session.add(post)
         db.session.flush()
@@ -5353,39 +5489,61 @@ def post_new():
         # The post lives in the conversation as a message, so one timeline and
         # one poller cover both chatter and posts. attach_parent puts it in
         # whichever conversation that is.
-        summary = f"Looking for {post.game}"
-        if post.mode == "inperson":
-            summary += " in person"
-        said = Message(user_id=current_user.id, post_id=post.id, body=summary)
-        attach_parent(said, here or COMMUNITY, here_parent)
-        db.session.add(said)
+        #
+        # Not one for picked friends. It belongs to no conversation, and a
+        # message in the campus room is exactly the announcement it is not:
+        # its pin and the board on /find are where the people it is for see
+        # it, and each of them is told below.
+        if audience != "friends":
+            summary = f"Looking for {post.game}"
+            if post.mode == "inperson":
+                summary += " in person"
+            said = Message(user_id=current_user.id, post_id=post.id, body=summary)
+            attach_parent(said, here or COMMUNITY, here_parent)
+            db.session.add(said)
         # The author is the first one going.
         db.session.add(GamePostRsvp(post_id=post.id, user_id=current_user.id))
         # An in-person meetup goes on the campus map too: where its author
-        # put the pin, or on its place's landmark.
+        # put the pin, or on its place's landmark. Its flag is the meetup's
+        # own (the navy one with a star) for an activity from the list, and
+        # for one written in it is the type its author gave it, if the form
+        # asked. Who sees the pin is who the meetup is for.
+        flag = None
         if post.mode == "inperson":
-            make_event_flag(post, point=None if point_bad else point)
+            flag = make_event_flag(
+                post, point=None if point_bad else point,
+                category=kind_sent if (wrote_in and kind_sent) else MEETUP_FLAG_KIND,
+                club_id=from_id if here == "club" else None,
+                friend_ids=friend_ids)
+        plan = " · ".join(p for p in (post.game, post.when_text, post.location) if p)
         # The other person in a private chat is told: in the bell, which a
         # meetup posted there never reached before, and by email if they stay
         # away (run_alerts). A club's or the campus room's is for a room of
         # people.
         if here in PRIVATE_MEETUP_CHATS:
             other = chat_other_id(here, here_parent)
-            plan = " · ".join(p for p in (post.game, post.when_text, post.location) if p)
             notices.meetup(other, current_user, here,
                            current_user.id if here == "match" else from_id, plan)
+        # And so is each friend a meetup was posted for, the same way. The
+        # notice opens its pin, where its card is.
+        if audience == "friends" and flag is not None:
+            for friend_id in friend_ids:
+                notices.meetup_invite(friend_id, current_user, flag.public_id, plan)
         db.session.commit()
         if here == "club":
             flash(f"Posted to {here_parent.name}.")
+        elif audience == "friends":
+            count = len(friend_ids)
+            flash(f"Posted for {count} friend{'' if count == 1 else 's'}.")
         else:
             flash("Asked them to meet up." if here
                   else "Posted to Community Chat.")
-        if here is not None:
+        if from_chat:
             return redirect(url_for("chat", kind=here, target_id=from_id))
 
     # A refused post from a conversation goes back to it, so the flash saying
     # what was wrong lands on the page the form is on.
-    if here is not None:
+    if from_chat:
         return redirect(url_for("chat", kind=here, target_id=from_id))
     if request.form.get("back") == "find":
         return redirect(url_for("find_game"))
@@ -5479,7 +5637,12 @@ def post_close(post_id):
         flash("That isn't your post.")
     else:
         post.status = "closed"
-        # Its map flag comes down with it.
+        # Its map flag comes down with it, and so does anything in a bell
+        # that pointed at the flag: an invite to a meetup that is off should
+        # not go on asking.
+        for public_id in db.session.scalars(
+                db.select(MapFlag.public_id).where(MapFlag.post_id == post.id)):
+            notices.withdraw(f"/find?flag={public_id}")
         db.session.execute(db.delete(MapFlag).where(MapFlag.post_id == post.id))
         db.session.commit()
         flash(f"{post.game} cancelled.")
@@ -5942,9 +6105,19 @@ def post_readable(post):
     Without this, post ids being small integers, anybody could RSVP to a
     club's meetup and be seated in its chat, or put their name on two
     friends' private plan.
+
+    One posted for picked friends lives in no conversation. It is readable
+    by the friends named on its pin (map_flag_viewers) and nobody else, and
+    a name comes off when the friendship ends (matching.end_match).
     """
     if post.audience == "campus" or post.author_id == current_user.id:
         return True
+    if post.audience == "friends":
+        return db.session.scalar(
+            db.select(MapFlagViewer.user_id)
+            .join(MapFlag, MapFlag.id == MapFlagViewer.flag_id)
+            .where(MapFlag.post_id == post.id,
+                   MapFlagViewer.user_id == current_user.id)) is not None
     said = db.session.scalar(
         db.select(Message).where(Message.post_id == post.id).limit(1))
     return said is not None and message_chat(said)[0] is not None
@@ -8407,50 +8580,67 @@ def account_delete():
 # =====================================================================
 # Campus map
 # ---------------------------------------------------------------------
-# Flags on the Meet up page's map. Two kinds share one table (MapFlag):
-#   - flags a student drops by hand: up to MAP_FLAG_LIMIT at a time, each
-#     ending after a chosen duration;
-#   - event flags, dropped automatically when an in-person meetup is posted
-#     (from Community Chat, Meet up, or a friend chat). They last as long as
-#     the meetup, don't count toward the limit, and are seen only by the
-#     people who said they're in until the author makes them public.
-# Owners can move (drag) and edit their own flags; nobody else can.
+# Pins on the Meet up page's map, all in one table (MapFlag):
+#   - a meetup's pin, made when an in-person meetup is posted (from the map,
+#     Community Chat, a club or a friend chat). It lasts as long as the
+#     meetup and is seen by whoever the meetup is for: everyone, a club's
+#     members, the friends its author picked, or only the people who are in
+#     (a one-on-one, or one its author locked);
+#   - a campus-wide meetup's pin (a fixture);
+#   - flags students used to drop by hand. Posting a meetup does that job
+#     now (post_new), so nothing makes these any more; ones already up stay
+#     until they expire.
+# An owner can move (drag) their own pin; nobody else can.
 #
 # Endpoints, all JSON and all for signed-in students:
-#   GET    /api/map-flags            every flag you may see, plus picker data
-#   POST   /api/map-flags            drop a new flag
-#   PATCH  /api/map-flags/<id>       move or edit one of your flags
-#   DELETE /api/map-flags/<id>       take one of your flags down
+#   GET    /api/map-flags            every pin you may see
+#   PATCH  /api/map-flags/<id>       move one of your pins, or lock a meetup's
+#   DELETE /api/map-flags/<id>       take down one that is not a meetup's
+# A meetup's pin is made by posting the meetup and comes down by cancelling
+# it (post_close), so the two can never disagree.
 #
 # Existing databases are brought up to date by upgrade_map_flags_schema()
 # (also `flask --app app upgrade-map-flags`), which runs on its own the first
 # time a request reaches a process that finds the old table.
 # =====================================================================
 
-# Hand-dropped flags per student at once. Event flags are not counted.
-MAP_FLAG_LIMIT = 3
-
-# Every kind of flag, in the order the map offers them. models.MAP_FLAG_KINDS
-# is the list the database accepts; the two must match.
+# Every kind of pin. models.MAP_FLAG_KINDS is the list the database accepts;
+# the two must match.
 MAP_FLAG_CATEGORIES = {
     "game": "Game",
     "study": "Study",
     "social": "Social",
     "club": "Club",
-    "event": "Event",
+    "event": "Event",        # a meetup: the navy flag with a star
     "home": "Campus-Wide",   # a campus-wide meetup (a fixture)
 }
 assert tuple(MAP_FLAG_CATEGORIES) == MAP_FLAG_KINDS
 
-# Minutes a hand-dropped flag can stay up.
-MAP_FLAG_DURATIONS = {30, 60, 120, 240, 480}
+# What a meetup's flag is, unless its author said otherwise: the navy flag
+# with a star that a meetup has always had. Every meetup for an activity
+# from the list gets it, and so does one written in from a form that does
+# not ask what kind it is (the Meet up drawer in a chat).
+MEETUP_FLAG_KIND = "event"
+# The types a meetup written in under "Other" can be given on the map's
+# form, in the order it offers them. Its flag is drawn in that type's
+# colour, as a flag dropped by hand used to be. Not "home", which is not a
+# student's to pick.
+MEETUP_KINDS = ("game", "study", "social", "club")
+# The one the form starts on.
+MEETUP_KIND_DEFAULT = "social"
 
-# Who can see a flag, as its owner can set it. An event flag starts at
-# "going" (people who are in) and can be made "public".
-HAND_FLAG_AUDIENCES = ("public", "friends", "club")
-EVENT_FLAG_AUDIENCES = ("going", "public")
+# Minutes a meetup posted for "Now" can run, as the form offers them.
+MAP_FLAG_DURATIONS = {30, 60, 120, 240, 480}
+MEETUP_NOW_DEFAULT = 60
+
 # The friend picker's ceiling, so a request cannot list the whole school.
 MAP_FLAG_FRIENDS_MAX = 50
+
+# The meetups whose author can lock their pin (only people who are in see
+# it) and open it again: ones for the whole campus, and ones for picked
+# friends. Unlocking returns a pin to the meetup's own audience and never to
+# a wider one.
+LOCKABLE_AUDIENCES = ("campus", "friends")
 
 # An event flag stays up until the end of its meetup's day in Boston. Times
 # here are naive UTC like the rest of the app; Boston's midnight is 04:00 or
@@ -8641,14 +8831,34 @@ def place_for_location(text):
 
 
 def event_flag_deadline(post):
-    """When a meetup's flag comes down: the end of its day, or, with no date,
-    the same horizon its chat has."""
+    """When a meetup's flag comes down: when the meetup says it ends (one
+    posted for "Now"), else the end of its day, or, with no date, the same
+    horizon its chat has."""
+    if post.ends_at is not None:
+        return post.ends_at
     if post.when_on is not None:
         return datetime.combine(post.when_on, datetime.max.time()) + EVENT_FLAG_DAY_END
     return (post.created_at or datetime.utcnow()) + MEETUP_CHAT_DEFAULT
 
 
-def make_event_flag(post, point=None):
+def meetup_flag_audience(post, club_id=None):
+    """Who sees a meetup's pin while it is not locked: (visibility, club_id).
+
+    The pin is for whoever the meetup is for, and never anybody more: the
+    whole campus, the friends its author picked (named in map_flag_viewers),
+    the club it was posted to, or, in a one-on-one, the two people in it,
+    who are the people going.
+    """
+    if post.audience == "campus":
+        return "public", None
+    if post.audience == "friends":
+        return "friends", None
+    if club_id is not None:
+        return "club", club_id
+    return "going", None
+
+
+def make_event_flag(post, point=None, category="event", club_id=None, friend_ids=()):
     """Drop the map flag for an in-person meetup. Called inside the
     transaction that creates the meetup; the caller commits.
 
@@ -8656,10 +8866,11 @@ def make_event_flag(post, point=None):
     already checked by the caller. Without one it goes on the landmark its
     place is at (or the Campus Center).
 
-    A meetup posted to the whole campus is on everybody's map from the
-    start: that is what the map is for. One posted inside a chat, a club or
-    a one-on-one is seen only by the people who are in, until its author
-    makes it public. Returns None for a meetup whose day has already passed.
+    `category` is the pin's type (MEETUP_KINDS). `club_id` is the club it
+    was posted to, and `friend_ids` the friends it is for, both already
+    checked by the caller. Who sees the pin follows from those and the
+    meetup's audience (meetup_flag_audience). Returns None for a meetup
+    whose day has already passed.
     """
     now = datetime.utcnow()
     expires = event_flag_deadline(post)
@@ -8676,13 +8887,17 @@ def make_event_flag(post, point=None):
         if place is None:
             place = APPROVED_MAP_LOCATIONS[EVENT_FLAG_DEFAULT_PLACE]
         latitude, longitude = place["latitude"], place["longitude"]
+    visibility, club_id = meetup_flag_audience(post, club_id)
     flag = MapFlag(
         public_id=str(uuid4()),
         owner_id=post.author_id,
         title=post.game[:100],
         description=(post.note or "")[:300] or None,
-        category="event",
-        visibility="public" if post.audience == "campus" else "going",
+        category=category,
+        visibility=visibility,
+        # In the constructor, not set afterwards: the audience CHECK wants a
+        # club on a club's pin from the first INSERT.
+        club_id=club_id,
         post_id=post.id,
         location_key=key or "custom",
         location_name=(post.location or "Campus meetup point")[:120],
@@ -8692,6 +8907,10 @@ def make_event_flag(post, point=None):
         expires_at=expires,
     )
     db.session.add(flag)
+    if visibility == "friends" and friend_ids:
+        db.session.flush()   # the friends' rows need the flag's id
+        for user_id in friend_ids:
+            db.session.add(MapFlagViewer(flag_id=flag.id, user_id=user_id))
     return flag
 
 
@@ -8725,8 +8944,8 @@ def map_flag_payloads(rows):
                 {"id": user_id, "name": name, "photo": beacon_picture_url(user_id)})
         rooms = chats_for(post_ids)
 
-    # The friends each of *my* "My friend(s)" flags is shared with, so the
-    # editor can show who is picked. Never sent for anybody else's flag.
+    # The friends each of *my* friends-only pins is for, so my own card can
+    # say who. Never sent for anybody else's pin.
     viewers = {}
     shared = [f.id for f in flags
               if f.visibility == "friends" and f.owner_id == current_user.id]
@@ -8761,16 +8980,26 @@ def map_flag_payloads(rows):
                 "open": post.status == "open",
                 # The meetup's own chat, for the people in it.
                 "chat_id": rooms.get(post.id) if (im_going or is_mine) else None,
+                # Whether its author can lock it down to the people who are
+                # in, and open it again. A club's and a one-on-one's cannot:
+                # theirs is already for exactly the people it is for.
+                "lockable": post.audience in LOCKABLE_AUDIENCES,
             }
+        label = MAP_FLAG_CATEGORIES[flag.category]
         out.append({
             "id": flag.public_id,
             "title": flag.title,
             "description": flag.description or "",
             "category": flag.category,
-            "category_label": MAP_FLAG_CATEGORIES[flag.category],
+            "category_label": label,
+            # What the card's title bar says: "Meetup" for a meetup, "Study
+            # meetup" for one written in and given a type, and the kind's
+            # own name for anything else.
+            "bar_label": (label if post is None
+                          else f"{label} meetup" if flag.category in MEETUP_KINDS
+                          else "Meetup"),
             "visibility": flag.visibility,
             "club_name": club_name,
-            "club_id": flag.club_id if is_mine else None,
             "friends": viewers.get(flag.id, []) if is_mine else None,
             "location_key": flag.location_key,
             "location_name": flag.location_name,
@@ -8803,7 +9032,7 @@ def flag_with_names(flag):
                             club.name if club else None)
 
 
-# ---------- reading a new flag or an edit from the browser ----------
+# ---------- reading a change to a pin from the browser ----------
 
 class FlagError(Exception):
     """A message for the student, and the HTTP status to send it with."""
@@ -8814,46 +9043,41 @@ class FlagError(Exception):
         self.status = status
 
 
-def read_flag_fields(data, flag=None):
-    """Check the editable parts of a flag from a JSON body.
+def picked_friends(picked):
+    """The friends a meetup is for, checked: a sorted list of their ids.
 
-    For a new flag (flag is None) every field is required, as it always was.
-    For an edit only the fields sent are read, so dragging a pin can send its
-    new position alone. Returns a dict of changes; raises FlagError.
+    Every one has to be a friend of the person posting right now, so a
+    posted form cannot name a stranger, and there is a ceiling so it cannot
+    name the whole school. Raises FlagError.
     """
-    creating = flag is None
-    event = flag is not None and flag.post_id is not None
+    try:
+        picked = sorted({int(x) for x in picked})
+    except (TypeError, ValueError):
+        raise FlagError("Pick friends from your list.")
+    if not picked:
+        raise FlagError("Pick at least one friend to share it with.")
+    if len(picked) > MAP_FLAG_FRIENDS_MAX:
+        raise FlagError(f"Share it with up to {MAP_FLAG_FRIENDS_MAX} friends.")
+    friends = {f["user_id"] for f in matching.active_matches(current_user.id)}
+    if not set(picked) <= friends:
+        raise FlagError("You can only share a meetup with your friends.", 403)
+    return picked
+
+
+def read_flag_fields(data, flag):
+    """Check a change to one of your pins, from a JSON body.
+
+    Two things can change. Where it is: a dragged pin sends its new latitude
+    and longitude. And, for a meetup whose author may lock it, whether it is
+    locked: `visibility` "going" locks it, and anything else opens it again
+    to the meetup's own audience. The value is never taken as the audience,
+    so a page that asks for "public" cannot widen a pin meant for friends.
+
+    Nothing else about a pin is written here. Its words are the meetup's.
+    Returns a dict of changes; raises FlagError.
+    """
     changes = {}
-
-    def sent(key):
-        return creating or key in data
-
-    if sent("title"):
-        title = str(data.get("title") or "").strip()
-        if not title:
-            raise FlagError("Give the meetup a title.")
-        if len(title) > 100:
-            raise FlagError("Keep the title under 100 characters.")
-        changes["title"] = title
-    if sent("description"):
-        description = str(data.get("description") or "").strip()
-        if len(description) > 300:
-            raise FlagError("Keep the note under 300 characters.")
-        changes["description"] = description or None
-    if sent("category"):
-        category = str(data.get("category") or "")
-        if category not in MAP_FLAG_CATEGORIES:
-            raise FlagError("Choose a valid flag category.")
-        changes["category"] = category
-
-    if sent("location_name"):
-        location_name = str(data.get("location_name") or "").strip()
-        if not location_name:
-            raise FlagError("Add a short label for the meetup location.")
-        if len(location_name) > 120:
-            raise FlagError("Keep the location label under 120 characters.")
-        changes["location_name"] = location_name
-    if sent("latitude") or sent("longitude"):
+    if "latitude" in data or "longitude" in data:
         try:
             latitude = float(data.get("latitude"))
             longitude = float(data.get("longitude"))
@@ -8863,72 +9087,37 @@ def read_flag_fields(data, flag=None):
             raise FlagError("Place the flag inside the shaded UMass Boston campus area.")
         changes["latitude"] = round(latitude, 6)
         changes["longitude"] = round(longitude, 6)
-    # Event flags end with their meetup, so only hand-dropped ones take a
-    # duration. On an edit a new duration counts from now.
-    if creating or ("duration" in data and not event):
-        try:
-            duration = int(data.get("duration", 0))
-        except (TypeError, ValueError):
-            duration = 0
-        if duration not in MAP_FLAG_DURATIONS:
-            raise FlagError("Choose a valid expiration time.")
-        changes["duration"] = duration
 
-    if sent("visibility"):
-        visibility = str(data.get("visibility") or "public")
-        if visibility not in (EVENT_FLAG_AUDIENCES if event else HAND_FLAG_AUDIENCES):
-            raise FlagError("Choose who can see this flag.")
-        changes["visibility"] = visibility
-        changes["club_id"] = None
-        changes["friend_ids"] = []
-        if visibility == "club":
-            try:
-                club_id = int(data.get("club_id"))
-            except (TypeError, ValueError):
-                raise FlagError("Choose one of your clubs.")
-            if db.session.get(ClubMember, (current_user.id, club_id)) is None:
-                raise FlagError("You can only post to a club you joined.", 403)
-            if db.session.get(Club, club_id) is None:
-                raise FlagError("That club is no longer available.")
-            changes["club_id"] = club_id
-        elif visibility == "friends":
-            picked = data.get("friend_ids")
-            if not isinstance(picked, list):
-                picked = []
-            try:
-                picked = sorted({int(x) for x in picked})
-            except (TypeError, ValueError):
-                raise FlagError("Pick friends from your list.")
-            if not picked:
-                raise FlagError("Pick at least one friend to share it with.")
-            if len(picked) > MAP_FLAG_FRIENDS_MAX:
-                raise FlagError(f"Share it with up to {MAP_FLAG_FRIENDS_MAX} friends.")
-            friends = {f["user_id"] for f in matching.active_matches(current_user.id)}
-            if not set(picked) <= friends:
-                raise FlagError("You can only share a flag with your friends.", 403)
-            changes["friend_ids"] = picked
+    if "visibility" in data:
+        post = db.session.get(GamePost, flag.post_id) if flag.post_id else None
+        if post is None or post.audience not in LOCKABLE_AUDIENCES:
+            raise FlagError("You can't change who sees this pin.")
+        changes["locked"] = str(data.get("visibility") or "") == "going"
     return changes
 
 
 def apply_flag_changes(flag, changes, now):
-    """Write checked changes onto a flag. The flag must already have an id
-    when its friends list changes (flush a new one first)."""
-    for key in ("title", "description", "category", "location_name",
-                "latitude", "longitude"):
-        if key in changes:
-            setattr(flag, key, changes[key])
+    """Write checked changes onto a pin."""
+    post = db.session.get(GamePost, flag.post_id) if flag.post_id else None
     if "latitude" in changes:
+        flag.latitude = changes["latitude"]
+        flag.longitude = changes["longitude"]
         # Moved by hand, so it is no longer pinned to a landmark.
         flag.location_key = "custom"
-    if "duration" in changes:
-        flag.expires_at = now + timedelta(minutes=changes["duration"])
-    if "visibility" in changes:
-        flag.visibility = changes["visibility"]
-        flag.club_id = changes["club_id"]
-        db.session.execute(
-            db.delete(MapFlagViewer).where(MapFlagViewer.flag_id == flag.id))
-        for user_id in changes["friend_ids"]:
-            db.session.add(MapFlagViewer(flag_id=flag.id, user_id=user_id))
+        # Its place in words follows the pin, on the pin and on the meetup's
+        # card, which used to go on naming where it had been. Not for a
+        # campus-wide meetup's pin: its words are the venue its poster named.
+        if flag.fixture_id is None:
+            flag.location_name = nearest_place_name(flag.latitude, flag.longitude)
+            if post is not None:
+                post.location = flag.location_name
+    if "locked" in changes:
+        if changes["locked"]:
+            flag.visibility, flag.club_id = "going", None
+        else:
+            flag.visibility, flag.club_id = meetup_flag_audience(post)
+        # The friends a pin is for stay named on it while it is locked:
+        # their rows are what opening it again gives it back to.
 
 
 def from_the_map():
@@ -8989,100 +9178,21 @@ def map_flags_list():
         )
         .order_by(MapFlag.expires_at, MapFlag.id)
     ).all()
-    mine = db.session.scalar(
-        db.select(db.func.count())
-        .select_from(MapFlag)
-        .where(MapFlag.owner_id == me, MapFlag.expires_at > now,
-               MapFlag.post_id.is_(None), MapFlag.fixture_id.is_(None))
-    )
-    clubs = db.session.execute(
-        db.select(Club.id, Club.name)
-        .join(ClubMember, ClubMember.club_id == Club.id)
-        .where(ClubMember.user_id == me)
-        .order_by(Club.name)
-    ).all()
-    friends = [{"id": f["user_id"], "name": f["name"],
-                "photo": beacon_picture_url(f["user_id"])}
-               for f in matching.active_matches(me)]
-    friends.sort(key=lambda f: f["name"].lower())
 
+    # Nothing for a form any more: the one form that posts to the map is the
+    # meetup's, and the page renders its clubs and friends itself (find_game),
+    # which also keeps a friends query out of every refresh of every open map.
     return jsonify({
         "flags": map_flag_payloads(rows),
-        "mine": mine,
-        "limit": MAP_FLAG_LIMIT,
         "categories": MAP_FLAG_CATEGORIES,
         # JSON objects come out sorted, so the map's order travels separately.
         "category_order": list(MAP_FLAG_CATEGORIES),
-        "durations": sorted(MAP_FLAG_DURATIONS),
         "places": [
             {"key": key, **place}
             for key, place in APPROVED_MAP_LOCATIONS.items()
         ],
         "bounds": MAP_FLAG_BOUNDS,
-        "clubs": [{"id": club_id, "name": name} for club_id, name in clubs],
-        # For the "My friend(s)" picker.
-        "friends": friends,
     })
-
-
-@app.route("/api/map-flags", methods=["POST"])
-@login_required
-def map_flag_create():
-    """Create one expiring flag inside the reviewed campus boundary."""
-    if not from_the_map():
-        return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
-
-    data = request.get_json(silent=True) or {}
-    try:
-        changes = read_flag_fields(data)
-    except FlagError as error:
-        return jsonify({"error": error.message}), error.status
-
-    now = datetime.utcnow()
-    if purge_expired_map_flags(now):
-        db.session.commit()
-
-    # Lock this student's row before counting. Two simultaneous create
-    # requests for the same person therefore cannot both claim the last slot.
-    db.session.execute(
-        db.select(User).where(User.id == current_user.id).with_for_update()
-    ).scalar_one()
-    active_count = db.session.scalar(
-        db.select(db.func.count())
-        .select_from(MapFlag)
-        .where(MapFlag.owner_id == current_user.id, MapFlag.expires_at > now,
-               MapFlag.post_id.is_(None), MapFlag.fixture_id.is_(None))
-    )
-    if active_count >= MAP_FLAG_LIMIT:
-        db.session.rollback()
-        return jsonify({
-            "error": f"You already have {MAP_FLAG_LIMIT} active flags. "
-                     "Delete one or wait for it to expire."
-        }), 409
-
-    flag = MapFlag(
-        public_id=str(uuid4()),
-        owner_id=current_user.id,
-        title=changes["title"],
-        category=changes["category"],
-        visibility=changes["visibility"],
-        location_key="custom",
-        location_name=changes["location_name"],
-        latitude=changes["latitude"],
-        longitude=changes["longitude"],
-        created_at=now,
-        expires_at=now + timedelta(minutes=changes["duration"]),
-    )
-    db.session.add(flag)
-    db.session.flush()   # the friends list needs the flag's id
-    apply_flag_changes(flag, changes, now)
-    db.session.commit()
-
-    return jsonify({
-        "flag": flag_with_names(flag),
-        "mine": active_count + 1,
-        "limit": MAP_FLAG_LIMIT,
-    }), 201
 
 
 def owned_flag(public_id, verb):
@@ -9100,8 +9210,9 @@ def owned_flag(public_id, verb):
 @app.route("/api/map-flags/<uuid:public_id>", methods=["PATCH"])
 @login_required
 def map_flag_update(public_id):
-    """Move or edit one of your flags. Send only what changed: a dragged pin
-    sends its new latitude and longitude; the editor sends the whole form."""
+    """Move one of your pins, or lock a meetup's. Send only what changed: a
+    dragged pin sends its new latitude and longitude, and the card's Lock
+    meetup key sends who should see it (read_flag_fields)."""
     if not from_the_map():
         return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
 
@@ -9127,13 +9238,20 @@ def map_flag_update(public_id):
 @app.route("/api/map-flags/<uuid:public_id>", methods=["DELETE"])
 @login_required
 def map_flag_delete(public_id):
-    """Take one of your flags down. For an event flag the meetup stays."""
+    """Take one of your pins down, unless it is a meetup's.
+
+    A meetup and its pin are one thing: the pin is how the people it is for
+    find it, and for picked friends it is what names them. So a meetup's pin
+    comes down by cancelling the meetup (post_close), not by itself.
+    """
     if not from_the_map():
         return jsonify({"error": "Something went wrong. Reload the map and try again."}), 400
 
     flag, refused = owned_flag(public_id, "remove")
     if refused:
         return refused
+    if flag.post_id is not None:
+        return jsonify({"error": "Cancel the meetup to take its pin down."}), 409
 
     db.session.delete(flag)
     db.session.commit()

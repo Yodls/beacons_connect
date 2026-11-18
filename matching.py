@@ -2,7 +2,8 @@ from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 
-from models import Match, User, UserAnswer, db, pair, pronoun_label
+from models import (MapFlag, MapFlagViewer, Match, User, UserAnswer, db, pair,
+                    pronoun_label)
 
 # The one question whose answers are shown back to people, by key. Named here
 # so a test can assert the question actually exists -- which is the only way
@@ -361,6 +362,17 @@ def end_match(user_id, other_id):
 
     match.status = "ended"
     match.ended_at = datetime.utcnow()
+    # A meetup one of them posted for picked friends names the other on its
+    # pin (map_flag_viewers), and that row is what lets them see it and join.
+    # It goes with the friendship, both ways round. Blocking comes through
+    # here too. Without this a pin for next week would stay open to somebody
+    # who was unfriended, or blocked, today.
+    mine = db.select(MapFlag.id).where(MapFlag.owner_id == user_id)
+    theirs = db.select(MapFlag.id).where(MapFlag.owner_id == other_id)
+    db.session.execute(db.delete(MapFlagViewer).where(db.or_(
+        db.and_(MapFlagViewer.user_id == other_id, MapFlagViewer.flag_id.in_(mine)),
+        db.and_(MapFlagViewer.user_id == user_id, MapFlagViewer.flag_id.in_(theirs)),
+    )).execution_options(synchronize_session=False))
     db.session.commit()
     return True
 

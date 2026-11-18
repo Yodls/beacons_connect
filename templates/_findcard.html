@@ -23,6 +23,10 @@
                 {%- if post.when_text %} &middot; {{ post.when_text }}{% endif %}
               </span>
             </div>
+            {# One posted for picked friends. Said on the card, because here
+               it sits among meetups that are for everybody, and its author
+               should not have to wonder which kind they posted. #}
+            {% if post.for_friends %}<span class="tag">Friends only</span>{% endif %}
           </div>
           {% if post.note %}<p class="why">{{ post.note }}</p>{% endif %}
           <span class="going {% if post.full %}full{% endif %}">

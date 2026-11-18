@@ -51,8 +51,6 @@
         width: 36px; height: 36px; color: var(--navy);
       }
       .map-fit .icon { width: 22px; height: 22px; }
-      /* the header's flag count turns orange when all of yours are up */
-      .campus-map-bar .count.full { background: var(--orange); }
       /* the status line floating bottom left */
       .map-status {
         position: absolute; z-index: 1000; left: 10px; bottom: 10px;
@@ -67,15 +65,33 @@
       .map-status.success { background: var(--beacon); }
       .map-status:empty { display: none; }
 
+      /* ---------- the key, on the map's bottom edge ----------
+         Each kind of flag in its colour, in one centred row across the
+         window (two short rows on a phone). It belongs to the map, so it is
+         attached to it, above whatever is under the map. On a phone it
+         steps aside while the form is open (.placing) or a flag's card is
+         open under the map (.carded, set by the script): each of those is
+         fitted to the screen with the map, and the key's rows would push
+         it off. */
+      .map-legend {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+        gap: 6px 18px; margin: 0; padding: 8px 14px; list-style: none;
+        background: var(--paper);
+        border-bottom: 2px dashed var(--line-2);
+      }
+      .map-key {
+        display: inline-flex; align-items: center; gap: 6px;
+        color: var(--navy); font: 700 .82rem/1 var(--sans);
+      }
+      @media (max-width: 560px) {
+        .map-legend { gap: 6px 12px; padding: 7px 10px; }
+        .campus-map-card.placing .map-legend,
+        .campus-map-card.carded .map-legend { display: none; }
+      }
+
       /* ---------- under the map ---------- */
       .campus-map-pane { display: grid; gap: 14px; padding: 14px; }
-      .map-legend {
-        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
-        margin: 0; padding: 0; list-style: none;
-      }
-      .map-legend:empty { display: none; }
-      .map-key { display: inline-flex; align-items: center; gap: 7px; font: 700 .88rem/1 var(--sans); }
-      /* the key's swatches, and the kind chips in the flag form: small
+      /* the key's swatches, and the kind chips in the meetup form: small
          flags in the same colours as the pins */
       .map-key-swatch, .kind-chip i {
         position: relative; width: 22px; height: 20px; flex: none;
@@ -221,12 +237,19 @@
       .fd-actions .small { min-height: 34px; padding: 0 10px; font-size: .82rem; box-shadow: 0 2px 0 var(--navy); }
       .fd-actions .small.warn { box-shadow: 0 2px 0 var(--danger); }
       .fd-actions .small:active { transform: translateY(2px); box-shadow: none; }
-      /* "Tap the map where you want people to find you", under the map
-         while a flag is being placed */
-      #mapFlagDetail .fd-hint {
-        margin: 0; padding: 10px 12px; color: var(--muted); font-size: .9rem;
-        background: var(--paper); border: 2px dashed var(--line-2); border-radius: var(--r);
+      /* "Cancel meetup": a real submit button, because the page sends its
+         form as it does "I'm in". Dressed in full as the small warning key
+         it stands beside, since base draws a submit button as the page's
+         main key. */
+      .fd-actions .fd-cancel, .fd-actions .fd-cancel:hover {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: auto; min-height: 34px; margin: 0; padding: 0 10px;
+        background: var(--danger-bg); color: var(--danger);
+        border: 2px solid var(--danger); border-radius: var(--r);
+        box-shadow: 0 2px 0 var(--danger);
+        font: 700 .82rem/1 var(--sans); cursor: pointer;
       }
+      .fd-actions .fd-cancel:active { transform: translateY(2px); box-shadow: none; }
 
       /* the callout: a Beacon OS window standing on the flag, its tail
          pointing at the flag's pole */
@@ -249,8 +272,8 @@
         border: 2px solid var(--navy); border-top-color: transparent; border-left-color: transparent;
       }
 
-      /* On a phone: the card as its own window under the map, where Post a
-         meetup and Drop a flag stand (they step aside while it is open). */
+      /* On a phone: the card as its own window under the map, where the
+         Post a meetup key stands (it steps aside while the card is open). */
       .map-below .flag-detail {
         overflow: hidden;
         background: #fff;
@@ -369,30 +392,158 @@
       .draft-actions { display: flex; flex-wrap: wrap; gap: 10px; }
       .draft-actions > * { flex: 1 1 8rem; }
 
-      /* "Post a meetup" and "Drop a flag": yellow keys centred under the
-         map, side by side where the pane is wide enough for two and each
-         across the pane on a phone. */
+      /* "Post a meetup" (drawn further down, with the kinds' colours). Where
+         the map has its full height the script stands the key on the map's
+         bottom right corner (homeKey in community-map.js: from 701px), the
+         way map apps place the one thing to do. Under that it is in this
+         row under the map: across the pane on a phone, a fixed width in
+         the middle up to 700px. */
       .map-drop-row {
         display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px;
       }
-      .map-drop-row .map-drop { flex: 1 1 11rem; width: auto; }
-      @media (min-width: 560px) { .map-drop-row .map-drop { max-width: 18rem; } }
-      /* The meetup form (_meetup_form.html) in the draft box: its own
-         fields wrap as they do anywhere, and the Post / Cancel row takes a
-         full line. */
-      .meetbox .newpost .draft-actions { flex: 1 1 100%; }
+      .map-drop-row .map-drop { flex: 1 1 14rem; width: auto; }
+      @media (min-width: 561px) { .map-drop-row .map-drop { flex: 0 0 20rem; } }
+      /* On the map: just above the map's credit line, hugging its words.
+         In the stage's own stacking context, like the locate key, so it
+         stays under the app's bars. */
+      .campus-map-stage > .map-drop, .campus-map-stage > .map-drop:hover {
+        position: absolute; z-index: 1000; right: 10px; bottom: 34px;
+        width: auto; padding: 6px 16px 6px 11px;
+      }
+      /* While it is there (and the form is not open) nothing is under the
+         flags strip, so the window ends at the strip, which takes the
+         window's bottom corners; and the status line, bottom left, wraps
+         before it reaches the key. */
+      .campus-map-card.key-on-map:not(.placing) .campus-map-pane { display: none; }
+      .campus-map-card.key-on-map:not(.placing) .map-legend {
+        border-bottom: 0; border-radius: 0 0 6px 6px;
+      }
+      .campus-map-card.key-on-map:not(.placing) .map-status { max-width: calc(100% - 20px - 15.5rem); }
+      /* ---------- Post a meetup (_meetup_form.html), in sections ----------
+         The form the chat's Meet up drawer has, laid out for the map's
+         window: a section each for what, when, who can see it and a note,
+         under a small caption and ruled off from the next. Two columns on a
+         wide screen, so the whole form sits under the map on one screen.
+         The caption, a row of fields and the people counter are that
+         drawer's own, in one copy: */
+      {% include "_meet_parts.css" %}
+      /* Sections down a column, not the wrapping row a one-line form is. */
+      .meetbox .newpost { display: block; }
+      .meet-cols { display: grid; gap: 0 28px; }
+      @media (min-width: 1000px) {
+        .meet-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      }
+      .meet-col { min-width: 0; }
+      .meetbox .meet-sec {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 0 14px;
+        border-top: 2px dashed var(--line-2);
+      }
+      /* A column: the form's row sizing (a flex-basis in rems) would set
+         heights in it. */
+      .meetbox .meet-sec > *, .meetbox .meet-sec > input, .meetbox .meet-sec > select,
+      .meetbox .meet-sec > textarea { flex: none; width: auto; margin: 0; }
+      .meetbox .meet-row > .act { flex: 1 1 10rem; }
+
+      /* A switch: one frame, a part for each choice, the chosen part
+         filled. Radio buttons underneath, so it sends what a dropdown
+         would and works with no script. */
+      .seg {
+        display: flex; align-items: stretch;
+        background: #fff;
+        border: 2px solid var(--navy); border-radius: var(--r);
+        overflow: hidden;
+      }
+      .meetbox .seg-opt { position: relative; flex: 1 1 0; display: flex; min-width: 0; margin: 0; }
+      .seg-opt + .seg-opt { border-left: 2px solid var(--navy); }
+      .meetbox .seg-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
+      .seg-opt span {
+        flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+        min-height: 42px; padding: 4px 8px;
+        color: var(--navy); font: 700 .92rem/1.15 var(--sans); text-align: center;
+        cursor: pointer; user-select: none;
+      }
+      .seg-opt span:hover { background: var(--paper); }
+      .seg-opt input:checked + span, .seg-opt input:checked + span:hover { background: var(--navy); color: #fff; }
+      .seg-opt input:focus-visible + span { outline: 3px solid var(--orange); outline-offset: -5px; }
+      /* A choice with nobody behind it: no friends to pick, no club joined. */
+      .seg-opt input:disabled + span, .seg-opt input:disabled + span:hover {
+        background: var(--paper); color: var(--muted); cursor: not-allowed;
+      }
+      /* Five parts (how long): tighter, so they share a phone's width. */
+      .seg-many .seg-opt span { padding: 4px 2px; font-size: .84rem; }
+
+      /* When. Now: how long, the switch taking the row and dropping under
+         its words when there is no room beside them. Later: the date and
+         the time on one line, each stretching to the edge, as the chat's
+         form has them. */
+      .meet-sub { flex: 0 0 auto; color: var(--navy); font-size: .88rem; font-weight: 700; }
+      .meetbox .meet-now > .seg { flex: 1 1 15rem; }
+      .meetbox .meet-later > .ondate { flex: 1 1 9rem; }
+      .meetbox .meet-later > .whenrow { flex: 1 1 13rem; display: flex; min-width: 0; }
+      .meetbox .meet-later .timeset { flex: 1 1 auto; }
+      .meetbox .meet-later .timeset select { flex: 1 1 auto; }
+
+      /* Who can see it: what the chosen one means, in a line under the
+         switch, then the club to pick or the friends to tick. */
+      .meet-says { color: var(--muted); font-size: .88rem; line-height: 1.35; }
+      .meetbox .meet-club { display: grid; gap: 6px; margin: 0; font-weight: 700; }
+      .meetbox .meet-club select { width: 100%; }
+      /* The friends to pick from: the search across the box, and the list
+         scrolling inside it once it is longer than a handful. */
+      .meetbox .newpost .fpick input[type="search"] { flex: none; width: 100%; }
+      .meetbox .flist { max-height: 13.5rem; overflow-y: auto; overscroll-behavior: contain; }
+
+      /* The note: a box with room for a sentence or two. */
+      .meetbox .meet-note textarea {
+        min-height: 60px; padding: 10px 12px; resize: vertical; line-height: 1.35;
+      }
+
+      /* The foot: Post it across the row, Cancel a smaller key beside it.
+         Sized so the two share one row down to the narrowest phone. */
+      .meetbox .newpost .draft-actions { padding-top: 14px; border-top: 2px dashed var(--line-2); }
+      .meetbox .draft-actions > button[type="submit"] { flex: 1 1 7rem; }
+      .meetbox .draft-actions > .meet-cancel { flex: 0 0 auto; min-width: 5.5rem; }
+
+      /* The narrowest phones: three choices and a three-part time each have
+         a third of a small form, so their words and their arrows sit a
+         little closer. Without it "Everyone" touches its edges and the
+         minutes are cut off by their own arrow. */
+      @media (max-width: 380px) {
+        .meet-who .seg-opt span { padding: 4px 3px; font-size: .86rem; }
+        .meetbox .timeset select { padding: 0 1.45rem 0 .45rem; background-position: right 5px center; }
+      }
+
+      /* Each kind's colour, for the key's flags and the type chips' (the
+         pins' own are KINDS in community-map.js). */
+      .kind-game { --flag-color: #ff791f; }
+      .kind-study { --flag-color: #005a8b; }
+      .kind-social { --flag-color: #78afe9; }
+      .kind-club { --flag-color: #fede42; }
+      .kind-event { --flag-color: #132245; }
+      .kind-home { --flag-color: #fede42; }
+      /* The Post a meetup key: a plus on a small navy tile, then its name
+         in the title face, on one line. The two are centred in the key as
+         one group, so it reads the same at any width. */
       .map-drop, .map-drop:hover {
-        display: flex; align-items: center; justify-content: center; gap: 8px;
-        width: 100%; min-height: 50px; margin: 0;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        width: 100%; min-height: 54px; margin: 0; padding: 6px 18px;
         background: var(--gold); color: var(--navy);
         border: 2px solid var(--navy); border-radius: var(--r);
         box-shadow: 0 4px 0 var(--navy);
-        font: 700 1rem/1 var(--sans); cursor: pointer;
+        cursor: pointer;
       }
       .map-drop:hover { background: #fff2a8; }
       .map-drop:active { transform: translateY(4px); box-shadow: none; }
-      .map-drop.cancel { background: #fff; }
       .map-drop[disabled] { opacity: .6; cursor: not-allowed; transform: none; box-shadow: none; }
+      .map-drop-mark {
+        flex: none; display: grid; place-items: center;
+        width: 32px; height: 32px;
+        background: var(--navy); color: var(--gold);
+        border-radius: var(--r-sm);
+      }
+      .map-drop-mark .icon { width: 24px; height: 24px; }
+      .map-drop-name { font: 400 26px/1 var(--title); letter-spacing: .01em; white-space: nowrap; }
 
       /* ---------- the landmark pins (built in community-map.js); the flag
          pins are in _map_chrome.css ---------- */
@@ -456,8 +607,9 @@
       /* ---------- sizes ---------- */
       @media (min-width: 1000px) {
         /* 26rem rather than 28: with the page head above, that is what
-           keeps the Post a meetup and Drop a flag keys under the map above
-           the fold of an 800px-tall window. */
+           keeps the map's foot (the Post a meetup key on its corner, and
+           the flags strip under it) above the fold of an 800px-tall
+           window. */
         #beaconCampusMap { height: 26rem; }
       }
       /* "Tap to move the map". On a touch screen the map starts with dragging

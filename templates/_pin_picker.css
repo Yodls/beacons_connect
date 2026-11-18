@@ -36,41 +36,10 @@
          heights in it. */
       .meetwin .meet-sec > *, .meetwin .meet-sec > input, .meetwin .meet-sec > select,
       .meetwin .meet-sec > textarea { flex: none; width: auto; }
-      .meet-cap {
-        display: flex; align-items: center; gap: 6px;
-        color: var(--muted);
-        font: 700 .72rem/1 var(--sans); letter-spacing: .08em; text-transform: uppercase;
-      }
-      .meet-cap .icon { width: 14px; height: 14px; }
-      .meet-cap small { font-weight: 400; letter-spacing: .02em; text-transform: none; }
-      .meet-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      /* The caption, a row of fields and the people counter are shared with
+         Post a meetup on the map, in one copy. */
+      {% include "_meet_parts.css" %}
       .meetwin .meet-row > .act { flex: 1 1 10rem; }
-      /* How many: one framed group like the time's -- a minus key, the
-         number, a plus key -- with "people" after it. */
-      .meet-count { display: inline-flex; align-items: center; gap: 8px; flex: none; }
-      .meet-count .step, .meetwin .meet-count input {
-        margin: 0; min-height: 42px; height: 42px;
-        border: 2px solid var(--navy); border-radius: 0;
-        box-shadow: none; font-weight: 700;
-      }
-      .meet-count .step {
-        width: 40px; padding: 0;
-        background: #fff; color: var(--navy);
-        font-size: 1.25rem; line-height: 1; cursor: pointer;
-      }
-      .meet-count .step:first-child { border-radius: var(--r) 0 0 var(--r); }
-      .meet-count .step:hover { background: var(--paper); }
-      .meet-count .step:active { background: var(--gold); }
-      .meetwin .meet-count input {
-        width: 3.2rem; flex: none; padding: 0; text-align: center;
-        border-left: 0; border-right: 0;
-        background: #fff; box-shadow: inset 0 3px 0 var(--paper);
-        -moz-appearance: textfield; appearance: textfield;
-      }
-      .meet-count input::-webkit-outer-spin-button,
-      .meet-count input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      .meet-count input + .step { border-radius: 0 var(--r) var(--r) 0; }
-      .meet-count small { color: var(--muted); font-weight: 700; font-size: .85rem; }
       .meetwin .meet-row > .ondate { flex: 1 1 9rem; }
       /* The time group stretches to the edge, its three parts sharing it. */
       .meetwin .meet-row > .whenrow { flex: 1 1 13rem; display: flex; }

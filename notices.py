@@ -278,6 +278,22 @@ def meetup(recipient_id, actor, kind, target_id, plan):
     )
 
 
+def meetup_invite(recipient_id, actor, flag_public_id, plan):
+    """A friend posted a meetup for the friends they picked, and you are one.
+
+    The same kind as meetup() above, so the bell, the email for somebody who
+    stays away, and the settle when they say they're in are the ones that
+    already exist. It opens the meetup's pin on the map, which is where its
+    card and its "I'm in" are: a meetup for picked friends lives in no chat.
+    """
+    return notify(
+        recipient_id, "meetup",
+        f"{actor.name} invited you to meet up: {plan}.",
+        f"/find?flag={flag_public_id}",
+        actor_id=actor.id,
+    )
+
+
 def game_answer(recipient_id, actor, game, label, action):
     said = "accepted" if action == "accept" else "declined"
     return notify(
@@ -552,6 +568,20 @@ def clear_url(user_id, url):
         .where(Notice.user_id == user_id,
                Notice.url == url,
                Notice.read_at.is_(None))
+        .values(read_at=datetime.utcnow())
+    ).rowcount
+
+
+def withdraw(url):
+    """Retire every unread notice that points at `url`, whoever it is for.
+
+    For a thing that has gone: a cancelled meetup's invites, which point at
+    its pin. clear_url is one person reading; this is the thing itself
+    ending, so nobody is left with a bell asking them to a meetup that is off.
+    """
+    return db.session.execute(
+        db.update(Notice)
+        .where(Notice.url == url, Notice.read_at.is_(None))
         .values(read_at=datetime.utcnow())
     ).rowcount
 

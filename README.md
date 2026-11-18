@@ -92,7 +92,10 @@ CSS and markup; nothing in the backend depends on it.
 | The Harborwalk behind every page, and the day/night switches | `templates/_harborwalk.html` (styles in `base.html`, section 2) |
 | Styles used by one page only | that page's `{% block appstyle %}` (or `{% block style %}`) |
 | Community map styles | `templates/_community_map.css` (included by `find.html`) |
-| Map pins, key and draft flag | `static/community-map.js` |
+| Map pins, their cards and the key | `static/community-map.js` |
+| The Post a meetup form on the map | `templates/_meetup_form.html` (its script is at the foot of `find.html`) |
+| What the two meetup forms share (section captions, the people counter) | `templates/_meet_parts.css`, included by `_community_map.css` and `_pin_picker.css` |
+| The key to the map's flag colours | the strip under the map in `templates/_community_map.html`; each kind's colour is a `.kind-*` rule in `_community_map.css` |
 
 ### Palette
 
@@ -156,38 +159,72 @@ Fonts.
 
 ## Campus map flags
 
-The Meet up page's map (Leaflet with OpenStreetMap tiles) shows short-lived
+The Meet up page's map (Leaflet with OpenStreetMap tiles) shows meetups as
 flags inside the campus area.
 
-**Two kinds of flag**
+**One way to put a flag on the map: post a meetup.** The form sits in the
+map window (`templates/_meetup_form.html`) and opens from the "Post a
+meetup" key or from the Post tab in the bottom bar. The key stands on the
+map's bottom right corner on a screen wider than 700px and across under the
+map on a phone; it steps aside while the form or a flag's card is open. The
+form asks three things:
 
-| | Hand-dropped flag | Event flag |
+| It asks | Choices | What follows |
 | --- | --- | --- |
-| Made by | "Drop a flag" on the map | Posting an in-person meetup (Community Chat, Meet up, or Meet up in a friend chat) |
-| How long | 30 minutes to 8 hours, picked when dropped | Until the end of the meetup's day |
-| Who sees it | Everyone, picked friends, or one of your clubs | Only people who said they're in, until the author makes it public |
-| Counts toward the 3-flag limit | Yes | No |
-| Cancelling the meetup | n/a | Takes the flag down |
+| What | An activity from the list, or "Other" with a type | The flag's look. A listed activity gets the meetup flag, navy with a star; one written in is Game, Study, Social or Club and takes that colour |
+| When | Now (for 30 minutes to 8 hours) or Later (a date, optional time) | A meetup for now ends when its author said it would (`game_posts.ends_at`); a dated one lasts to the end of its day |
+| Who can see it | Everyone, My friends (picked from a list), or One of my clubs | Who sees the flag and can join, as below |
 
-Flag types: Game, Study, Social, Club, Event and **Campus-Wide** (a
+| Posted for | Its card appears | Its flag is seen by |
+| --- | --- | --- |
+| Everyone | in Community Chat and under "Open meetups" | every student |
+| One of my clubs | in that club's chat | the club's members |
+| My friends | under "Open meetups" for the author and the picked friends, who each get a notification | the picked friends (`map_flag_viewers`) |
+| The other person in a friend or pair chat (the chat's own Meet up key) | in that chat | the two of them |
+
+Every flag a student posts is a meetup, so each has "I'm in", a limit on how
+many can come and its own chat. The author of a meetup for everyone or for
+friends can lock its flag, which hides it from everybody who is not already
+in; unlocking gives it back to the people it was posted for, never to more.
+
+Flag kinds: Event (a meetup: navy with a star), Game, Study, Social and Club
+(a meetup written in and given that type), and **Campus-Wide** (a
 campus-wide meetup from /fixtures; the kind is still called `home` in the
-code and the database). Each is drawn as a small flag in its own colour. Owners can drag their flags to
-a new spot, edit them, or take them down; nobody else can. Meetup cards in
-chats and on Meet up get a "See on map" link for anyone who can see the flag.
+code and the database). Each is drawn
+as a small flag in its own colour. An author can drag their flag to a new
+spot, which rewrites the meetup's place to match, and takes it down by
+cancelling the meetup from its card; nobody else can do either. Meetup cards
+in chats and on Meet up get a "See on map" link for anyone who can see the
+flag. Unfriending or blocking somebody takes them off the flags they were
+picked for.
+
+Students used to be able to drop a flag by hand as well, with no meetup
+behind it. Posting a meetup for "Now" does that job. A hand-dropped flag
+lasted eight hours at most, so there was nothing to migrate.
 
 **API** (all JSON, signed in, writes need `X-Requested-With: XMLHttpRequest`):
-`GET /api/map-flags`, `POST /api/map-flags`, `PATCH /api/map-flags/<id>`
-(send only what changed, e.g. a new `latitude`/`longitude` after a drag) and
-`DELETE /api/map-flags/<id>`.
+`GET /api/map-flags`, `PATCH /api/map-flags/<id>` (a new
+`latitude`/`longitude` after a drag, or `visibility` to lock or unlock a
+meetup's flag) and `DELETE /api/map-flags/<id>` (for a flag that is not a
+meetup's; a meetup's comes down when the meetup is cancelled).
 
-**Database.** Event flags add three columns to `map_flags` (`price`,
-`post_id`, `updated_at`), widen its CHECK constraints, and add a
-`map_flag_viewers` table for "My friend(s)". An existing database is upgraded
-automatically the first time the app serves a request, and flags are added for
-meetups that are still to come. To run the upgrade by hand (safe to repeat):
+**Database.** A meetup's flag uses two columns on `map_flags` (`post_id`,
+`updated_at`) and the `map_flag_viewers` table, which names the friends a
+flag is for. An existing database gets those automatically the first time
+the app serves a request, and flags are added for meetups that are still to
+come. To run that upgrade by hand (safe to repeat):
 
 ```bash
 flask --app app upgrade-map-flags
+```
+
+Meetups for "Now" and for picked friends need one more migration, which adds
+`game_posts.ends_at` and lets a meetup's audience be `friends`. It only adds,
+and `beacon update` runs it with the rest. By hand (a dry run first, then
+`--apply` to keep it):
+
+```bash
+python dbtool.py migrate add_meetup_now
 ```
 
 **Map tiles.** OpenStreetMap only serves its tiles to pages opened from a web
@@ -245,7 +282,7 @@ Some messages are small windows instead of bubbles:
 | --- | --- | --- |
 | Meetup | navy, "Meetup" | a message carrying a meetup (`_postcard.html`) |
 | Game | orange, the game's name | an invite, accept, decline or result |
-| Map flag | the flag's colour (U-Find shows its logo and price) | a link to a flag (`/find?flag=...`) in a message |
+| Map flag | the flag's colour, titled with its kind ("Study meetup") | a link to a flag (`/find?flag=...`) in a message |
 
 To share a flag, press **Copy link** on its card on the map and paste it into
 any chat. The chat asks `/api/map-flags` which flags the reader may see, so a

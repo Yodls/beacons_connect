@@ -176,15 +176,11 @@
         .meetbelow > .meetups-sec { grid-column: 1 / -1; }
         .meetbelow > section:not(.meetups-sec) .grid.two { grid-template-columns: minmax(0, 1fr); }
         .meetups-sec .grid.two { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
-        /* The map window's pane, under the map: posting or dropping a flag on
-           the left, a tapped flag's card and the key on the right. */
-        .campus-map-pane {
-          display: grid; gap: 16px 24px; align-items: start;
-          grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-        }
       }
-      /* The pane's two halves keep its own spacing at every width. */
-      .map-pane-act, .map-pane-side { display: grid; gap: 14px; min-width: 0; align-content: start; }
+      /* The map window's pane, under the map and its key: the Post a meetup
+         key, or the form it opens, across the window (on a phone, a tapped
+         flag's card in their place). */
+      .map-pane-act { display: grid; gap: 14px; min-width: 0; align-content: start; }
       .actions .maplink { min-height: 40px; padding: 0 12px; font-size: .92rem; }
 
       /* ---------- the campus map ---------- */
@@ -538,18 +534,36 @@
   // There is no place to pick: the pin is the where, and the server keeps
   // its words. Cancel, Escape or posting puts it away. The form only holds
   // the point -- the meetup's flag is made by the server when it is posted.
+  //
+  // The form asks three more things, and shows only what goes with each
+  // answer: when (now, for how long; or later, on a date), who can see it
+  // (everyone, a club, or friends ticked in a list), and, for an activity
+  // written in, what kind of meetup it is. A part that is not showing is
+  // disabled as well as hidden, so it is neither sent nor validated. The
+  // answers are switches, which are radio buttons: the one chosen is read
+  // by name.
   (function () {
     var POINTS = {{ place_points | tojson }};
+    var card = document.getElementById("campusMapCard");
     var box = document.getElementById("mapMeetForm");
     var key = document.getElementById("mapMeet");
     var form = box ? box.querySelector("form.newpost") : null;
-    if (!box || !key || !form) { return; }
+    if (!card || !box || !key || !form) { return; }
     var line = box.querySelector(".onmap");
     var where = box.querySelector(".onmap-where");
     var note = document.getElementById("mapMeetNote");
     var cancel = form.querySelector(".meet-cancel");
     var lat = form.querySelector("input[name=latitude]");
     var lng = form.querySelector("input[name=longitude]");
+    var act = form.querySelector("select[name=game]");
+    var date = form.querySelector("input[name=when_on]");
+    var says = form.querySelector(".meet-says");
+    var nowBox = form.querySelector(".meet-now");
+    var laterBox = form.querySelector(".meet-later");
+    var clubBox = form.querySelector(".meet-club");
+    var friendsBox = form.querySelector(".meet-friends");
+    var search = friendsBox.querySelector("input[type=search]");
+    var nobody = friendsBox.querySelector(".fmore");
     var point = null;    // {lat, lng, near}: where the pin is while the form is out
     var open = false;    // the form is out, with its pin on the map
 
@@ -564,11 +578,69 @@
       return { lat: c.lat, lng: c.lng, near: c.near };
     }
 
+    // Hidden, and out of what the form sends.
+    function shut(part, off) {
+      part.hidden = off;
+      Array.prototype.forEach.call(part.querySelectorAll("input, select"), function (field) {
+        field.disabled = off;
+      });
+    }
+
+    // The flag its pin will be: the meetup's own, navy with a star, for an
+    // activity from the list ("event" is its name on the map), and for one
+    // written in the colour of whichever type chip is chosen.
+    function kind() {
+      if (act.value !== "other") { return "event"; }
+      var chosen = form.querySelector("input[name=category]:checked");
+      return chosen ? chosen.value : "social";
+    }
+
+    // Which part of a switch is chosen, by the switch's name.
+    function picked(name, otherwise) {
+      var chosen = form.querySelector("input[name=" + name + "]:checked");
+      return chosen ? chosen.value : otherwise;
+    }
+
+    function sync() {
+      var now = picked("when", "now") === "now";
+      shut(nowBox, !now);
+      shut(laterBox, now);
+      // Asked for here, not in the markup: under Now there is no date to
+      // give, and a required field that is hidden would block the form.
+      date.required = !now;
+      var audience = picked("audience", "everyone");
+      shut(clubBox, audience !== "club");
+      shut(friendsBox, audience !== "friends");
+      // What that choice means, in the line under the switch.
+      says.textContent = says.getAttribute("data-" + audience) || "";
+      // The pin on the map wears the type's colour.
+      if (open && window.BeaconMap && window.BeaconMap.pickKind) { window.BeaconMap.pickKind(kind()); }
+    }
+
+    // The friend list, narrowed to the names that have what was typed.
+    function narrow() {
+      var typed = search.value.trim().toLowerCase();
+      var any = false;
+      Array.prototype.forEach.call(friendsBox.querySelectorAll(".pickrow"), function (row) {
+        var match = !typed || row.getAttribute("data-name").indexOf(typed) !== -1;
+        row.hidden = !match;
+        any = any || match;
+      });
+      nobody.hidden = any;
+    }
+
     function openForm() {
-      if (open) { return; }
+      var bar = document.querySelector(".topbar");
+      var top = card.getBoundingClientRect().top + window.pageYOffset
+                - (bar ? bar.offsetHeight : 0) - 8;
+      if (open) {
+        // Already out (the Post tab pressed again): bring it back into view.
+        window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+        return;
+      }
       if (!point) { point = campusCentre(); }
       var started = window.BeaconMap && window.BeaconMap.pick({
-        lat: point.lat, lng: point.lng,
+        lat: point.lat, lng: point.lng, kind: kind(),
         onMove: function (p) {
           point = { lat: p.lat, lng: p.lng, near: p.near };
           show();
@@ -580,16 +652,36 @@
       show();
       // Map and form on one screen: the map window to the top of the page,
       // just under the top bar.
-      var bar = document.querySelector(".topbar");
-      var card = document.getElementById("campusMapCard");
-      var top = card.getBoundingClientRect().top + window.pageYOffset
-                - (bar ? bar.offsetHeight : 0) - 8;
       window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
     }
 
     key.addEventListener("click", openForm);
     cancel.addEventListener("click", function () {
       if (window.BeaconMap) { window.BeaconMap.unpick(); }
+    });
+    // Any answer changing can change what shows. After the first script's
+    // own listener on the activity, which shows the type chips for a
+    // write-in, so the pin's colour is read from the form as it now is.
+    form.addEventListener("change", sync);
+    // The people counter's minus and plus keys: one step either way, kept
+    // within the field's own least and most, as the chat's form does it
+    // (chat.html). The number can still be typed.
+    Array.prototype.forEach.call(form.querySelectorAll(".meet-count"), function (group) {
+      var field = group.querySelector("input");
+      Array.prototype.forEach.call(group.querySelectorAll(".step"), function (stepKey) {
+        stepKey.addEventListener("click", function () {
+          var step = parseInt(stepKey.getAttribute("data-step"), 10) || 0;
+          var low = parseInt(field.min, 10) || 2, high = parseInt(field.max, 10) || 50;
+          var now = parseInt(field.value, 10);
+          if (isNaN(now)) { now = low; }
+          field.value = Math.min(high, Math.max(low, now + step));
+        });
+      });
+    });
+    search.addEventListener("input", narrow);
+    // Enter in the friend search would send the whole form.
+    search.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { event.preventDefault(); }
     });
     // Posted: put the form away, show where the meetup landed, and start
     // the next pin from the Campus Center again. After the enhancer's
@@ -601,14 +693,37 @@
       setTimeout(function () {
         point = null;
         show();
+        sync();
+        narrow();
         if (posted && window.BeaconMap) { window.BeaconMap.focusAt(posted.lat, posted.lng); }
       }, 0);
     });
+
+    // The Post tab in the bottom bar asks for this form. Arriving from
+    // another page it brings ?post=1, which the map's window carries as
+    // data-post, and the form opens as soon as the map can take a pin (the
+    // map script says so). Pressed while already here, it just opens.
+    card.addEventListener("beacon:mapready", function () {
+      if (card.getAttribute("data-post") !== "1") { return; }
+      card.setAttribute("data-post", "");
+      openForm();
+    });
+    var tab = document.querySelector("a.tab-new");
+    if (tab) {
+      tab.addEventListener("click", function (event) {
+        // No map yet, or no key because a flag's card is in its place:
+        // follow the link, which arrives with the form asked for.
+        if (!open && key.hidden) { return; }
+        event.preventDefault();
+        openForm();
+      });
+    }
 
     line.hidden = false;
     note.hidden = false;
     cancel.hidden = false;
     show();
+    sync();
   })();
 </script>
 <script src="{{ url_for('static', filename='community-map.js') }}"></script>
