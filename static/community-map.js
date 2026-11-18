@@ -237,37 +237,6 @@
 
   function campusContains(latlng) { return L.latLngBounds(CAMPUS_BOUNDS).contains(latlng); }
 
-  // On a touch screen, one-finger drag pans the map -- so a thumb trying to
-  // scroll past 350px of tiles moves the tiles instead and the page never
-  // moves. The map starts locked and a tap unlocks it; a tap anywhere else
-  // locks it again. Mouse users never see this.
-  //
-  // "Elsewhere" means outside the map's whole stage, not just the tiles: the
-  // Locate me button and the status line sit beside the tiles in the stage,
-  // and tapping Locate me used to count as leaving the map and lock it again.
-  var unlockMap = function () {};
-  function lockUntilTap(container) {
-    var touch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
-    if (!touch) { return; }
-    var stage = container.closest(".campus-map-stage") || container;
-    var button = node("button", "map-unlock", "Tap to move the map");
-    button.type = "button";
-    function lock() {
-      map.dragging.disable(); map.touchZoom.disable();
-      if (!button.isConnected) { container.appendChild(button); }
-    }
-    function unlock() {
-      map.dragging.enable(); map.touchZoom.enable();
-      button.remove();
-    }
-    unlockMap = unlock;
-    button.addEventListener("click", function (ev) { ev.stopPropagation(); unlock(); });
-    document.addEventListener("touchstart", function (ev) {
-      if (!stage.contains(ev.target)) { lock(); }
-    }, { passive: true });
-    lock();
-  }
-
   // Leaflet's locationerror carries the browser's own words ("Origin does
   // not have permission to use Geolocation service", "User denied
   // Geolocation"), which tell nobody what to do. The code is the same in
@@ -288,7 +257,6 @@
       // map to pan that far to show it.
       maxBounds: L.latLngBounds(CAMPUS_BOUNDS).pad(1), maxBoundsViscosity: 0.85
     }).setView(L.latLngBounds(CAMPUS_BOUNDS).getCenter(), CAMPUS_ZOOM);
-    lockUntilTap(document.getElementById("beaconCampusMap"));
 
     var tiles = L.tileLayer(TILE_URL, {
       maxZoom: 19,
@@ -1142,8 +1110,19 @@
     pick = { lat: options.lat, lng: options.lng, kind: options.kind || "event",
              onMove: options.onMove, onDone: options.onDone };
     setMode("pick");
-    unlockMap();
-    map.setView([pick.lat, pick.lng], Math.max(map.getZoom(), PLACE_ZOOM));
+    // Zoomed in to place the pin, with the pin in the middle of the map, or
+    // in the middle of the stretch of it the page says will still be on
+    // the screen (options.within: px down the map, worked out now that the
+    // form is open under it). One move: a second one asked for while this
+    // zoom plays would be dropped by Leaflet.
+    var zoom = Math.max(map.getZoom(), PLACE_ZOOM);
+    var centre = L.latLng(pick.lat, pick.lng);
+    var stretch = options.within ? options.within() : null;
+    if (stretch && stretch[1] > stretch[0]) {
+      var want = (stretch[0] + stretch[1]) / 2;
+      centre = map.unproject(map.project(centre, zoom).add([0, map.getSize().y / 2 - want]), zoom);
+    }
+    map.setView(centre, zoom);
     announce("Tap the map or drag the pin to where you'll meet.");
   }
 
@@ -1262,9 +1241,6 @@
 
   function locationFound(event) {
     el.locate.disabled = false;
-    // You just asked to see yourself on the map, so you can move around
-    // there straight away rather than tapping to unlock it first.
-    unlockMap();
     userLayer.clearLayers();
     L.circle(event.latlng, {
       radius: Math.min(event.accuracy, 180), color: "#ff791f", weight: 2,

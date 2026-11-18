@@ -629,25 +629,58 @@
       nobody.hidden = any;
     }
 
+    function still() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+
     // The map window to the top of the page, just under the top bar: where
-    // the form opens, and where a posted meetup is shown.
+    // a posted meetup is shown.
     function toMap() {
       var bar = document.querySelector(".topbar");
       var top = card.getBoundingClientRect().top + window.pageYOffset
                 - (bar ? bar.offsetHeight : 0) - 8;
-      var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      window.scrollTo({ top: Math.max(top, 0), behavior: still ? "auto" : "smooth" });
+      window.scrollTo({ top: Math.max(top, 0), behavior: still() ? "auto" : "smooth" });
+    }
+
+    // Where the page scrolls to once the form is open under the map: all of
+    // the form on the screen where it fits, with as much of the map above
+    // it as there is room for; where the form is taller than the screen (a
+    // phone), its head just under the top bar. Returns how far to scroll,
+    // and the stretch of the map (px down it) still on the screen after,
+    // where the pin is put. The top bar is counted where it sticks, not
+    // where it is now: at the very top of the page a strip above it (the
+    // development database line) is still showing, and scrolls away.
+    function formView() {
+      var bar = document.querySelector(".topbar");
+      var tabs = document.querySelector("nav.tabbar");
+      var ceiling = 0;
+      if (bar && /sticky|fixed/.test(getComputedStyle(bar).position)) {
+        ceiling = (parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight;
+      }
+      var floor = tabs && getComputedStyle(tabs).position === "fixed"
+        ? tabs.getBoundingClientRect().top : window.innerHeight;
+      var f = box.getBoundingClientRect();
+      var by = Math.min(f.bottom + 12 - floor,    // down to show the whole form
+                        f.top - (ceiling + 8));   // and no further than its head
+      var m = document.getElementById("beaconCampusMap").getBoundingClientRect();
+      var mapTop = m.top - by;
+      // Room for the pin's flag above its foot, and its foot clear of the edge.
+      return { by: by, stretch: [Math.max(ceiling, mapTop) - mapTop + 50,
+                                 Math.min(floor, m.bottom - by) - mapTop - 10] };
+    }
+    function toForm() {
+      window.scrollBy({ top: formView().by, behavior: still() ? "auto" : "smooth" });
     }
 
     function openForm() {
       if (open) {
         // Already out (the Post tab pressed again): bring it back into view.
-        toMap();
+        toForm();
         return;
       }
       if (!point) { point = campusCentre(); }
       var started = window.BeaconMap && window.BeaconMap.pick({
         lat: point.lat, lng: point.lng, kind: kind(),
+        // Asked once the form is open: the pin goes where it will be seen.
+        within: function () { return formView().stretch; },
         onMove: function (p) {
           point = { lat: p.lat, lng: p.lng, near: p.near };
           show();
@@ -657,8 +690,7 @@
       if (!started) { return; }
       open = true;
       show();
-      // Map and form on one screen.
-      toMap();
+      toForm();
     }
 
     key.addEventListener("click", openForm);

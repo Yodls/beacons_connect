@@ -22,7 +22,7 @@
       .campus-map-stage {
         position: relative;
         /* Its own stacking context. The locate button, the status line and
-           "Tap to move the map" are z-index 1000 so they sit above the
+           the Post a meetup key are z-index 1000 so they sit above the
            tiles -- and without this, that 1000 was weighed against the
            whole page, so they floated over the top bar, the account menu
            and the tab bar. Inside, nothing changes; the stage as a whole
@@ -611,18 +611,6 @@
            the flags strip under it) above the fold of an 800px-tall
            window. */
         #beaconCampusMap { height: 26rem; }
-      }
-      /* "Tap to move the map". On a touch screen the map starts with dragging
-         off, so a finger across it scrolls the page instead of panning 352px
-         of tiles; one tap on this unlocks it until a tap lands outside. */
-      .map-unlock {
-        position: absolute; z-index: 1000; left: 50%; top: 50%;
-        transform: translate(-50%, -50%);
-        padding: 10px 14px; min-height: 44px;
-        background: #fff; color: var(--navy);
-        border: 2px solid var(--navy); border-radius: var(--r-sm);
-        box-shadow: var(--drop);
-        font: 700 .95rem/1.2 var(--sans); cursor: pointer;
       }
       @media (max-width: 700px) {
         #beaconCampusMap { height: min(22rem, 45vh); height: min(22rem, 45dvh); }
